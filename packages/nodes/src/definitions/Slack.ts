@@ -1,0 +1,111 @@
+import type { NodeDefinition } from '@twiddle/shared';
+
+export const SlackNode: NodeDefinition = {
+  type: 'twiddle.slack',
+  displayName: 'Send Slack Message',
+  description: 'Send a message to a Slack channel or user',
+  icon: 'message-square',
+  iconColor: '#4A154B',
+  category: 'core',
+  version: 1,
+  inputs: ['main'],
+  outputs: ['main'],
+  parameters: [
+    {
+      name: 'channel',
+      displayName: 'Channel',
+      type: 'string',
+      default: '',
+      required: true,
+      description: 'Slack channel (e.g., #general) or user ID to send the message to',
+      placeholder: '#general or @username',
+    },
+    {
+      name: 'message',
+      displayName: 'Message',
+      type: 'string',
+      default: '',
+      required: true,
+      description: 'The message to send. Supports Slack markdown and expressions.',
+      typeOptions: {
+        rows: 4,
+      },
+    },
+    {
+      name: 'messageType',
+      displayName: 'Message Type',
+      type: 'options',
+      default: 'text',
+      options: [
+        { name: 'Text', value: 'text', description: 'Simple text message' },
+        { name: 'Block Kit', value: 'blocks', description: 'Rich message using Slack Block Kit' },
+      ],
+    },
+    {
+      name: 'blocks',
+      displayName: 'Blocks (JSON)',
+      type: 'string',
+      default: '',
+      description: 'Slack Block Kit blocks in JSON format',
+      typeOptions: {
+        rows: 8,
+      },
+      displayOptions: {
+        show: {
+          messageType: ['blocks'],
+        },
+      },
+    },
+    {
+      name: 'username',
+      displayName: 'Bot Username',
+      type: 'string',
+      default: '',
+      description: 'Override the bot username for this message',
+      placeholder: 'Twiddle Bot',
+    },
+    {
+      name: 'iconEmoji',
+      displayName: 'Icon Emoji',
+      type: 'string',
+      default: '',
+      description: 'Override the bot icon with an emoji (e.g., :robot_face:)',
+      placeholder: ':robot_face:',
+    },
+    {
+      name: 'threadTs',
+      displayName: 'Thread Timestamp',
+      type: 'string',
+      default: '',
+      description: 'Reply to a specific thread by providing its timestamp',
+      placeholder: '1234567890.123456',
+    },
+    {
+      name: 'unfurlLinks',
+      displayName: 'Unfurl Links',
+      type: 'boolean',
+      default: true,
+      description: 'Enable link previews in the message',
+    },
+    {
+      name: 'unfurlMedia',
+      displayName: 'Unfurl Media',
+      type: 'boolean',
+      default: true,
+      description: 'Enable media previews in the message',
+    },
+    {
+      name: 'slackCredential',
+      displayName: 'Slack Credential',
+      type: 'credentials',
+      default: '',
+      required: true,
+      description: 'Slack Bot Token or Webhook credential',
+      typeOptions: {
+        credentialType: 'slack',
+      },
+    },
+  ],
+  subtitle: 'Send message to {{$parameter.channel}}',
+  documentationUrl: 'https://docs.twiddle.io/nodes/slack',
+};

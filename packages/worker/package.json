@@ -1,0 +1,29 @@
+{
+  "name": "@twiddle/worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Temporal worker for Twiddle workflow execution",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@twiddle/shared": "workspace:*",
+    "@twiddle/workflows": "workspace:*",
+    "@twiddle/nodes": "workspace:*",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/activity": "^1.11.0",
+    "undici": "^7.0.0",
+    "vm2": "^3.9.19"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

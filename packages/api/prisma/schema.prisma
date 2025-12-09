@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// User and Group Management
+// ============================================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  password      String?  // Hashed password for local auth (null for SSO users)
+  provider      String   @default("local") // local, azure-entra
+  providerId    String?  // External provider user ID
+  avatarUrl     String?
+  isAdmin       Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  emailVerified Boolean  @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Sessions for local auth
+  sessions      Session[]
+  
+  // Group memberships
+  groupMemberships GroupMember[]
+  
+  // Folders created by this user
+  folders       Folder[]
+  
+  // Folder permissions granted to this user
+  folderPermissions FolderPermission[]
+  
+  // Workflows created by this user
+  workflows     Workflow[]
+  credentials   Credential[]
+
+  @@unique([provider, providerId])
+  @@index([email])
+  @@index([isActive])
+}
+
+// Session for local authentication
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  ipAddress    String?
+  userAgent    String?
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isDefault   Boolean  @default(false) // New users auto-join this group
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  // Members of this group
+  members     GroupMember[]
+  
+  // Folders owned by this group
+  folders     Folder[]
+  
+  // Folder permissions granted to this group
+  folderPermissions FolderPermission[]
+  
+  // Workflows in this group (legacy - prefer folder-based organization)
+  workflows   Workflow[]
+  
+  // Credentials accessible to this group
+  credentials Credential[]
+
+  @@index([name])
+  @@index([isDefault])
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  userId    String
+  groupId   String
+  role      String   @default("member") // member, admin, owner
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+// ============================================================================
+// Environments / Stages
+// ============================================================================
+
+enum Environment {
+  DV  // Development
+  UT  // User Testing
+  LT  // Load Testing
+  PD  // Production
+}
+
+// ============================================================================
+// Folders for organizing workflows
+// ============================================================================
+
+model Folder {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String?  // Optional color for folder icon
+  
+  // Parent folder for nested structure (null = root level)
+  parentId    String?
+  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Folder[] @relation("FolderHierarchy")
+  
+  // Owner - the user who created the folder
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  
+  // Legacy group field (deprecated, use permissions instead)
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  // Permissions for this folder
+  permissions FolderPermission[]
+  
+  // Workflows in this folder
+  workflows   Workflow[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([parentId])
+  @@index([groupId])
+  @@index([createdById])
+}
+
+// Permission levels for folder access
+enum FolderPermissionLevel {
+  READ   // Can view workflows in folder
+  WRITE  // Can create/edit/delete workflows in folder
+  ADMIN  // Can manage folder permissions and delete folder
+}
+
+// Folder permissions - grants access to users or groups
+model FolderPermission {
+  id          String   @id @default(cuid())
+  folderId    String
+  folder      Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  
+  // Either userId OR groupId must be set (not both)
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  permission  FolderPermissionLevel
+  
+  createdAt   DateTime @default(now())
+  createdById String?
+  
+  @@unique([folderId, userId])
+  @@unique([folderId, groupId])
+  @@index([folderId])
+  @@index([userId])
+  @@index([groupId])
+}
+
+// ============================================================================
+// Workflows and Executions
+// ============================================================================
+
+model Workflow {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  // Version number - auto-increments on each save
+  version     Int      @default(1)
+  
+  // Environment/Stage - workflows progress through DV -> UT -> LT -> PD
+  environment Environment @default(DV)
+  promotedAt  DateTime?   // When last promoted
+  promotedById String?    // Who promoted it
+  
+  // Visual workflow definition (for the editor)
+  nodes       Json     @default("[]")
+  connections Json     @default("[]")
+  settings    Json     @default("{}")
+  
+  // Generated Python code (for execution)
+  pythonWorkflow   String?  @db.Text  // workflow.py content
+  pythonActivities String?  @db.Text  // activities.py content
+  pythonWorker     String?  @db.Text  // worker.py content
+  pythonRequirements String? @db.Text // requirements.txt content
+  
+  // GitHub integration
+  githubRepo       String?  // GitHub repository URL (e.g., owner/repo)
+  githubBranch     String?  @default("main") // Branch to commit to
+  githubPath       String?  // Path within repo for workflow files
+  localPath        String?  // Local filesystem path for the cloned repo
+  githubCredentialId String? // Reference to GitHub credential
+  lastCommitSha    String?  // Last commit SHA for tracking
+  
+  active      Boolean  @default(false)
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Owner (unchanged - workflow keeps its own owner)
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  
+  // Folder - workflow inherits group permissions from folder
+  folderId    String?
+  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  
+  // Legacy direct group assignment (deprecated - use folder.groupId instead)
+  groupId     String?
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+  @@index([environment])
+  @@index([createdAt])
+  @@index([groupId])
+  @@index([createdById])
+  @@index([folderId])
+}
+
+model Credential {
+  id          String   @id @default(cuid())
+  name        String
+  type        String
+  data        Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Owner and group
+  createdById String?
+  groupId     String?
+  
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@unique([name, type])
+  @@index([type])
+  @@index([groupId])
+  @@index([createdById])
+}

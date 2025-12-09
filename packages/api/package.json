@@ -1,0 +1,40 @@
+{
+  "name": "@twiddle/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Twiddle API server",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.0",
+    "@fastify/swagger": "^9.4.0",
+    "@fastify/swagger-ui": "^5.2.0",
+    "@prisma/client": "^6.1.0",
+    "@temporalio/client": "^1.11.0",
+    "@twiddle/nodes": "workspace:*",
+    "@twiddle/shared": "workspace:*",
+    "fastify": "^5.1.0",
+    "nanoid": "^5.0.0",
+    "pg": "^8.16.3",
+    "redis": "^5.10.0",
+    "tar": "^7.4.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/pg": "^8.15.6",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
