@@ -223,7 +223,7 @@ export function GitHubSettings({ workflowId, workflowName, onClose }: GitHubSett
                 {credentials.length === 0 ? (
                   <p className="text-sm text-slate-500">
                     No GitHub credentials found.{' '}
-                    <a href="/credentials" className="text-primary-600 hover:underline">
+                    <a href="/datasources" className="text-primary-600 hover:underline">
                       Add one first
                     </a>
                   </p>

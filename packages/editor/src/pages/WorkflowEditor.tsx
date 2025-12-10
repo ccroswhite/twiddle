@@ -14,9 +14,10 @@ import {
   type Connection,
   BackgroundVariant,
   type NodeTypes,
+  SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2 } from 'lucide-react';
+import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy } from 'lucide-react';
 import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
@@ -99,6 +100,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isUndoing = useRef(false);
 
+  // Selection context menu
+  const [selectionContextMenu, setSelectionContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const selectionContextMenuRef = useRef<HTMLDivElement>(null);
+
   const nodeTypes: NodeTypes = useMemo(() => ({
     workflowNode: WorkflowNode as any,
   }), []);
@@ -176,6 +181,94 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       isUndoing.current = false;
     }, 0);
   }, [history, historyIndex, setNodes, setEdges, handleOpenProperties]);
+
+  // Keyboard shortcut for undo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle if not typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo]);
+
+  // Close selection context menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (selectionContextMenuRef.current && !selectionContextMenuRef.current.contains(event.target as HTMLElement)) {
+        setSelectionContextMenu(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Handle right-click on canvas to show selection context menu
+  const handleSelectionContextMenu = useCallback((event: React.MouseEvent) => {
+    const selectedNodes = nodes.filter(node => node.selected);
+    if (selectedNodes.length > 0) {
+      event.preventDefault();
+      setSelectionContextMenu({ x: event.clientX, y: event.clientY });
+    }
+  }, [nodes]);
+
+  // Copy and paste selected nodes with offset
+  const handleCopyAndPaste = useCallback(() => {
+    const selectedNodes = nodes.filter(node => node.selected);
+    if (selectedNodes.length === 0) return;
+
+    // Get edges that connect selected nodes
+    const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+    const selectedEdges = edges.filter(
+      edge => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target)
+    );
+
+    // Generate new IDs and offset positions
+    const idMap = new Map<string, string>();
+    const offset = { x: 50, y: 50 };
+
+    const newNodes = selectedNodes.map(node => {
+      const newId = `${node.data.nodeType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      idMap.set(node.id, newId);
+      return {
+        ...node,
+        id: newId,
+        position: {
+          x: node.position.x + offset.x,
+          y: node.position.y + offset.y,
+        },
+        selected: true,
+        data: {
+          ...node.data,
+          onOpenProperties: handleOpenProperties,
+        },
+      };
+    });
+
+    // Update edge references to new node IDs
+    const newEdges = selectedEdges.map(edge => ({
+      ...edge,
+      id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}`,
+      source: idMap.get(edge.source) || edge.source,
+      target: idMap.get(edge.target) || edge.target,
+    }));
+
+    // Deselect existing nodes and add new ones
+    setNodes(prev => [
+      ...prev.map(n => ({ ...n, selected: false })),
+      ...newNodes,
+    ]);
+    setEdges(prev => [...prev, ...newEdges]);
+    setSelectionContextMenu(null);
+  }, [nodes, edges, handleOpenProperties, setNodes, setEdges]);
 
   // Track changes to nodes and edges for undo history
   const prevNodesRef = useRef<string>('');
@@ -865,11 +958,50 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           snapToGrid={true}
           snapGrid={[20, 20]}
           fitView
+          selectionOnDrag={true}
+          selectionMode={SelectionMode.Partial}
+          panOnDrag={[1, 2]}
+          selectNodesOnDrag={true}
+          onSelectionContextMenu={handleSelectionContextMenu}
         >
           <Controls />
           <MiniMap />
           <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
         </ReactFlow>
+
+        {/* Selection Context Menu */}
+        {selectionContextMenu && (
+          <div
+            ref={selectionContextMenuRef}
+            className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 min-w-[160px]"
+            style={{
+              left: selectionContextMenu.x,
+              top: selectionContextMenu.y,
+            }}
+          >
+            <button
+              onClick={handleCopyAndPaste}
+              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              <Copy className="w-4 h-4" />
+              Copy
+            </button>
+            <div className="border-t border-slate-200 my-1" />
+            <button
+              onClick={() => {
+                const selectedNodes = nodes.filter(n => n.selected);
+                const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+                setNodes(nodes.filter(n => !n.selected));
+                setEdges(edges.filter(e => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target)));
+                setSelectionContextMenu(null);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Node Panel */}
@@ -1193,7 +1325,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                       draggable
                       onDragStart={(e) => handleDragStart(e, workflow.id)}
                       onDragEnd={handleDragEnd}
-                      className={`p-4 rounded-lg border transition-colors cursor-grab active:cursor-grabbing ${
+                      onClick={() => {
+                        setShowWorkflowBrowser(false);
+                        navigate(`/workflows/${workflow.id}`);
+                      }}
+                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${
                         draggingWorkflowId === workflow.id
                           ? 'bg-primary-50 border-primary-300 opacity-50'
                           : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
@@ -1239,15 +1375,9 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                               </button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => {
-                                setShowWorkflowBrowser(false);
-                                navigate(`/workflows/${workflow.id}`);
-                              }}
-                              className="font-medium text-slate-900 hover:text-primary-600 truncate block text-left"
-                            >
+                            <span className="font-medium text-slate-900 truncate block text-left">
                               {workflow.name}
-                            </button>
+                            </span>
                           )}
                           
                           {workflow.description && (

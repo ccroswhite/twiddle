@@ -257,7 +257,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
             className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
           >
             <Copy className="w-3.5 h-3.5" />
-            Duplicate
+            Copy
           </button>
           <div className="border-t border-slate-200 my-1" />
           <button

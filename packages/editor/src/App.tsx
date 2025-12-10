@@ -25,7 +25,7 @@ export default function App() {
           <Route path="workflows" element={<WorkflowEditor openBrowser />} />
           <Route path="workflows/:id" element={<WorkflowEditor />} />
           <Route path="workflows/new" element={<WorkflowEditor />} />
-          <Route path="credentials" element={<Credentials />} />
+          <Route path="datasources" element={<Credentials />} />
           <Route path="groups" element={<Groups />} />
           <Route path="settings" element={<Settings />} />
         </Route>
