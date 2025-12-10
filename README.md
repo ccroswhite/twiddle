@@ -79,12 +79,24 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-5. Run database migrations:
+5. Generate Prisma client and run database migrations:
 ```bash
+# Generate Prisma client (required before building)
+cd packages/api && npx prisma generate && cd ../..
+
+# Set the database so that you can connect
+export DATABASE_URL="postgresql://twiddle:twiddle@localhost:5432/twiddle?schema=public"
+
+# Run database migrations
 pnpm db:migrate
 ```
 
-6. Start development servers:
+6. Build all packages:
+```bash
+pnpm build
+```
+
+7. Start development servers:
 ```bash
 # Terminal 1: API Server
 pnpm dev:api
@@ -92,9 +104,19 @@ pnpm dev:api
 # Terminal 2: Temporal Worker
 pnpm dev:worker
 
-# Terminal 3: Frontend (when available)
+# Terminal 3: Frontend
 pnpm dev:editor
 ```
+
+### Clean Build (if you encounter build issues)
+
+If you encounter module not found errors or stale build artifacts:
+
+```bash
+# Clean all build artifacts, caches, and dependencies
+rm -rf node_modules packages/*/node_modules packages/*/dist packages/*/.turbo packages/*/tsconfig.tsbuildinfo .turbo
+```
+And then go to setup section above
 
 ### Access Points
 
