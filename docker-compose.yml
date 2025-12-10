@@ -39,26 +39,26 @@ services:
       - ./temporal-config:/etc/temporal/config/dynamicconfig
 
   # Temporal Web UI
-  temporal-ui:
-    image: temporalio/ui:2.31.2
-    container_name: twiddle-temporal-ui
-    depends_on:
-      - temporal
-    environment:
-      - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-    ports:
-      - "8080:8080"
-
-  # Redis (for caching and pub/sub)
-  redis:
-    image: redis:7-alpine
-    container_name: twiddle-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+#  temporal-ui:
+#    image: temporalio/ui:2.31.2
+#    container_name: twiddle-temporal-ui
+#    depends_on:
+#      - temporal
+#    environment:
+#      - TEMPORAL_ADDRESS=temporal:7233
+#      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+#    ports:
+#      - "8080:8080"
+#
+#  # Redis (for caching and pub/sub)
+#  redis:
+#    image: redis:7-alpine
+#    container_name: twiddle-redis
+#    ports:
+#      - "6379:6379"
+#    volumes:
+#      - redis_data:/data
 
 volumes:
   postgres_data:
-  redis_data:
+#  redis_data:
