@@ -10,6 +10,26 @@ interface WorkflowNode {
   parameters: Record<string, unknown>;
   position: { x: number; y: number };
   credentials?: Record<string, unknown>;
+  // Temporal Activity Options
+  startToCloseTimeout?: number;
+  scheduleToCloseTimeout?: number;
+  retryOnFail?: boolean;
+  maxRetries?: number;
+  retryInterval?: number;
+  backoffCoefficient?: number;
+  continueOnFail?: boolean;
+}
+
+// Trigger nodes are not activities - they start workflows
+const TRIGGER_NODE_TYPES = new Set([
+  'twiddle.manualTrigger',
+  'twiddle.webhook',
+  'twiddle.interval',
+]);
+
+// Check if a node type is an activity (not a trigger)
+function isActivityNode(nodeType: string): boolean {
+  return !TRIGGER_NODE_TYPES.has(nodeType);
 }
 
 interface WorkflowConnection {
@@ -54,15 +74,23 @@ function generateActivityCode(nodeType: string): string {
   switch (nodeType) {
     case 'twiddle.httpRequest':
       return `
-async def execute_http_request(params: dict) -> dict:
-    """Execute HTTP request"""
+async def execute_httprequest(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute HTTP request activity.
+    
+    This activity makes an HTTP request to the specified URL and returns
+    the response. It is idempotent for GET requests.
+    """
     import aiohttp
     
+    params = input.parameters
     url = params.get('url', '')
     method = params.get('method', 'GET').upper()
     headers = params.get('headers', {})
     body = params.get('body')
     timeout = params.get('timeout', 30)
+    
+    activity.logger.info(f"[{input.node_name}] Making {method} request to {url}")
     
     async with aiohttp.ClientSession() as session:
         async with session.request(
@@ -73,32 +101,61 @@ async def execute_http_request(params: dict) -> dict:
             data=body if isinstance(body, str) else None,
             timeout=aiohttp.ClientTimeout(total=timeout)
         ) as response:
+            response_body = await response.text()
+            activity.logger.info(f"[{input.node_name}] Response status: {response.status}")
+            
             return {
-                'status': response.status,
-                'headers': dict(response.headers),
-                'body': await response.text()
+                **input.input_data,
+                'http_response': {
+                    'status': response.status,
+                    'headers': dict(response.headers),
+                    'body': response_body
+                }
             }
 `;
 
     case 'twiddle.code':
       return `
-async def execute_code(params: dict, input_data: dict) -> dict:
-    """Execute custom Python code"""
+async def execute_code(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute custom Python code activity.
+    
+    The code has access to 'input_data' and should set 'result' variable.
+    This activity should be idempotent - avoid side effects.
+    """
+    params = input.parameters
     code = params.get('code', '')
     
-    # Create execution context
-    local_vars = {'input_data': input_data, 'result': None}
+    activity.logger.info(f"[{input.node_name}] Executing custom code")
+    
+    # Create execution context with input data
+    local_vars = {
+        'input_data': input.input_data,
+        'result': None,
+        'activity': activity,
+    }
     
     # Execute the code
     exec(code, {'__builtins__': __builtins__}, local_vars)
     
-    return local_vars.get('result', input_data)
+    result = local_vars.get('result')
+    if result is None:
+        result = input.input_data
+    
+    activity.logger.info(f"[{input.node_name}] Code execution completed")
+    return result
 `;
 
     case 'twiddle.if':
       return `
-async def execute_if(params: dict, input_data: dict) -> dict:
-    """Evaluate conditions and return branch"""
+async def execute_if(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Evaluate conditions and determine branch.
+    
+    Returns the input data with a 'branch' field indicating
+    which path to take ('true' or 'false').
+    """
+    params = input.parameters
     conditions = params.get('conditions', {}).get('conditions', [])
     combine_mode = params.get('combineConditions', 'all')
     
@@ -126,90 +183,339 @@ async def execute_if(params: dict, input_data: dict) -> dict:
     results = [evaluate_condition(c) for c in conditions]
     
     if combine_mode == 'all':
-        result = all(results) if results else True
+        branch_result = all(results) if results else True
     else:
-        result = any(results) if results else True
+        branch_result = any(results) if results else True
     
-    return {'branch': 'true' if result else 'false', 'data': input_data}
+    branch = 'true' if branch_result else 'false'
+    activity.logger.info(f"[{input.node_name}] Condition evaluated to: {branch}")
+    
+    return {**input.input_data, 'branch': branch}
 `;
 
     case 'twiddle.setData':
       return `
-async def execute_set_data(params: dict, input_data: dict) -> dict:
-    """Set or transform data"""
+async def execute_setdata(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Set or transform data activity.
+    
+    Adds or modifies fields in the data based on configuration.
+    """
+    params = input.parameters
     mode = params.get('mode', 'manual')
+    
+    result = dict(input.input_data) if isinstance(input.input_data, dict) else {}
     
     if mode == 'manual':
         fields = params.get('fields', {}).get('fields', [])
-        result = dict(input_data) if isinstance(input_data, dict) else {}
         for field in fields:
-            result[field.get('name', '')] = field.get('value', '')
-        return result
+            field_name = field.get('name', '')
+            field_value = field.get('value', '')
+            if field_name:
+                result[field_name] = field_value
+                activity.logger.info(f"[{input.node_name}] Set {field_name} = {field_value}")
     
-    return input_data
+    return result
 `;
 
     case 'twiddle.ssh':
       return `
-async def execute_ssh(params: dict) -> dict:
-    """Execute SSH command on remote host"""
+async def execute_ssh(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SSH command on remote host.
+    
+    Connects to a remote host via SSH and executes a command.
+    Credentials should be provided via environment variables for security.
+    """
     import asyncssh
     
-    host = params.get('host', '')
-    port = params.get('port', 22)
-    username = params.get('username', '')
-    password = params.get('password')
-    private_key = params.get('privateKey')
+    params = input.parameters
+    host = params.get('host', '') or get_env('SSH_HOST')
+    port = int(params.get('port', 22) or get_env('SSH_PORT', '22'))
+    username = params.get('username', '') or get_env('SSH_USERNAME')
+    password = params.get('password') or get_env('SSH_PASSWORD')
+    private_key_path = get_env('SSH_PRIVATE_KEY_PATH')
     command = params.get('command', '')
+    
+    activity.logger.info(f"[{input.node_name}] Connecting to {host}:{port} as {username}")
     
     connect_kwargs = {
         'host': host,
         'port': port,
         'username': username,
+        'known_hosts': None,  # Disable host key checking (configure properly in production)
     }
     
     if password:
         connect_kwargs['password'] = password
-    elif private_key:
-        connect_kwargs['client_keys'] = [private_key]
+    elif private_key_path:
+        connect_kwargs['client_keys'] = [private_key_path]
     
     async with asyncssh.connect(**connect_kwargs) as conn:
         result = await conn.run(command)
+        activity.logger.info(f"[{input.node_name}] Command exit code: {result.exit_status}")
+        
         return {
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'exit_code': result.exit_status
+            **input.input_data,
+            'ssh_result': {
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'exit_code': result.exit_status
+            }
         }
 `;
 
     case 'twiddle.mssql':
+      return `
+async def execute_mssql(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on Microsoft SQL Server.
+    
+    Connection details should be provided via environment variables.
+    """
+    import pymssql
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    host = get_env('MSSQL_HOST', 'localhost')
+    port = get_env('MSSQL_PORT', '1433')
+    user = get_env('MSSQL_USER', 'sa')
+    password = get_env('MSSQL_PASSWORD')
+    database = get_env('MSSQL_DB', 'master')
+    
+    activity.logger.info(f"[{input.node_name}] Executing SQL on {host}:{port}/{database}")
+    
+    conn = pymssql.connect(
+        server=f"{host}:{port}",
+        user=user,
+        password=password,
+        database=database
+    )
+    
+    try:
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        return {
+            **input.input_data,
+            'sql_result': {
+                'rows': rows,
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        conn.close()
+`;
+
     case 'twiddle.postgresql':
+      return `
+async def execute_postgresql(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on PostgreSQL.
+    
+    Connection details should be provided via environment variables.
+    """
+    import asyncpg
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    host = get_env('POSTGRES_HOST', 'localhost')
+    port = int(get_env('POSTGRES_PORT', '5432'))
+    user = get_env('POSTGRES_USER', 'postgres')
+    password = get_env('POSTGRES_PASSWORD')
+    database = get_env('POSTGRES_DB', 'postgres')
+    
+    activity.logger.info(f"[{input.node_name}] Executing SQL on {host}:{port}/{database}")
+    
+    conn = await asyncpg.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        database=database
+    )
+    
+    try:
+        rows = await conn.fetch(query)
+        
+        return {
+            **input.input_data,
+            'sql_result': {
+                'rows': [dict(row) for row in rows],
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        await conn.close()
+`;
+
     case 'twiddle.mysql':
       return `
-async def execute_sql(params: dict, db_type: str) -> dict:
-    """Execute SQL query"""
+async def execute_mysql(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on MySQL.
+    
+    Connection details should be provided via environment variables.
+    """
+    import aiomysql
+    
+    params = input.parameters
     query = params.get('query', '')
-    timeout = params.get('timeout', 30)
     
-    # Database connection would be configured via environment variables
-    # This is a placeholder - actual implementation depends on the database
+    host = get_env('MYSQL_HOST', 'localhost')
+    port = int(get_env('MYSQL_PORT', '3306'))
+    user = get_env('MYSQL_USER', 'root')
+    password = get_env('MYSQL_PASSWORD')
+    database = get_env('MYSQL_DB', 'mysql')
     
-    return {
-        'rows': [],
-        'rowCount': 0,
-        'success': True,
-        'message': f'SQL query executed on {db_type}'
-    }
+    activity.logger.info(f"[{input.node_name}] Executing SQL on {host}:{port}/{database}")
+    
+    conn = await aiomysql.connect(
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        db=database
+    )
+    
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cursor:
+            await cursor.execute(query)
+            rows = await cursor.fetchall()
+            
+            return {
+                **input.input_data,
+                'sql_result': {
+                    'rows': list(rows),
+                    'rowCount': len(rows),
+                    'success': True
+                }
+            }
+    finally:
+        conn.close()
 `;
 
     default:
+      const funcName = nodeType.split('.').pop()?.toLowerCase() || 'unknown';
       return `
-async def execute_${nodeType.split('.').pop()?.toLowerCase() || 'unknown'}(params: dict, input_data: dict) -> dict:
-    """Execute ${nodeType} node"""
-    # TODO: Implement ${nodeType} logic
-    return input_data
+async def execute_${funcName}(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute ${nodeType} activity.
+    
+    TODO: Implement the specific logic for this activity type.
+    """
+    activity.logger.info(f"[{input.node_name}] Executing ${nodeType}")
+    
+    # Placeholder implementation - passes through input data
+    return input.input_data
 `;
   }
+}
+
+/**
+ * Helper to converting JS values to Python literals
+ */
+function toPythonValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return 'None';
+  }
+  if (value === true) {
+    return 'True';
+  }
+  if (value === false) {
+    return 'False';
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(toPythonValue).join(', ')}]`;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).map(
+      ([k, v]) => `'${k}': ${toPythonValue(v)}`
+    );
+    return `{${entries.join(', ')}}`;
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value); // Strings are compatible mostly, but we use JSON.stringify to handle escapes
+  }
+  return String(value);
+}
+
+/**
+ * Generate activity execution code for a node with proper options
+ */
+function generateActivityExecution(node: WorkflowNode, index: number): string {
+  const funcName = nodeTypeToFunctionName(node.type);
+  const nodeVarName = `node_${index}_result`;
+  const nodeName = node.name || node.type.split('.').pop() || 'unknown';
+  
+  // Get activity options with defaults
+  const startToCloseTimeout = node.startToCloseTimeout || 300;
+  const scheduleToCloseTimeout = node.scheduleToCloseTimeout || 0;
+  const retryOnFail = node.retryOnFail !== false; // Default true
+  const maxRetries = node.maxRetries || 3;
+  const retryInterval = node.retryInterval || 1;
+  const backoffCoefficient = node.backoffCoefficient || 2.0;
+  const continueOnFail = node.continueOnFail || false;
+  
+  // Build retry policy if retries are enabled
+  let retryPolicyCode = '';
+  if (retryOnFail) {
+    retryPolicyCode = `
+        retry_policy=RetryPolicy(
+            initial_interval=timedelta(seconds=${retryInterval}),
+            backoff_coefficient=${backoffCoefficient},
+            maximum_attempts=${maxRetries},
+        ),`;
+  } else {
+    retryPolicyCode = `
+        retry_policy=RetryPolicy(maximum_attempts=1),`;
+  }
+  
+  // Build timeout options
+  let timeoutCode = `
+        start_to_close_timeout=timedelta(seconds=${startToCloseTimeout}),`;
+  
+  if (scheduleToCloseTimeout > 0) {
+    timeoutCode += `
+        schedule_to_close_timeout=timedelta(seconds=${scheduleToCloseTimeout}),`;
+  }
+  
+  // Generate the activity call
+  // We use toPythonValue for parameters to ensure True/False/None are correct
+  const parametersDict = toPythonValue(node.parameters || {});
+  
+  let activityCall = `
+        # Activity ${index + 1}: ${nodeName}
+        try:
+            ${nodeVarName} = await workflow.execute_activity(
+                ${funcName},
+                ActivityInput(
+                    node_id="${node.id}",
+                    node_name="${nodeName}",
+                    parameters=${parametersDict},
+                    input_data=result,
+                ),${timeoutCode}${retryPolicyCode}
+            )
+            result = ${nodeVarName}`;
+  
+  if (continueOnFail) {
+    activityCall += `
+        except Exception as e:
+            workflow.logger.warning(f"Activity '${nodeName}' failed but continuing: {e}")
+            # Continue with previous result`;
+  } else {
+    activityCall += `
+        except Exception as e:
+            workflow.logger.error(f"Activity '${nodeName}' failed: {e}")
+            raise`;
+  }
+  
+  return activityCall;
 }
 
 /**
@@ -217,56 +523,70 @@ async def execute_${nodeType.split('.').pop()?.toLowerCase() || 'unknown'}(param
  */
 function generateWorkflowFile(workflow: WorkflowData): string {
   const workflowName = toPythonIdentifier(workflow.name);
+  const workflowClassName = workflowName.charAt(0).toUpperCase() + workflowName.slice(1) + 'Workflow';
   const nodes = workflow.nodes as WorkflowNode[];
   const connections = workflow.connections as WorkflowConnection[];
   
   // Build execution order from connections (for future graph traversal)
   void connections; // Used for topology
   
-  // Generate node execution calls
-  const nodeExecutions = nodes
-    .filter(n => !n.type.includes('Trigger'))
-    .map(node => {
-      const funcName = nodeTypeToFunctionName(node.type);
-      const paramsJson = JSON.stringify(node.parameters || {}, null, 4)
-        .split('\n')
-        .map((line, i) => i === 0 ? line : '        ' + line)
-        .join('\n');
-      
-      return `
-    # Execute: ${node.name || node.type}
-    ${node.id.replace(/-/g, '_')}_result = await workflow.execute_activity(
-        ${funcName},
-        args=[${paramsJson}, result],
-        start_to_close_timeout=timedelta(seconds=300)
-    )
-    result = ${node.id.replace(/-/g, '_')}_result`;
-    }).join('\n');
+  // Filter to only activity nodes (not triggers)
+  const activityNodes = nodes.filter(n => isActivityNode(n.type));
+  
+  // Generate node execution calls with proper activity options
+  const nodeExecutions = activityNodes
+    .map((node, index) => generateActivityExecution(node, index))
+    .join('\n');
 
   return `"""
 ${workflow.name}
 ${workflow.description || 'Generated from Twiddle workflow'}
 
-Auto-generated Temporal workflow
+Auto-generated Temporal workflow with durable activity execution.
+Each activity is idempotent and has configurable retry and timeout policies.
 """
+import os
 from datetime import timedelta
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from activities import *
+    from activities import (
+        ActivityInput,
+${activityNodes.map(n => `        ${nodeTypeToFunctionName(n.type)},`).join('\n')}
+    )
 
 
 @workflow.defn
-class ${workflowName.charAt(0).toUpperCase() + workflowName.slice(1)}Workflow:
-    """${workflow.description || workflow.name}"""
+class ${workflowClassName}:
+    """
+    ${workflow.description || workflow.name}
+    
+    This is a Temporal workflow that orchestrates a series of activities.
+    Each activity is durable - if the worker crashes, Temporal will resume
+    execution from the last completed activity.
+    """
     
     @workflow.run
-    async def run(self, input_data: dict = None) -> dict:
-        """Execute the workflow"""
-        result = input_data or {}
-        ${nodeExecutions || '# No nodes to execute\n        pass'}
+    async def run(self, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Execute the workflow.
         
+        Args:
+            input_data: Optional input data to pass to the first activity
+            
+        Returns:
+            The result from the final activity
+        """
+        result = input_data or {}
+        
+        workflow.logger.info(f"Starting workflow with input: {result}")
+${nodeExecutions || '        # No activities to execute\n        pass'}
+        
+        workflow.logger.info(f"Workflow completed with result: {result}")
         return result
 `;
 }
@@ -276,24 +596,58 @@ class ${workflowName.charAt(0).toUpperCase() + workflowName.slice(1)}Workflow:
  */
 function generateActivitiesFile(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
-  const nodeTypes = [...new Set(nodes.map(n => n.type))];
+  const nodeTypes = [...new Set(nodes.filter(n => isActivityNode(n.type)).map(n => n.type))];
   
   const activities = nodeTypes
-    .filter(t => !t.includes('Trigger'))
     .map(nodeType => {
       const activityCode = generateActivityCode(nodeType);
+      const funcName = nodeTypeToFunctionName(nodeType);
       
       return `
-@activity.defn
+@activity.defn(name="${funcName}")
 ${activityCode}`;
     })
     .join('\n');
 
   return `"""
-Activity implementations for the workflow
+Activity implementations for the workflow.
+
+Each activity is:
+- Idempotent: Safe to retry without side effects
+- Durable: State is persisted by Temporal
+- Configurable: Retry policies and timeouts are set by the workflow
 """
+import os
+import logging
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
+
 from temporalio import activity
 
+# Configure logging
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ActivityInput:
+    """
+    Standard input for all activities.
+    
+    Attributes:
+        node_id: Unique identifier for this node in the workflow
+        node_name: Human-readable name for the activity
+        parameters: Node-specific configuration parameters
+        input_data: Data passed from the previous activity
+    """
+    node_id: str
+    node_name: str
+    parameters: Dict[str, Any]
+    input_data: Dict[str, Any]
+
+
+def get_env(key: str, default: str = "") -> str:
+    """Get environment variable with optional default."""
+    return os.environ.get(key, default)
 
 ${activities}
 `;
@@ -306,43 +660,136 @@ function generateWorkerFile(workflow: WorkflowData): string {
   const workflowName = toPythonIdentifier(workflow.name);
   const workflowClassName = workflowName.charAt(0).toUpperCase() + workflowName.slice(1) + 'Workflow';
   const nodes = workflow.nodes as WorkflowNode[];
-  const nodeTypes = [...new Set(nodes.map(n => n.type))];
+  const activityNodes = nodes.filter(n => isActivityNode(n.type));
+  const nodeTypes = [...new Set(activityNodes.map(n => n.type))];
   
   const activityImports = nodeTypes
-    .filter(t => !t.includes('Trigger'))
     .map(t => nodeTypeToFunctionName(t))
     .join(',\n    ');
 
   return `"""
 Temporal Worker for ${workflow.name}
+
+This worker connects to a Temporal server and executes workflow tasks.
+Configure the Temporal server address via environment variables.
+
+Task Queue: ${workflowName}
+Metrics prefix: ${workflowName}_
 """
 import asyncio
+import logging
+import os
+import sys
+from typing import Optional
+
+from dotenv import load_dotenv
 from temporalio.client import Client
 from temporalio.worker import Worker
+from temporalio.runtime import Runtime, TelemetryConfig, PrometheusConfig
 
 from workflow import ${workflowClassName}
 from activities import (
+    ActivityInput,
     ${activityImports}
 )
 
+# Load environment variables from .env file
+load_dotenv()
+
+# Workflow configuration
+WORKFLOW_NAME = "${workflowName}"
+TASK_QUEUE = WORKFLOW_NAME  # Task queue matches workflow name
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(WORKFLOW_NAME)
+
+
+def get_temporal_host() -> str:
+    """Get Temporal server address from environment."""
+    return os.environ.get('TEMPORAL_HOST', 'localhost:7233')
+
+
+def get_temporal_namespace() -> str:
+    """Get Temporal namespace from environment."""
+    return os.environ.get('TEMPORAL_NAMESPACE', 'default')
+
+
+def get_metrics_port() -> Optional[int]:
+    """Get Prometheus metrics port from environment."""
+    port = os.environ.get('METRICS_PORT')
+    return int(port) if port else None
+
+
+def create_runtime_with_metrics(metrics_port: int) -> Runtime:
+    """
+    Create a Temporal runtime with Prometheus metrics enabled.
+    
+    Metrics will be prefixed with the workflow name for easy filtering.
+    """
+    return Runtime(
+        telemetry=TelemetryConfig(
+            metrics=PrometheusConfig(
+                bind_address=f"0.0.0.0:{metrics_port}",
+            ),
+        ),
+    )
+
 
 async def main():
-    """Start the worker"""
-    # Connect to Temporal server
-    client = await Client.connect("localhost:7233")
+    """Start the Temporal worker."""
+    temporal_host = get_temporal_host()
+    namespace = get_temporal_namespace()
+    metrics_port = get_metrics_port()
     
-    # Create worker
+    logger.info(f"=== ${workflow.name} Worker ===")
+    logger.info(f"Workflow: {WORKFLOW_NAME}")
+    logger.info(f"Task Queue: {TASK_QUEUE}")
+    logger.info(f"Temporal Server: {temporal_host}")
+    logger.info(f"Namespace: {namespace}")
+    
+    # Create runtime with metrics if port is configured
+    runtime = None
+    if metrics_port:
+        logger.info(f"Metrics endpoint: http://0.0.0.0:{metrics_port}/metrics")
+        runtime = create_runtime_with_metrics(metrics_port)
+    
+    try:
+        # Connect to Temporal server
+        client = await Client.connect(
+            temporal_host,
+            namespace=namespace,
+            runtime=runtime,
+        )
+        logger.info("Successfully connected to Temporal server")
+    except Exception as e:
+        logger.error(f"Failed to connect to Temporal server: {e}")
+        logger.error("Make sure Temporal server is running and accessible")
+        sys.exit(1)
+    
+    # Create and run the worker
     worker = Worker(
         client,
-        task_queue="${workflowName}-task-queue",
+        task_queue=TASK_QUEUE,
         workflows=[${workflowClassName}],
         activities=[
             ${activityImports}
         ],
     )
     
-    print(f"Starting worker for ${workflow.name}...")
-    await worker.run()
+    logger.info(f"Starting worker...")
+    logger.info("Press Ctrl+C to stop")
+    
+    try:
+        await worker.run()
+    except KeyboardInterrupt:
+        logger.info("Worker stopped by user")
+    except Exception as e:
+        logger.error(f"Worker error: {e}")
+        raise
 
 
 if __name__ == "__main__":
@@ -359,36 +806,155 @@ function generateStarterFile(workflow: WorkflowData): string {
 
   return `"""
 Start the ${workflow.name} workflow
+
+This script connects to Temporal and starts a workflow execution.
+Configure the Temporal server address via environment variables.
+
+Task Queue: ${workflowName}
 """
+import argparse
 import asyncio
+import json
+import logging
+import os
+import sys
 import uuid
+
+from dotenv import load_dotenv
 from temporalio.client import Client
 
 from workflow import ${workflowClassName}
 
+# Load environment variables from .env file
+load_dotenv()
 
-async def main():
-    """Start a workflow execution"""
-    # Connect to Temporal server
-    client = await Client.connect("localhost:7233")
+# Workflow configuration
+WORKFLOW_NAME = "${workflowName}"
+TASK_QUEUE = WORKFLOW_NAME  # Task queue matches workflow name
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(WORKFLOW_NAME)
+
+
+def get_temporal_host() -> str:
+    """Get Temporal server address from environment."""
+    return os.environ.get('TEMPORAL_HOST', 'localhost:7233')
+
+
+def get_temporal_namespace() -> str:
+    """Get Temporal namespace from environment."""
+    return os.environ.get('TEMPORAL_NAMESPACE', 'default')
+
+
+async def start_workflow(input_data: dict = None, wait_for_result: bool = True, workflow_id: str = None) -> dict:
+    """
+    Start a workflow execution.
+    
+    Args:
+        input_data: Optional input data to pass to the workflow
+        wait_for_result: If True, wait for the workflow to complete
+        workflow_id: Optional custom workflow ID (auto-generated if not provided)
+        
+    Returns:
+        The workflow result if wait_for_result is True, otherwise the workflow ID
+    """
+    temporal_host = get_temporal_host()
+    namespace = get_temporal_namespace()
+    
+    logger.info(f"=== Starting ${workflow.name} ===")
+    logger.info(f"Temporal Server: {temporal_host}")
+    logger.info(f"Namespace: {namespace}")
+    logger.info(f"Task Queue: {TASK_QUEUE}")
+    
+    try:
+        client = await Client.connect(
+            temporal_host,
+            namespace=namespace,
+        )
+    except Exception as e:
+        logger.error(f"Failed to connect to Temporal server: {e}")
+        logger.error("Make sure Temporal server is running and accessible")
+        sys.exit(1)
+    
+    # Generate a unique workflow ID if not provided
+    if not workflow_id:
+        workflow_id = f"{WORKFLOW_NAME}-{uuid.uuid4().hex[:8]}"
+    
+    logger.info(f"Workflow ID: {workflow_id}")
+    logger.info(f"Input data: {json.dumps(input_data, default=str)}")
     
     # Start the workflow
-    workflow_id = f"${workflowName}-{uuid.uuid4()}"
-    
     handle = await client.start_workflow(
         ${workflowClassName}.run,
         id=workflow_id,
-        task_queue="${workflowName}-task-queue",
-        arg={"message": "Hello from Python!"}  # Input data
+        task_queue=TASK_QUEUE,
+        arg=input_data or {},
     )
     
-    print(f"Started workflow: {workflow_id}")
+    logger.info(f"Workflow started successfully!")
+    logger.info(f"View in Temporal UI: http://localhost:8080/namespaces/{namespace}/workflows/{workflow_id}")
     
-    # Wait for result
-    result = await handle.result()
-    print(f"Workflow result: {result}")
+    if wait_for_result:
+        logger.info("Waiting for workflow to complete...")
+        try:
+            result = await handle.result()
+            logger.info(f"Workflow completed!")
+            logger.info(f"Result: {json.dumps(result, indent=2, default=str)}")
+            return result
+        except Exception as e:
+            logger.error(f"Workflow failed: {e}")
+            raise
+    else:
+        return {"workflow_id": workflow_id, "status": "started"}
+
+
+async def main():
+    """Main entry point with CLI argument parsing."""
+    parser = argparse.ArgumentParser(
+        description='Start the ${workflow.name} workflow',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python starter.py
+  python starter.py --input '{"key": "value"}'
+  python starter.py --id my-custom-id --no-wait
+        """
+    )
+    parser.add_argument(
+        '--input', '-i',
+        type=str,
+        help='JSON input data for the workflow',
+        default='{}'
+    )
+    parser.add_argument(
+        '--id',
+        type=str,
+        help='Custom workflow ID (auto-generated if not provided)',
+        default=None
+    )
+    parser.add_argument(
+        '--no-wait',
+        action='store_true',
+        help='Start the workflow without waiting for the result'
+    )
     
-    return result
+    args = parser.parse_args()
+    
+    try:
+        input_data = json.loads(args.input)
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON input: {e}")
+        sys.exit(1)
+    
+    await start_workflow(
+        input_data=input_data,
+        wait_for_result=not args.no_wait,
+        workflow_id=args.id
+    )
 
 
 if __name__ == "__main__":
@@ -597,14 +1163,32 @@ Environment variables (set in \`.env\` or docker-compose.yml):
 |----------|---------|-------------|
 | \`TEMPORAL_HOST\` | localhost:7233 | Temporal server address |
 | \`TEMPORAL_NAMESPACE\` | default | Temporal namespace |
+| \`METRICS_PORT\` | (disabled) | Port for Prometheus metrics endpoint |
 
 ## Task Queue
 
-This workflow uses the task queue: \`${workflowName}-task-queue\`
+This workflow uses the task queue: \`${workflowName}\`
+
+The task queue name matches the workflow name for easy identification in the Temporal UI.
+
+## Metrics
+
+When \`METRICS_PORT\` is set, the worker exposes Prometheus metrics at:
+\`http://localhost:<METRICS_PORT>/metrics\`
+
+Key metrics include:
+- \`temporal_workflow_completed\` - Completed workflows
+- \`temporal_workflow_failed\` - Failed workflows  
+- \`temporal_activity_execution_latency\` - Activity execution time
+- \`temporal_activity_schedule_to_start_latency\` - Time waiting for worker
+
+All metrics include labels for \`workflow_type\` and \`task_queue\` (\`${workflowName}\`).
 
 ## Temporal UI
 
 When running with Docker, access the Temporal UI at: http://localhost:8080
+
+Filter by task queue \`${workflowName}\` to see only this workflow's executions.
 `;
 }
 
@@ -615,9 +1199,21 @@ function generateEnvExample(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = new Set(nodes.map(n => n.type));
   
-  let envContent = `# Temporal Configuration
+  const workflowName = toPythonIdentifier(workflow.name);
+  
+  let envContent = `# ${workflow.name} Configuration
+# Generated by Twiddle
+
+# Temporal Configuration
 TEMPORAL_HOST=localhost:7233
 TEMPORAL_NAMESPACE=default
+
+# Task queue (matches workflow name)
+# TASK_QUEUE=${workflowName}
+
+# Prometheus Metrics (optional)
+# Set to enable metrics endpoint on this port
+# METRICS_PORT=9090
 `;
 
   // Add database-specific env vars

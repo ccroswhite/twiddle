@@ -46,7 +46,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return { authenticated: false, user: null };
     }
 
-    const session = getSession(sessionId);
+    const session = await getSession(sessionId);
 
     if (!session) {
       return { authenticated: false, user: null };
@@ -71,7 +71,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     // Generate state for CSRF protection
     const state = crypto.randomUUID();
-    
+
     // Store state in cookie for verification
     reply.header(
       'Set-Cookie',
@@ -79,7 +79,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const authUrl = getAuthorizationUrl(config, state);
-    
+
     // Redirect to Azure login
     return reply.redirect(authUrl);
   });
@@ -136,7 +136,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         expiresAt: Date.now() + tokens.expiresIn * 1000,
       };
 
-      const sessionId = createSession(session);
+      const sessionId = await createSession(session);
 
       // Set session cookie
       const isProduction = process.env.NODE_ENV === 'production';
@@ -168,7 +168,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const sessionId = cookies['twiddle_session'] || '';
 
     if (sessionId) {
-      deleteSession(sessionId);
+      await deleteSession(sessionId);
     }
 
     // Clear session cookie
@@ -181,7 +181,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       // Return Azure logout URL for frontend to redirect
       const { logoutUrl } = getAzureUrls(config);
       const postLogoutRedirect = process.env.APP_URL || 'http://localhost:5173';
-      
+
       return {
         success: true,
         logoutUrl: `${logoutUrl}?post_logout_redirect_uri=${encodeURIComponent(postLogoutRedirect)}`,
@@ -199,7 +199,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const { logoutUrl } = getAzureUrls(config);
     const postLogoutRedirect = process.env.APP_URL || 'http://localhost:5173';
-    
+
     return {
       logoutUrl: `${logoutUrl}?post_logout_redirect_uri=${encodeURIComponent(postLogoutRedirect)}`,
     };

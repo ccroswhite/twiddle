@@ -645,6 +645,27 @@ export const localAuthApi = {
       body: JSON.stringify(data),
       credentials: 'include',
     }),
+
+  // Request password reset
+  forgotPassword: (data: { email: string }) =>
+    request<{ success: boolean; message: string; resetToken?: string; resetUrl?: string }>('/auth/local/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Verify reset token
+  verifyResetToken: (data: { email: string; token: string }) =>
+    request<{ valid: boolean }>('/auth/local/verify-reset-token', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Reset password with token
+  resetPassword: (data: { email: string; token: string; newPassword: string }) =>
+    request<{ success: boolean; message: string }>('/auth/local/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 // System Settings API (admin only)

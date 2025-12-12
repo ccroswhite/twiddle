@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react';
-import { X, Code } from 'lucide-react';
+import { X, Code, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Node } from '@xyflow/react';
+
+// Trigger nodes are not activities - they start workflows
+const TRIGGER_NODE_TYPES = new Set([
+  'twiddle.manualTrigger',
+  'twiddle.webhook',
+  'twiddle.interval',
+]);
+
+// Check if a node type is an activity (not a trigger)
+const isActivityNode = (nodeType: string): boolean => {
+  return !TRIGGER_NODE_TYPES.has(nodeType);
+};
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -962,7 +974,16 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
     <div className="fixed right-0 top-[57px] bottom-0 w-[450px] bg-white shadow-xl border-l border-slate-200 flex flex-col z-40">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-900">Node Properties</h2>
+        <div className="flex items-center gap-2">
+          {isActivityNode(nodeType) ? (
+            <>
+              <Zap className="w-5 h-5 text-amber-500" />
+              <h2 className="text-lg font-semibold text-slate-900">Activity Properties</h2>
+            </>
+          ) : (
+            <h2 className="text-lg font-semibold text-slate-900">Trigger Properties</h2>
+          )}
+        </div>
         <button
           onClick={onClose}
           className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -1001,6 +1022,154 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
           <h3 className="text-sm font-medium text-slate-700 mb-3">Parameters</h3>
           {renderParameterEditor()}
         </div>
+
+        {/* Activity Options - Only show for activity nodes (not triggers) */}
+        {isActivityNode(nodeType) && (
+          <div className="border-t border-slate-200 pt-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <h3 className="text-sm font-medium text-slate-700">Activity Options</h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              Configure Temporal activity execution behavior. Activities are the smallest unit of durable execution.
+            </p>
+            
+            {/* Timeout Settings */}
+            <div className="space-y-4">
+              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  Timeouts
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Start-to-Close Timeout (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    value={(parameters.startToCloseTimeout as number) || 300}
+                    onChange={(e) => updateParameter('startToCloseTimeout', parseInt(e.target.value) || 300)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                    min={1}
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Maximum time for a single activity execution attempt
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">
+                    Schedule-to-Close Timeout (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    value={(parameters.scheduleToCloseTimeout as number) || 0}
+                    onChange={(e) => updateParameter('scheduleToCloseTimeout', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                    min={0}
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Total time including retries (0 = unlimited)
+                  </p>
+                </div>
+              </div>
+
+              {/* Retry Settings */}
+              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <RefreshCw className="w-4 h-4 text-slate-500" />
+                  Retry Policy
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="retryOnFail"
+                    checked={(parameters.retryOnFail as boolean) ?? true}
+                    onChange={(e) => updateParameter('retryOnFail', e.target.checked)}
+                    className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <label htmlFor="retryOnFail" className="text-sm text-slate-700">
+                    Retry on failure
+                  </label>
+                </div>
+
+                {(parameters.retryOnFail ?? true) && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Maximum Attempts
+                      </label>
+                      <input
+                        type="number"
+                        value={(parameters.maxRetries as number) || 3}
+                        onChange={(e) => updateParameter('maxRetries', parseInt(e.target.value) || 3)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        min={1}
+                        max={100}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Initial Retry Interval (seconds)
+                      </label>
+                      <input
+                        type="number"
+                        value={(parameters.retryInterval as number) || 1}
+                        onChange={(e) => updateParameter('retryInterval', parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        min={1}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                        Backoff Coefficient
+                      </label>
+                      <input
+                        type="number"
+                        value={(parameters.backoffCoefficient as number) || 2}
+                        onChange={(e) => updateParameter('backoffCoefficient', parseFloat(e.target.value) || 2)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                        min={1}
+                        step={0.1}
+                      />
+                      <p className="text-xs text-slate-400 mt-1">
+                        Multiplier for retry interval between attempts
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Error Handling */}
+              <div className="bg-slate-50 rounded-lg p-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <AlertTriangle className="w-4 h-4 text-slate-500" />
+                  Error Handling
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="continueOnFail"
+                    checked={(parameters.continueOnFail as boolean) ?? false}
+                    onChange={(e) => updateParameter('continueOnFail', e.target.checked)}
+                    className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <label htmlFor="continueOnFail" className="text-sm text-slate-700">
+                    Continue workflow on failure
+                  </label>
+                </div>
+                <p className="text-xs text-slate-400">
+                  If enabled, the workflow will continue to the next activity even if this one fails after all retries.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Footer */}

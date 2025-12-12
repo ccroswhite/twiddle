@@ -1,6 +1,18 @@
 import { useState } from 'react';
-import { X, Search, Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Server, Clock, Key, Send, Webhook, FileCode } from 'lucide-react';
+import { X, Search, Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Server, Clock, Key, Send, Webhook, FileCode, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// Trigger nodes are not activities - they start workflows
+const TRIGGER_NODE_TYPES = new Set([
+  'twiddle.manualTrigger',
+  'twiddle.webhook',
+  'twiddle.interval',
+]);
+
+// Check if a node type is an activity (not a trigger)
+const isActivityNode = (nodeType: string): boolean => {
+  return !TRIGGER_NODE_TYPES.has(nodeType);
+};
 
 interface NodeTypeInfo {
   type: string;
@@ -85,7 +97,7 @@ export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold">Add Node</h2>
+          <h2 className="text-lg font-semibold">Add Activity or Trigger</h2>
           <button
             onClick={onClose}
             className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -100,7 +112,7 @@ export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search nodes..."
+              placeholder="Search activities and triggers..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -133,9 +145,21 @@ export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
                         <div className={cn(bgColor, 'p-2 rounded-lg')}>
                           <Icon className="w-4 h-4 text-white" />
                         </div>
-                        <div>
-                          <div className="font-medium text-sm text-slate-900">
-                            {node.displayName}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-slate-900">
+                              {node.displayName}
+                            </span>
+                            {isActivityNode(node.type) ? (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1 rounded">
+                                <Zap className="w-2 h-2" />
+                                Activity
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium text-blue-600 bg-blue-50 px-1 rounded">
+                                Trigger
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-slate-500 line-clamp-1">
                             {node.description}
@@ -150,7 +174,7 @@ export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
 
           {filteredNodes.length === 0 && (
             <div className="text-center py-8 text-slate-400">
-              No nodes found matching "{search}"
+              No activities or triggers found matching "{search}"
             </div>
           )}
         </div>

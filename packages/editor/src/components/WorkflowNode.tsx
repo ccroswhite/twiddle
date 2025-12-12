@@ -1,7 +1,19 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-import { Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Search, Server, Clock, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare } from 'lucide-react';
+import { Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Search, Server, Clock, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap } from 'lucide-react';
+
+// Trigger nodes are not activities - they start workflows
+const TRIGGER_NODE_TYPES = new Set([
+  'twiddle.manualTrigger',
+  'twiddle.webhook',
+  'twiddle.interval',
+]);
+
+// Check if a node type is an activity (not a trigger)
+const isActivityNode = (nodeType: string): boolean => {
+  return !TRIGGER_NODE_TYPES.has(nodeType);
+};
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'twiddle.httpRequest': Globe,
@@ -201,11 +213,20 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
           <div className={`${bgColor} p-1 rounded`}>
             <Icon className="w-3 h-3 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="font-medium text-xs text-slate-900">{data.label}</div>
             {!isCredential && (
-              <div className="text-[10px] text-slate-400 leading-tight">
-                {data.nodeType.replace('twiddle.', '')}
+              <div className="flex items-center gap-1">
+                {isActivityNode(data.nodeType) ? (
+                  <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1 rounded">
+                    <Zap className="w-2 h-2" />
+                    Activity
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-medium text-blue-600 bg-blue-50 px-1 rounded">
+                    Trigger
+                  </span>
+                )}
               </div>
             )}
           </div>

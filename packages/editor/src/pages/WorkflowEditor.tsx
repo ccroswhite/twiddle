@@ -897,9 +897,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           <button
             onClick={() => setShowNodePanel(true)}
             className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Add a new activity or trigger to the workflow"
           >
             <Plus className="w-4 h-4" />
-            Add Node
+            Add Activity
           </button>
           <button
             onClick={handleExportPython}

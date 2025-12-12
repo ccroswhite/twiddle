@@ -11,10 +11,14 @@ export interface WorkflowNode {
   credentials?: Record<string, string>;
   disabled?: boolean;
   notes?: string;
-  retryOnFail?: boolean;
-  maxRetries?: number;
-  retryInterval?: number;
-  continueOnFail?: boolean;
+  // Temporal Activity Options
+  startToCloseTimeout?: number;      // Maximum time for a single activity execution attempt (seconds)
+  scheduleToCloseTimeout?: number;   // Total time including retries (seconds, 0 = unlimited)
+  retryOnFail?: boolean;             // Whether to retry on failure (default: true)
+  maxRetries?: number;               // Maximum number of retry attempts
+  retryInterval?: number;            // Initial retry interval (seconds)
+  backoffCoefficient?: number;       // Multiplier for retry interval between attempts
+  continueOnFail?: boolean;          // Continue workflow even if activity fails after all retries
 }
 
 export interface WorkflowConnection {

@@ -64,10 +64,10 @@ export function getAuthConfig(): AuthConfig {
 // Azure Entra OAuth URLs
 export function getAzureUrls(config: AuthConfig) {
   if (!config.azure) throw new Error('Azure config not available');
-  
+
   const { tenantId } = config.azure;
   const baseUrl = `https://login.microsoftonline.com/${tenantId}`;
-  
+
   return {
     authorizeUrl: `${baseUrl}/oauth2/v2.0/authorize`,
     tokenUrl: `${baseUrl}/oauth2/v2.0/token`,
@@ -79,10 +79,10 @@ export function getAzureUrls(config: AuthConfig) {
 // Generate authorization URL
 export function getAuthorizationUrl(config: AuthConfig, state: string): string {
   if (!config.azure) throw new Error('Azure config not available');
-  
+
   const { authorizeUrl } = getAzureUrls(config);
   const { clientId, redirectUri, scopes } = config.azure;
-  
+
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: 'code',
@@ -91,7 +91,7 @@ export function getAuthorizationUrl(config: AuthConfig, state: string): string {
     response_mode: 'query',
     state,
   });
-  
+
   return `${authorizeUrl}?${params.toString()}`;
 }
 
@@ -101,10 +101,10 @@ export async function exchangeCodeForTokens(
   code: string,
 ): Promise<{ accessToken: string; refreshToken?: string; expiresIn: number; idToken?: string }> {
   if (!config.azure) throw new Error('Azure config not available');
-  
+
   const { tokenUrl } = getAzureUrls(config);
   const { clientId, clientSecret, redirectUri, scopes } = config.azure;
-  
+
   const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
@@ -119,19 +119,19 @@ export async function exchangeCodeForTokens(
       scope: scopes.join(' '),
     }),
   });
-  
+
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`Token exchange failed: ${error}`);
   }
-  
+
   const data = await response.json() as {
     access_token: string;
     refresh_token?: string;
     expires_in: number;
     id_token?: string;
   };
-  
+
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -146,10 +146,10 @@ export async function refreshAccessToken(
   refreshToken: string,
 ): Promise<{ accessToken: string; refreshToken?: string; expiresIn: number }> {
   if (!config.azure) throw new Error('Azure config not available');
-  
+
   const { tokenUrl } = getAzureUrls(config);
   const { clientId, clientSecret, scopes } = config.azure;
-  
+
   const response = await fetch(tokenUrl, {
     method: 'POST',
     headers: {
@@ -163,17 +163,17 @@ export async function refreshAccessToken(
       scope: scopes.join(' '),
     }),
   });
-  
+
   if (!response.ok) {
     throw new Error('Token refresh failed');
   }
-  
+
   const data = await response.json() as {
     access_token: string;
     refresh_token?: string;
     expires_in: number;
   };
-  
+
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -194,11 +194,11 @@ export async function getUserInfo(accessToken: string): Promise<{
       Authorization: `Bearer ${accessToken}`,
     },
   });
-  
+
   if (!response.ok) {
     throw new Error('Failed to get user info');
   }
-  
+
   const data = await response.json() as {
     id: string;
     mail?: string;
@@ -207,7 +207,7 @@ export async function getUserInfo(accessToken: string): Promise<{
     givenName?: string;
     surname?: string;
   };
-  
+
   return {
     id: data.id,
     email: data.mail || data.userPrincipalName,
@@ -217,38 +217,108 @@ export async function getUserInfo(accessToken: string): Promise<{
   };
 }
 
-// Session store (in production, use Redis or database)
-const sessions = new Map<string, UserSession>();
+// Session management using Prisma
+import { prisma } from './prisma.js';
 
-export function createSession(user: UserSession): string {
-  const sessionId = crypto.randomUUID();
-  sessions.set(sessionId, user);
-  return sessionId;
+// Session duration: 7 days
+const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function createSession(userSession: UserSession): Promise<string> {
+  // 1. Upsert user
+  const user = await prisma.user.upsert({
+    where: { email: userSession.email.toLowerCase() },
+    update: {
+      name: userSession.name,
+      lastLoginAt: new Date(),
+      // Update provider info if needed, or keep existing
+    },
+    create: {
+      email: userSession.email.toLowerCase(),
+      name: userSession.name,
+      provider: userSession.provider,
+      isActive: true, // Auto-activate SSO users
+    },
+  });
+
+  // 2. Ensure default group membership
+  const groupCount = await prisma.groupMember.count({
+    where: { userId: user.id },
+  });
+
+  if (groupCount === 0) {
+    const defaultGroup = await prisma.group.findFirst({
+      where: { isDefault: true },
+    });
+    if (defaultGroup) {
+      await prisma.groupMember.create({
+        data: {
+          userId: user.id,
+          groupId: defaultGroup.id,
+          role: 'member',
+        },
+      });
+    }
+  }
+
+  // 3. Create session
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
+
+  await prisma.session.create({
+    data: {
+      userId: user.id,
+      token,
+      expiresAt,
+    },
+  });
+
+  return token;
 }
 
-export function getSession(sessionId: string): UserSession | undefined {
-  return sessions.get(sessionId);
+export async function getSession(token: string): Promise<UserSession | undefined> {
+  const session = await prisma.session.findUnique({
+    where: { token },
+    include: { user: true },
+  });
+
+  if (!session) {
+    return undefined;
+  }
+
+  // Check expiry
+  if (session.expiresAt < new Date()) {
+    await prisma.session.delete({ where: { id: session.id } });
+    return undefined;
+  }
+
+  if (!session.user.isActive) {
+    return undefined;
+  }
+
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    name: session.user.name || '',
+    provider: session.user.provider,
+    // We don't store upstream tokens in DB session
+  };
 }
 
-export function deleteSession(sessionId: string): void {
-  sessions.delete(sessionId);
+export async function deleteSession(token: string): Promise<void> {
+  await prisma.session.deleteMany({
+    where: { token },
+  });
 }
 
-// Optional auth middleware - sets request.user if authenticated, but doesn't block
-// This is used for routes that work with or without authentication
+// Optional auth middleware
 export async function optionalAuthMiddleware(
   request: FastifyRequest,
   _reply: FastifyReply,
 ): Promise<void> {
-  // Import prisma dynamically to avoid circular dependencies
-  const { prisma } = await import('./prisma.js');
-  
   try {
     const cookieHeader = request.headers.cookie || '';
-    if (!cookieHeader) {
-      return; // No cookies, continue without user
-    }
-    
+    if (!cookieHeader) return;
+
     const cookies: Record<string, string> = {};
     cookieHeader.split(';').forEach(c => {
       const parts = c.trim().split('=');
@@ -257,31 +327,30 @@ export async function optionalAuthMiddleware(
       }
     });
     const token = cookies['twiddle_session'] || '';
-    
-    if (!token) {
-      return; // No session, continue without user
+
+    if (!token) return;
+
+    const session = await getSession(token);
+
+    if (session) {
+      (request as FastifyRequest & { user: { id: string; email: string; name: string | null; isAdmin: boolean } }).user = {
+        id: session.id,
+        email: session.email,
+        name: session.name,
+        isAdmin: false, // Access user record for strict admin check if needed
+      };
+
+      // Fetch admin status if needed (optimization: add isAdmin to UserSession interface or fetch here)
+      const user = await prisma.user.findUnique({
+        where: { id: session.id },
+        select: { isAdmin: true }
+      });
+      if (user?.isAdmin) {
+        (request as any).user.isAdmin = true;
+      }
     }
-    
-    // Find session in database
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { user: true },
-    });
-    
-    if (!session || session.expiresAt < new Date() || !session.user.isActive) {
-      return; // Invalid/expired session, continue without user
-    }
-    
-    // Attach user to request
-    (request as FastifyRequest & { user: { id: string; email: string; name: string | null; isAdmin: boolean } }).user = {
-      id: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-      isAdmin: session.user.isAdmin,
-    };
   } catch (error) {
     console.error('Auth middleware error:', error);
-    // Continue without user on error
   }
 }
 
@@ -291,52 +360,29 @@ export async function authMiddleware(
   reply: FastifyReply,
 ): Promise<void> {
   const config = getAuthConfig();
-  
-  // If auth is disabled, allow all requests
+
   if (!config.enabled) {
     return;
   }
-  
-  // Check for session cookie or authorization header
+
   const cookieHeader = request.headers.cookie || '';
   const cookies = Object.fromEntries(
     cookieHeader.split(';').map(c => c.trim().split('=').map(s => s.trim()))
   );
   const sessionId = cookies['twiddle_session'] || '';
-  
+
   if (!sessionId) {
     reply.status(401).send({ error: 'Unauthorized', message: 'No session found' });
     return;
   }
-  
-  const session = getSession(sessionId);
-  
+
+  const session = await getSession(sessionId);
+
   if (!session) {
     reply.status(401).send({ error: 'Unauthorized', message: 'Invalid session' });
     return;
   }
-  
-  // Check if token is expired
-  if (session.expiresAt && Date.now() > session.expiresAt) {
-    // Try to refresh the token
-    if (session.refreshToken) {
-      try {
-        const tokens = await refreshAccessToken(config, session.refreshToken);
-        session.accessToken = tokens.accessToken;
-        session.refreshToken = tokens.refreshToken;
-        session.expiresAt = Date.now() + tokens.expiresIn * 1000;
-      } catch {
-        deleteSession(sessionId);
-        reply.status(401).send({ error: 'Unauthorized', message: 'Session expired' });
-        return;
-      }
-    } else {
-      deleteSession(sessionId);
-      reply.status(401).send({ error: 'Unauthorized', message: 'Session expired' });
-      return;
-    }
-  }
-  
+
   // Attach user to request
   (request as FastifyRequest & { user: UserSession }).user = session;
 }

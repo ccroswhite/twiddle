@@ -10,11 +10,22 @@ import {
   validatePassword,
   validateEmail,
 } from '../lib/password.js';
+import { randomBytes } from 'crypto';
 
 const prisma = new PrismaClient();
 
 // Session duration: 7 days
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Password reset token duration: 1 hour
+const RESET_TOKEN_DURATION_MS = 60 * 60 * 1000;
+
+/**
+ * Generate a secure reset token
+ */
+function generateResetToken(): string {
+  return randomBytes(32).toString('hex');
+}
 
 export const localAuthRoutes: FastifyPluginAsync = async (app) => {
   // Register a new user
@@ -153,8 +164,8 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
 
     // Check if user has a password (local auth)
     if (!user.password) {
-      return reply.status(401).send({ 
-        error: 'This account uses SSO. Please login with your SSO provider.' 
+      return reply.status(401).send({
+        error: 'This account uses SSO. Please login with your SSO provider.'
       });
     }
 
@@ -304,8 +315,8 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
 
     // Check if user has local auth
     if (!user.password) {
-      return reply.status(400).send({ 
-        error: 'Cannot change password for SSO accounts' 
+      return reply.status(400).send({
+        error: 'Cannot change password for SSO accounts'
       });
     }
 
@@ -446,5 +457,152 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
         isAdmin: user.isAdmin,
       },
     };
+  });
+
+  // Request password reset
+  app.post<{
+    Body: {
+      email: string;
+    };
+  }>('/forgot-password', async (request, reply) => {
+    const { email } = request.body;
+
+    if (!email || !validateEmail(email)) {
+      return reply.status(400).send({ error: 'Invalid email address' });
+    }
+
+    // Find user
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    // Always return success to prevent email enumeration
+    if (!user || user.provider !== 'local') {
+      // Log for debugging but don't reveal to user
+      console.log(`Password reset requested for non-existent or SSO user: ${email}`);
+      return { success: true, message: 'If an account exists with this email, a reset link has been generated.' };
+    }
+
+    // Generate reset token
+    const resetToken = generateResetToken();
+    const resetTokenExpiry = new Date(Date.now() + RESET_TOKEN_DURATION_MS);
+
+    // Store reset token in database
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+
+    // In a real application, you would send an email here
+    // For now, we'll return the token in the response (development only)
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    // Log token in dev for testing
+    if (isDev) {
+      console.log(`[DEV ONLY] Password reset token generated for ${email}: ${resetToken}`);
+      console.log(`[DEV ONLY] Reset URL: /reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`);
+    }
+
+    return {
+      success: true,
+      message: 'If an account exists with this email, a reset link has been generated.',
+      // Only include token in development for testing
+      ...(isDev && {
+        resetToken,
+        resetUrl: `/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+      }),
+    };
+  });
+
+  // Verify reset token is valid
+  app.post<{
+    Body: {
+      email: string;
+      token: string;
+    };
+  }>('/verify-reset-token', async (request, reply) => {
+    const { email, token } = request.body;
+
+    if (!email || !token) {
+      return reply.status(400).send({ error: 'Email and token are required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user || !user.resetToken || !user.resetTokenExpiry) {
+      return reply.status(400).send({ error: 'Invalid or expired reset token' });
+    }
+
+    if (user.resetToken !== token) {
+      return reply.status(400).send({ error: 'Invalid or expired reset token' });
+    }
+
+    if (user.resetTokenExpiry < new Date()) {
+      return reply.status(400).send({ error: 'Reset token has expired' });
+    }
+
+    return { valid: true };
+  });
+
+  // Reset password with token
+  app.post<{
+    Body: {
+      email: string;
+      token: string;
+      newPassword: string;
+    };
+  }>('/reset-password', async (request, reply) => {
+    const { email, token, newPassword } = request.body;
+
+    if (!email || !token || !newPassword) {
+      return reply.status(400).send({ error: 'Email, token, and new password are required' });
+    }
+
+    // Validate new password
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return reply.status(400).send({ error: passwordError });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+    });
+
+    if (!user || !user.resetToken || !user.resetTokenExpiry) {
+      return reply.status(400).send({ error: 'Invalid or expired reset token' });
+    }
+
+    if (user.resetToken !== token) {
+      return reply.status(400).send({ error: 'Invalid or expired reset token' });
+    }
+
+    if (user.resetTokenExpiry < new Date()) {
+      return reply.status(400).send({ error: 'Reset token has expired' });
+    }
+
+    // Hash new password
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update password and clear reset token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+
+    // Invalidate all existing sessions for security
+    await prisma.session.deleteMany({
+      where: { userId: user.id },
+    });
+
+    return { success: true, message: 'Password has been reset successfully. Please log in with your new password.' };
   });
 };

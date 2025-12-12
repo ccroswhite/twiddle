@@ -24,7 +24,12 @@ model User {
   emailVerified Boolean  @default(false)
   lastLoginAt   DateTime?
   createdAt     DateTime @default(now())
+
   updatedAt     DateTime @updatedAt
+
+  // Password reset
+  resetToken       String?
+  resetTokenExpiry DateTime?
 
   // Sessions for local auth
   sessions      Session[]
