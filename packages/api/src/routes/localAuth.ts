@@ -142,7 +142,8 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
       password: string;
     };
   }>('/login', async (request, reply) => {
-    const { email, password } = request.body;
+    const email = (request.body as any).email?.trim();
+    const password = (request.body as any).password?.trim();
 
     if (!email || !password) {
       return reply.status(400).send({ error: 'Email and password are required' });
@@ -154,6 +155,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (!user) {
+      console.log(`[Auth] Login failed: User not found for email "${email}"`);
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
@@ -172,6 +174,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
     // Verify password
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
+      console.log(`[Auth] Login failed: Invalid password for user "${email}"`);
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 

@@ -69,8 +69,8 @@ async function main() {
   });
 
   // Register routes
-  await app.register(localAuthRoutes, { prefix: '/api/auth' });
-  await app.register(authRoutes, { prefix: '/api/auth/sso' });
+  await app.register(localAuthRoutes, { prefix: '/api/auth/local' });
+  await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(workflowRoutes, { prefix: '/api/workflows' });
   await app.register(promotionRoutes, { prefix: '/api/promotions' });
   await app.register(nodeRoutes, { prefix: '/api/nodes' });

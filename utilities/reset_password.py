@@ -87,7 +87,7 @@ def reset_password(email: str, new_password: str):
         user_id = user[0]
         print(f"User found (ID: {user_id}). Generating hash...")
         
-        password_hash = hash_password(new_password)
+        password_hash = hash_password(new_password.rstrip())
         
         print("Updating password...")
         cur.execute(
