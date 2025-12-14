@@ -452,7 +452,7 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
   const funcName = nodeTypeToFunctionName(node.type);
   const nodeVarName = `node_${index}_result`;
   const nodeName = node.name || node.type.split('.').pop() || 'unknown';
-  
+
   // Get activity options with defaults
   const startToCloseTimeout = node.startToCloseTimeout || 300;
   const scheduleToCloseTimeout = node.scheduleToCloseTimeout || 0;
@@ -461,7 +461,7 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
   const retryInterval = node.retryInterval || 1;
   const backoffCoefficient = node.backoffCoefficient || 2.0;
   const continueOnFail = node.continueOnFail || false;
-  
+
   // Build retry policy if retries are enabled
   let retryPolicyCode = '';
   if (retryOnFail) {
@@ -475,20 +475,20 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
     retryPolicyCode = `
         retry_policy=RetryPolicy(maximum_attempts=1),`;
   }
-  
+
   // Build timeout options
   let timeoutCode = `
         start_to_close_timeout=timedelta(seconds=${startToCloseTimeout}),`;
-  
+
   if (scheduleToCloseTimeout > 0) {
     timeoutCode += `
         schedule_to_close_timeout=timedelta(seconds=${scheduleToCloseTimeout}),`;
   }
-  
+
   // Generate the activity call
   // We use toPythonValue for parameters to ensure True/False/None are correct
   const parametersDict = toPythonValue(node.parameters || {});
-  
+
   let activityCall = `
         # Activity ${index + 1}: ${nodeName}
         try:
@@ -502,7 +502,7 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
                 ),${timeoutCode}${retryPolicyCode}
             )
             result = ${nodeVarName}`;
-  
+
   if (continueOnFail) {
     activityCall += `
         except Exception as e:
@@ -514,7 +514,7 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
             workflow.logger.error(f"Activity '${nodeName}' failed: {e}")
             raise`;
   }
-  
+
   return activityCall;
 }
 
@@ -526,13 +526,13 @@ function generateWorkflowFile(workflow: WorkflowData): string {
   const workflowClassName = workflowName.charAt(0).toUpperCase() + workflowName.slice(1) + 'Workflow';
   const nodes = workflow.nodes as WorkflowNode[];
   const connections = workflow.connections as WorkflowConnection[];
-  
+
   // Build execution order from connections (for future graph traversal)
   void connections; // Used for topology
-  
+
   // Filter to only activity nodes (not triggers)
   const activityNodes = nodes.filter(n => isActivityNode(n.type));
-  
+
   // Generate node execution calls with proper activity options
   const nodeExecutions = activityNodes
     .map((node, index) => generateActivityExecution(node, index))
@@ -597,12 +597,12 @@ ${nodeExecutions || '        # No activities to execute\n        pass'}
 function generateActivitiesFile(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = [...new Set(nodes.filter(n => isActivityNode(n.type)).map(n => n.type))];
-  
+
   const activities = nodeTypes
     .map(nodeType => {
       const activityCode = generateActivityCode(nodeType);
       const funcName = nodeTypeToFunctionName(nodeType);
-      
+
       return `
 @activity.defn(name="${funcName}")
 ${activityCode}`;
@@ -653,149 +653,7 @@ ${activities}
 `;
 }
 
-/**
- * Generate the worker file
- */
-function generateWorkerFile(workflow: WorkflowData): string {
-  const workflowName = toPythonIdentifier(workflow.name);
-  const workflowClassName = workflowName.charAt(0).toUpperCase() + workflowName.slice(1) + 'Workflow';
-  const nodes = workflow.nodes as WorkflowNode[];
-  const activityNodes = nodes.filter(n => isActivityNode(n.type));
-  const nodeTypes = [...new Set(activityNodes.map(n => n.type))];
-  
-  const activityImports = nodeTypes
-    .map(t => nodeTypeToFunctionName(t))
-    .join(',\n    ');
 
-  return `"""
-Temporal Worker for ${workflow.name}
-
-This worker connects to a Temporal server and executes workflow tasks.
-Configure the Temporal server address via environment variables.
-
-Task Queue: ${workflowName}
-Metrics prefix: ${workflowName}_
-"""
-import asyncio
-import logging
-import os
-import sys
-from typing import Optional
-
-from dotenv import load_dotenv
-from temporalio.client import Client
-from temporalio.worker import Worker
-from temporalio.runtime import Runtime, TelemetryConfig, PrometheusConfig
-
-from workflow import ${workflowClassName}
-from activities import (
-    ActivityInput,
-    ${activityImports}
-)
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Workflow configuration
-WORKFLOW_NAME = "${workflowName}"
-TASK_QUEUE = WORKFLOW_NAME  # Task queue matches workflow name
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(WORKFLOW_NAME)
-
-
-def get_temporal_host() -> str:
-    """Get Temporal server address from environment."""
-    return os.environ.get('TEMPORAL_HOST', 'localhost:7233')
-
-
-def get_temporal_namespace() -> str:
-    """Get Temporal namespace from environment."""
-    return os.environ.get('TEMPORAL_NAMESPACE', 'default')
-
-
-def get_metrics_port() -> Optional[int]:
-    """Get Prometheus metrics port from environment."""
-    port = os.environ.get('METRICS_PORT')
-    return int(port) if port else None
-
-
-def create_runtime_with_metrics(metrics_port: int) -> Runtime:
-    """
-    Create a Temporal runtime with Prometheus metrics enabled.
-    
-    Metrics will be prefixed with the workflow name for easy filtering.
-    """
-    return Runtime(
-        telemetry=TelemetryConfig(
-            metrics=PrometheusConfig(
-                bind_address=f"0.0.0.0:{metrics_port}",
-            ),
-        ),
-    )
-
-
-async def main():
-    """Start the Temporal worker."""
-    temporal_host = get_temporal_host()
-    namespace = get_temporal_namespace()
-    metrics_port = get_metrics_port()
-    
-    logger.info(f"=== ${workflow.name} Worker ===")
-    logger.info(f"Workflow: {WORKFLOW_NAME}")
-    logger.info(f"Task Queue: {TASK_QUEUE}")
-    logger.info(f"Temporal Server: {temporal_host}")
-    logger.info(f"Namespace: {namespace}")
-    
-    # Create runtime with metrics if port is configured
-    runtime = None
-    if metrics_port:
-        logger.info(f"Metrics endpoint: http://0.0.0.0:{metrics_port}/metrics")
-        runtime = create_runtime_with_metrics(metrics_port)
-    
-    try:
-        # Connect to Temporal server
-        client = await Client.connect(
-            temporal_host,
-            namespace=namespace,
-            runtime=runtime,
-        )
-        logger.info("Successfully connected to Temporal server")
-    except Exception as e:
-        logger.error(f"Failed to connect to Temporal server: {e}")
-        logger.error("Make sure Temporal server is running and accessible")
-        sys.exit(1)
-    
-    # Create and run the worker
-    worker = Worker(
-        client,
-        task_queue=TASK_QUEUE,
-        workflows=[${workflowClassName}],
-        activities=[
-            ${activityImports}
-        ],
-    )
-    
-    logger.info(f"Starting worker...")
-    logger.info("Press Ctrl+C to stop")
-    
-    try:
-        await worker.run()
-    except KeyboardInterrupt:
-        logger.info("Worker stopped by user")
-    except Exception as e:
-        logger.error(f"Worker error: {e}")
-        raise
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-`;
-}
 
 /**
  * Generate the starter/client file
@@ -968,7 +826,7 @@ if __name__ == "__main__":
 function generateRequirements(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = new Set(nodes.map(n => n.type));
-  
+
   const requirements: string[] = [
     '# Temporal SDK',
     'temporalio>=1.4.0',
@@ -979,71 +837,71 @@ function generateRequirements(workflow: WorkflowData): string {
     '# Utilities',
     'python-dotenv>=1.0.0',
   ];
-  
+
   // Add SSH dependencies
   if (nodeTypes.has('twiddle.ssh')) {
     requirements.push('', '# SSH', 'asyncssh>=2.14.0', 'cryptography>=41.0.0');
   }
-  
+
   // Add WinRM dependencies
   if (nodeTypes.has('twiddle.winrm')) {
     requirements.push('', '# WinRM', 'pywinrm>=0.4.3');
   }
-  
+
   // Add PostgreSQL dependencies
   if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlCredentials'))) {
     requirements.push('', '# PostgreSQL', 'asyncpg>=0.29.0', 'psycopg2-binary>=2.9.9');
   }
-  
+
   // Add MySQL dependencies
   if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlCredentials'))) {
     requirements.push('', '# MySQL', 'aiomysql>=0.2.0', 'PyMySQL>=1.1.0');
   }
-  
+
   // Add MSSQL dependencies
   if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'))) {
     requirements.push('', '# Microsoft SQL Server', 'pymssql>=2.2.11');
   }
-  
+
   // Add Redis dependencies
   if (nodeTypes.has('twiddle.redis') || nodes.some(n => n.type.includes('credential.redisCredentials'))) {
     requirements.push('', '# Redis', 'redis>=5.0.0', 'aioredis>=2.0.1');
   }
-  
+
   // Add Valkey dependencies (Redis-compatible)
   if (nodeTypes.has('twiddle.valkey') || nodes.some(n => n.type.includes('credential.valkeyCredentials'))) {
     requirements.push('', '# Valkey (Redis-compatible)', 'redis>=5.0.0');
   }
-  
+
   // Add Cassandra dependencies
   if (nodeTypes.has('twiddle.cassandra') || nodes.some(n => n.type.includes('credential.cassandraCredentials'))) {
     requirements.push('', '# Cassandra', 'cassandra-driver>=3.29.0');
   }
-  
+
   // Add OpenSearch/Elasticsearch dependencies
   if (nodeTypes.has('twiddle.opensearch') || nodes.some(n => n.type.includes('credential.opensearchCredentials'))) {
     requirements.push('', '# OpenSearch', 'opensearch-py>=2.4.0');
   }
-  
+
   if (nodeTypes.has('twiddle.elasticsearch') || nodes.some(n => n.type.includes('credential.elasticsearchCredentials'))) {
     requirements.push('', '# Elasticsearch', 'elasticsearch>=8.11.0');
   }
-  
+
   // Add Snowflake dependencies
   if (nodeTypes.has('twiddle.snowflake') || nodes.some(n => n.type.includes('credential.snowflakeCredentials'))) {
     requirements.push('', '# Snowflake', 'snowflake-connector-python>=3.6.0');
   }
-  
+
   // Add PrestoDB dependencies
   if (nodeTypes.has('twiddle.prestodb') || nodes.some(n => n.type.includes('credential.prestodbCredentials'))) {
     requirements.push('', '# PrestoDB', 'presto-python-client>=0.8.4');
   }
-  
+
   // Add Oracle dependencies
   if (nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleCredentials'))) {
     requirements.push('', '# Oracle', 'oracledb>=2.0.0');
   }
-  
+
   return requirements.join('\n') + '\n';
 }
 
@@ -1052,7 +910,7 @@ function generateRequirements(workflow: WorkflowData): string {
  */
 function generateReadme(workflow: WorkflowData): string {
   const workflowName = toPythonIdentifier(workflow.name);
-  
+
   return `# ${workflow.name}
 
 ${workflow.description || 'A Temporal workflow generated from Twiddle.'}
@@ -1198,9 +1056,9 @@ Filter by task queue \`${workflowName}\` to see only this workflow's executions.
 function generateEnvExample(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = new Set(nodes.map(n => n.type));
-  
+
   const workflowName = toPythonIdentifier(workflow.name);
-  
+
   let envContent = `# ${workflow.name} Configuration
 # Generated by Twiddle
 
@@ -1250,8 +1108,8 @@ MSSQL_DB=mydb
 `;
   }
 
-  if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') || 
-      nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
+  if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') ||
+    nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
     envContent += `
 # Redis/Valkey Configuration
 REDIS_HOST=localhost
@@ -1276,22 +1134,22 @@ SSH_PRIVATE_KEY_PATH=/path/to/key
 function generateDockerfile(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = new Set(nodes.map(n => n.type));
-  
+
   // Determine if we need special system dependencies
   const needsMssql = nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'));
   const needsOracle = nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleCredentials'));
   const needsSsh = nodeTypes.has('twiddle.ssh');
-  
+
   let systemDeps = 'gcc libffi-dev';
-  
+
   if (needsMssql) {
     systemDeps += ' freetds-dev';
   }
-  
+
   if (needsOracle) {
     systemDeps += ' libaio1';
   }
-  
+
   if (needsSsh) {
     systemDeps += ' openssh-client';
   }
@@ -1334,7 +1192,7 @@ CMD ["python", "worker.py"]
 function generateDockerCompose(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
   const nodeTypes = new Set(nodes.map(n => n.type));
-  
+
   let envVars = `      - TEMPORAL_HOST=\${TEMPORAL_HOST:-localhost:7233}
       - TEMPORAL_NAMESPACE=\${TEMPORAL_NAMESPACE:-default}`;
 
@@ -1367,7 +1225,7 @@ function generateDockerCompose(workflow: WorkflowData): string {
   }
 
   if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') ||
-      nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
+    nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
     envVars += `
       - REDIS_HOST=\${REDIS_HOST:-localhost}
       - REDIS_PORT=\${REDIS_PORT:-6379}
@@ -1533,7 +1391,6 @@ Thumbs.db
 export interface GeneratedPythonCode {
   pythonWorkflow: string;
   pythonActivities: string;
-  pythonWorker: string;
   pythonRequirements: string;
 }
 
@@ -1544,7 +1401,6 @@ export function generatePythonCode(workflow: WorkflowData): GeneratedPythonCode 
   return {
     pythonWorkflow: generateWorkflowFile(workflow),
     pythonActivities: generateActivitiesFile(workflow),
-    pythonWorker: generateWorkerFile(workflow),
     pythonRequirements: generateRequirements(workflow),
   };
 }
@@ -1556,7 +1412,6 @@ export function generatePythonExport(workflow: WorkflowData): Record<string, str
   return {
     'workflow.py': generateWorkflowFile(workflow),
     'activities.py': generateActivitiesFile(workflow),
-    'worker.py': generateWorkerFile(workflow),
     'starter.py': generateStarterFile(workflow),
     'requirements.txt': generateRequirements(workflow),
     'Dockerfile': generateDockerfile(workflow),

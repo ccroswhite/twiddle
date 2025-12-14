@@ -47,6 +47,10 @@ model User {
   workflows     Workflow[]
   credentials   Credential[]
 
+  // SDLC Promotions
+  requestedPromotions PromotionRequest[] @relation("RequestedPromotions")
+  reviewedPromotions  PromotionRequest[] @relation("ReviewedPromotions")
+
   @@unique([provider, providerId])
   @@index([email])
   @@index([isActive])
@@ -217,7 +221,6 @@ model Workflow {
   // Generated Python code (for execution)
   pythonWorkflow   String?  @db.Text  // workflow.py content
   pythonActivities String?  @db.Text  // activities.py content
-  pythonWorker     String?  @db.Text  // worker.py content
   pythonRequirements String? @db.Text // requirements.txt content
   
   // GitHub integration
@@ -244,6 +247,9 @@ model Workflow {
   // Legacy direct group assignment (deprecated - use folder.groupId instead)
   groupId     String?
   group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  // SDLC
+  promotionRequests PromotionRequest[]
 
   @@index([active])
   @@index([environment])
@@ -272,4 +278,48 @@ model Credential {
   @@index([type])
   @@index([groupId])
   @@index([createdById])
+}
+
+// ============================================================================
+// SDLC Promotions
+// ============================================================================
+
+model PromotionRequest {
+  id        String   @id @default(cuid())
+  
+  // Relations
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  
+  // Promotion Details
+  fromEnv    Environment
+  toEnv      Environment
+  
+  // Actors
+  requesterId String
+  requester   User     @relation("RequestedPromotions", fields: [requesterId], references: [id])
+  
+  reviewerId  String?
+  reviewer    User?    @relation("ReviewedPromotions", fields: [reviewerId], references: [id])
+  
+  // State
+  status     PromotionStatus @default(PENDING)
+  
+  // Metadata
+  requestNotes String?
+  reviewNotes  String?
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([workflowId])
+  @@index([status])
+  @@index([requesterId])
+  @@index([reviewerId])
+}
+
+enum PromotionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

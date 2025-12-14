@@ -14,7 +14,6 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "dev:api": "pnpm --filter @twiddle/api dev",
-    "dev:worker": "pnpm --filter @twiddle/worker dev",
     "dev:editor": "pnpm --filter @twiddle/editor dev",
     "lint": "turbo run lint",
     "test": "turbo run test",

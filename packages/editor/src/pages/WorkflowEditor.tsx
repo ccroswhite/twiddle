@@ -44,7 +44,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isNew = !id || id === 'new';
-  
+
   // Track the folder ID for new workflows (set when clicking Create New Workflow from a folder)
   const [newWorkflowFolderId, setNewWorkflowFolderId] = useState<string | null>(null);
 
@@ -57,7 +57,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showPythonCode, setShowPythonCode] = useState(false);
   const [showGitHubSettings, setShowGitHubSettings] = useState(false);
   const [githubConnected, setGithubConnected] = useState(false);
-  const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string; worker: string } | null>(null);
+  const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
   const [environment, setEnvironment] = useState<Environment>('DV');
   const [promoting, setPromoting] = useState(false);
@@ -69,7 +69,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [editingWorkflowName, setEditingWorkflowName] = useState('');
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
-  
+
   // Folder state
   const [folders, setFolders] = useState<FolderType[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -78,11 +78,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [newFolderName, setNewFolderName] = useState('');
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState('');
-  
+
   // Drag and drop state
   const [draggingWorkflowId, setDraggingWorkflowId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
-  
+
   // Folder permissions state
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [permissionsFolder, setPermissionsFolder] = useState<FolderType | null>(null);
@@ -110,7 +110,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   // Store ReactFlow instance for viewport calculations
   const reactFlowInstance = useRef<ReturnType<typeof useReactFlow> | null>(null);
-  
+
   // Track if this is the initial mount for the openBrowser behavior
   const isInitialMount = useRef(true);
 
@@ -132,23 +132,23 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Save current state to history
   const saveToHistory = useCallback(() => {
     if (isUndoing.current) return;
-    
+
     setHistory(prev => {
       // Create a deep copy of current state
       const snapshot = {
         nodes: JSON.parse(JSON.stringify(nodes)),
         edges: JSON.parse(JSON.stringify(edges)),
       };
-      
+
       // If we're not at the end of history, truncate forward history
       const newHistory = prev.slice(0, historyIndex + 1);
       newHistory.push(snapshot);
-      
+
       // Keep only the last MAX_HISTORY items
       if (newHistory.length > MAX_HISTORY) {
         newHistory.shift();
       }
-      
+
       return newHistory;
     });
     setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
@@ -157,11 +157,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Undo last action
   const handleUndo = useCallback(() => {
     if (historyIndex <= 0 || history.length === 0) return;
-    
+
     isUndoing.current = true;
     const prevIndex = historyIndex - 1;
     const prevState = history[prevIndex];
-    
+
     if (prevState) {
       // Restore onOpenProperties callback to nodes
       const restoredNodes = prevState.nodes.map(node => ({
@@ -175,7 +175,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setEdges(prevState.edges);
       setHistoryIndex(prevIndex);
     }
-    
+
     // Reset flag after state update
     setTimeout(() => {
       isUndoing.current = false;
@@ -273,13 +273,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Track changes to nodes and edges for undo history
   const prevNodesRef = useRef<string>('');
   const prevEdgesRef = useRef<string>('');
-  
+
   useEffect(() => {
     if (isUndoing.current) return;
-    
+
     const nodesJson = JSON.stringify(nodes.map(n => ({ id: n.id, position: n.position, data: { label: n.data.label, nodeType: n.data.nodeType, parameters: n.data.parameters } })));
     const edgesJson = JSON.stringify(edges);
-    
+
     // Only save if there's an actual change
     if (nodesJson !== prevNodesRef.current || edgesJson !== prevEdgesRef.current) {
       // Skip the initial empty state
@@ -324,7 +324,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         }
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isNew, openBrowser, location.key]); // showWorkflowBrowser intentionally omitted to avoid re-triggering
 
   async function loadGitHubStatus(workflowId: string) {
@@ -340,7 +340,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     try {
       // Load node types
       const nodeTypes = await nodesApi.list();
-      
+
       // Load credentials and convert them to node types
       const credentials = await credentialsApi.list();
       const credentialNodes: NodeTypeInfo[] = credentials.map((cred: { id: string; name: string; type: string }) => ({
@@ -349,7 +349,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         description: `Use ${cred.name} credential (${getCredentialTypeLabel(cred.type)})`,
         category: 'Credentials',
       }));
-      
+
       setAvailableNodes([...(nodeTypes as NodeTypeInfo[]), ...credentialNodes]);
     } catch (err) {
       console.error('Failed to load node types:', err);
@@ -389,19 +389,17 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         connections: unknown[];
         pythonWorkflow?: string;
         pythonActivities?: string;
-        pythonWorker?: string;
         environment?: Environment;
       };
       setWorkflowName(workflow.name);
       setWorkflowDescription(workflow.description || '');
       setEnvironment(workflow.environment || 'DV');
-      
+
       // Load Python code if available
       if (workflow.pythonWorkflow) {
         setPythonCode({
           workflow: workflow.pythonWorkflow,
           activities: workflow.pythonActivities || '',
-          worker: workflow.pythonWorker || '',
         });
       }
 
@@ -472,11 +470,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   function addNode(nodeType: NodeTypeInfo) {
     // Calculate position at the center of the current viewport
     let position = { x: 250, y: 100 };
-    
+
     if (reactFlowInstance.current) {
       const { getViewport } = reactFlowInstance.current;
       const viewport = getViewport();
-      
+
       // Get the center of the visible area in flow coordinates
       // The viewport contains x, y (pan offset) and zoom level
       // We need to find the center of the visible canvas
@@ -485,19 +483,19 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         const rect = canvasElement.getBoundingClientRect();
         const centerX = rect.width / 2;
         const centerY = rect.height / 2;
-        
+
         // Convert screen coordinates to flow coordinates
         position = {
           x: (centerX - viewport.x) / viewport.zoom,
           y: (centerY - viewport.y) / viewport.zoom,
         };
-        
+
         // Snap to grid (20px)
         position.x = Math.round(position.x / 20) * 20;
         position.y = Math.round(position.y / 20) * 20;
       }
     }
-    
+
     const newNode: Node = {
       id: `node_${Date.now()}`,
       type: 'workflowNode',
@@ -564,7 +562,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   async function handlePromote() {
     if (isNew || !id) return;
-    
+
     const nextEnv = getNextEnvironment(environment);
     if (!nextEnv) {
       alert('Workflow is already at Production (PD)');
@@ -620,7 +618,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       ]);
       setFolders(foldersData);
       // Filter workflows to show only those in the current folder (or root)
-      const filteredWorkflows = workflowsData.filter(w => 
+      const filteredWorkflows = workflowsData.filter(w =>
         folderId ? w.folderId === folderId : !w.folderId
       );
       setAvailableWorkflows(filteredWorkflows);
@@ -923,11 +921,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           <button
             onClick={() => setShowGitHubSettings(true)}
             disabled={isNew}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${
-              githubConnected
-                ? 'text-green-600 hover:bg-green-50'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors disabled:opacity-50 ${githubConnected
+              ? 'text-green-600 hover:bg-green-50'
+              : 'text-slate-600 hover:bg-slate-100'
+              }`}
             title={githubConnected ? 'GitHub connected' : 'Connect to GitHub'}
           >
             <Github className="w-4 h-4" />
@@ -1046,15 +1043,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                   <code>{pythonCode.activities}</code>
                 </pre>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                  <Code className="w-4 h-4" />
-                  worker.py
-                </h3>
-                <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-sm overflow-x-auto">
-                  <code>{pythonCode.worker}</code>
-                </pre>
-              </div>
+
             </div>
             <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
               <button
@@ -1103,7 +1092,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             className={`absolute inset-0 bg-black/20 transition-opacity duration-200 ${isClosingBrowser ? 'opacity-0' : 'opacity-100'}`}
             onClick={handleCloseWorkflowBrowser}
           />
-          
+
           {/* Panel */}
           <div className={`relative w-[480px] bg-white shadow-xl flex flex-col ${isClosingBrowser ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
             {/* Header */}
@@ -1210,11 +1199,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                       onDragOver={(e) => handleDragOver(e, null)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, null)}
-                      className={`p-3 border-2 border-dashed rounded-lg text-center text-sm transition-colors ${
-                        dragOverFolderId === null
-                          ? 'border-primary-400 bg-primary-50 text-primary-600'
-                          : 'border-slate-300 text-slate-500'
-                      }`}
+                      className={`p-3 border-2 border-dashed rounded-lg text-center text-sm transition-colors ${dragOverFolderId === null
+                        ? 'border-primary-400 bg-primary-50 text-primary-600'
+                        : 'border-slate-300 text-slate-500'
+                        }`}
                     >
                       Drop here to move to parent folder
                     </div>
@@ -1227,11 +1215,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                       onDragOver={(e) => handleDragOver(e, folder.id)}
                       onDragLeave={handleDragLeave}
                       onDrop={(e) => handleDrop(e, folder.id)}
-                      className={`p-3 rounded-lg border transition-colors ${
-                        dragOverFolderId === folder.id
-                          ? 'bg-primary-100 border-primary-400'
-                          : 'bg-amber-50 hover:bg-amber-100 border-amber-200'
-                      }`}
+                      className={`p-3 rounded-lg border transition-colors ${dragOverFolderId === folder.id
+                        ? 'bg-primary-100 border-primary-400'
+                        : 'bg-amber-50 hover:bg-amber-100 border-amber-200'
+                        }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         {editingFolderId === folder.id ? (
@@ -1330,11 +1317,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                         setShowWorkflowBrowser(false);
                         navigate(`/workflows/${workflow.id}`);
                       }}
-                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${
-                        draggingWorkflowId === workflow.id
-                          ? 'bg-primary-50 border-primary-300 opacity-50'
-                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                      }`}
+                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${draggingWorkflowId === workflow.id
+                        ? 'bg-primary-50 border-primary-300 opacity-50'
+                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                        }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -1380,13 +1366,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                               {workflow.name}
                             </span>
                           )}
-                          
+
                           {workflow.description && (
                             <div className="text-sm text-slate-500 truncate mt-0.5">
                               {workflow.description}
                             </div>
                           )}
-                          
+
                           {/* Metadata */}
                           <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
                             {/* Owner */}
@@ -1396,7 +1382,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                                 {workflow.createdBy?.name || workflow.createdBy?.email || 'System'}
                               </span>
                             </div>
-                            
+
                             {/* Group */}
                             {workflow.group && (
                               <div className="flex items-center gap-1">
@@ -1404,7 +1390,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                                 <span>{workflow.group.name}</span>
                               </div>
                             )}
-                            
+
                             {/* Last updated */}
                             <div className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
@@ -1412,7 +1398,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             </div>
                           </div>
                         </div>
-                        
+
                         {/* Actions */}
                         <div className="flex items-center gap-1">
                           <EnvironmentBadge environment={workflow.environment} />
@@ -1472,7 +1458,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             className="absolute inset-0 bg-black/50"
             onClick={() => setDeletingWorkflow(null)}
           />
-          
+
           {/* Modal */}
           <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <div className="flex items-start gap-4">
@@ -1484,18 +1470,18 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                   Delete Workflow
                 </h3>
                 <p className="mt-2 text-sm text-slate-600">
-                  Are you sure you want to delete <strong>"{deletingWorkflow.name}"</strong>? 
+                  Are you sure you want to delete <strong>"{deletingWorkflow.name}"</strong>?
                   This action cannot be undone.
                 </p>
                 {deletingWorkflow.environment !== 'DV' && (
                   <p className="mt-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                    ⚠️ This workflow is in <strong>{deletingWorkflow.environment}</strong> environment. 
+                    ⚠️ This workflow is in <strong>{deletingWorkflow.environment}</strong> environment.
                     Deleting it may affect production systems.
                   </p>
                 )}
               </div>
             </div>
-            
+
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setDeletingWorkflow(null)}
@@ -1525,7 +1511,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               setPermissionsFolder(null);
             }}
           />
-          
+
           {/* Modal */}
           <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
             {/* Header */}
@@ -1589,15 +1575,15 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                         <option value="">Select {newPermissionType}...</option>
                         {newPermissionType === 'user'
                           ? availableUsers.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name || u.email}
-                              </option>
-                            ))
+                            <option key={u.id} value={u.id}>
+                              {u.name || u.email}
+                            </option>
+                          ))
                           : availableGroups.map((g) => (
-                              <option key={g.id} value={g.id}>
-                                {g.name}
-                              </option>
-                            ))}
+                            <option key={g.id} value={g.id}>
+                              {g.name}
+                            </option>
+                          ))}
                       </select>
                       <select
                         value={newPermissionLevel}
