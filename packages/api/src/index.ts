@@ -24,7 +24,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 async function main() {
   const app = Fastify({
-    logger: true,
+    logger: {
+      level: process.env.LOG_LEVEL || 'info',
+    },
   });
 
   // Register plugins
@@ -84,16 +86,22 @@ async function main() {
   // Log auth status
   const authConfig = getAuthConfig();
   if (authConfig.enabled) {
-    console.log(`Authentication enabled: ${authConfig.provider}`);
+    app.log.info(`Authentication enabled: ${authConfig.provider}`);
+    if (authConfig.provider === 'local') {
+      app.log.info('Local authentication enabled');
+    }
   } else {
-    console.log('Local authentication enabled');
+    app.log.info('Local authentication enabled');
   }
 
   // Start server
   try {
     await app.listen({ port: PORT, host: HOST });
-    console.log(`Twiddle API server running at http://${HOST}:${PORT}`);
-    console.log(`API documentation available at http://${HOST}:${PORT}/docs`);
+    // Print routes for debugging
+    // app.printRoutes();
+
+    app.log.info(`Twiddle API server running at http://${HOST}:${PORT}`);
+    app.log.info(`API documentation available at http://${HOST}:${PORT}/docs`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

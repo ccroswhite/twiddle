@@ -655,6 +655,105 @@ ${activities}
 
 
 
+
+/**
+ * Generate the worker file that runs the workflow and activities
+ */
+function generateWorkerFile(workflow: WorkflowData): string {
+  const workflowName = toPythonIdentifier(workflow.name);
+  const workflowClassName = workflowName.charAt(0).toUpperCase() + workflowName.slice(1) + 'Workflow';
+
+  // Get all activity function names
+  const nodes = workflow.nodes as WorkflowNode[];
+  const activityNodes = nodes.filter(n => isActivityNode(n.type));
+  // Deduplicate node types
+  const nodeTypes = [...new Set(activityNodes.map(n => n.type))];
+  const activityFunctions = nodeTypes.map(t => nodeTypeToFunctionName(t));
+
+  const activityImports = activityFunctions.length > 0
+    ? `
+from activities import (
+${activityFunctions.map(f => `    ${f},`).join('\n')}
+)`
+    : '';
+
+  return `"""
+Worker for ${workflow.name}
+
+This script starts a Temporal Worker that listens to the task queue
+and executes workflows and activities.
+"""
+import asyncio
+import logging
+import os
+import sys
+from concurrent.futures import ThreadPoolExecutor
+
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+from workflow import ${workflowClassName}
+${activityImports}
+
+# Configure logging
+logging.basicConfig(
+    level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("worker")
+
+# Configuration
+TEMPORAL_HOST = os.environ.get('TEMPORAL_HOST', 'localhost:7233')
+TEMPORAL_NAMESPACE = os.environ.get('TEMPORAL_NAMESPACE', 'default')
+TASK_QUEUE = "${workflowName}"
+
+
+async def main():
+    logger.info(f"Starting worker for task queue: {TASK_QUEUE}")
+    logger.info(f"Connecting to Temporal server at {TEMPORAL_HOST}...")
+
+    try:
+        client = await Client.connect(
+            TEMPORAL_HOST,
+            namespace=TEMPORAL_NAMESPACE,
+        )
+        logger.info("Connected to Temporal server")
+    except Exception as e:
+        logger.error(f"Failed to connect to Temporal server: {e}")
+        logger.error("Ensure Temporal server is running and reachable")
+        sys.exit(1)
+
+    # Create worker
+    worker = Worker(
+        client,
+        task_queue=TASK_QUEUE,
+        workflows=[${workflowClassName}],
+        activities=[
+${activityFunctions.map(f => `            ${f},`).join('\n')}
+        ],
+        # Thread pool for synchronous activities if needed
+        activity_executor=ThreadPoolExecutor(max_workers=10),
+    )
+
+    logger.info("Worker started, waiting for tasks...")
+    try:
+        await worker.run()
+    except asyncio.CancelledError:
+        logger.info("Worker stopped")
+    except Exception as e:
+        logger.error(f"Worker failed: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Interrupt received, shutting down")
+`;
+}
+
+
 /**
  * Generate the starter/client file
  */
@@ -669,8 +768,8 @@ This script connects to Temporal and starts a workflow execution.
 Configure the Temporal server address via environment variables.
 
 Task Queue: ${workflowName}
-"""
-import argparse
+  """
+  import argparse
 import asyncio
 import json
 import logging
@@ -678,144 +777,144 @@ import os
 import sys
 import uuid
 
-from dotenv import load_dotenv
-from temporalio.client import Client
+    from dotenv import load_dotenv
+    from temporalio.client import Client
 
-from workflow import ${workflowClassName}
+    from workflow import ${workflowClassName}
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from.env file
+  load_dotenv()
 
 # Workflow configuration
-WORKFLOW_NAME = "${workflowName}"
-TASK_QUEUE = WORKFLOW_NAME  # Task queue matches workflow name
+  WORKFLOW_NAME = "${workflowName}"
+  TASK_QUEUE = WORKFLOW_NAME  # Task queue matches workflow name
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(WORKFLOW_NAME)
+  logging.basicConfig(
+    level = logging.INFO,
+    format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  )
+  logger = logging.getLogger(WORKFLOW_NAME)
 
 
 def get_temporal_host() -> str:
-    """Get Temporal server address from environment."""
-    return os.environ.get('TEMPORAL_HOST', 'localhost:7233')
+  """Get Temporal server address from environment."""
+  return os.environ.get('TEMPORAL_HOST', 'localhost:7233')
 
 
 def get_temporal_namespace() -> str:
-    """Get Temporal namespace from environment."""
-    return os.environ.get('TEMPORAL_NAMESPACE', 'default')
+  """Get Temporal namespace from environment."""
+  return os.environ.get('TEMPORAL_NAMESPACE', 'default')
 
 
 async def start_workflow(input_data: dict = None, wait_for_result: bool = True, workflow_id: str = None) -> dict:
-    """
+  """
     Start a workflow execution.
-    
+
     Args:
-        input_data: Optional input data to pass to the workflow
-        wait_for_result: If True, wait for the workflow to complete
-        workflow_id: Optional custom workflow ID (auto-generated if not provided)
-        
-    Returns:
+  input_data: Optional input data to pass to the workflow
+  wait_for_result: If True, wait for the workflow to complete
+  workflow_id: Optional custom workflow ID(auto - generated if not provided)
+
+  Returns:
         The workflow result if wait_for_result is True, otherwise the workflow ID
-    """
-    temporal_host = get_temporal_host()
-    namespace = get_temporal_namespace()
-    
-    logger.info(f"=== Starting ${workflow.name} ===")
-    logger.info(f"Temporal Server: {temporal_host}")
-    logger.info(f"Namespace: {namespace}")
-    logger.info(f"Task Queue: {TASK_QUEUE}")
-    
-    try:
-        client = await Client.connect(
-            temporal_host,
-            namespace=namespace,
-        )
+  """
+  temporal_host = get_temporal_host()
+  namespace = get_temporal_namespace()
+
+  logger.info(f"=== Starting ${workflow.name} ===")
+  logger.info(f"Temporal Server: {temporal_host}")
+  logger.info(f"Namespace: {namespace}")
+  logger.info(f"Task Queue: {TASK_QUEUE}")
+
+  try:
+  client = await Client.connect(
+    temporal_host,
+    namespace = namespace,
+  )
     except Exception as e:
-        logger.error(f"Failed to connect to Temporal server: {e}")
-        logger.error("Make sure Temporal server is running and accessible")
-        sys.exit(1)
+  logger.error(f"Failed to connect to Temporal server: {e}")
+  logger.error("Make sure Temporal server is running and accessible")
+  sys.exit(1)
     
     # Generate a unique workflow ID if not provided
-    if not workflow_id:
-        workflow_id = f"{WORKFLOW_NAME}-{uuid.uuid4().hex[:8]}"
-    
-    logger.info(f"Workflow ID: {workflow_id}")
-    logger.info(f"Input data: {json.dumps(input_data, default=str)}")
+  if not workflow_id:
+    workflow_id = f"{WORKFLOW_NAME}-{uuid.uuid4().hex[:8]}"
+
+  logger.info(f"Workflow ID: {workflow_id}")
+  logger.info(f"Input data: {json.dumps(input_data, default=str)}")
     
     # Start the workflow
-    handle = await client.start_workflow(
-        ${workflowClassName}.run,
-        id=workflow_id,
-        task_queue=TASK_QUEUE,
-        arg=input_data or {},
-    )
-    
-    logger.info(f"Workflow started successfully!")
-    logger.info(f"View in Temporal UI: http://localhost:8080/namespaces/{namespace}/workflows/{workflow_id}")
-    
-    if wait_for_result:
-        logger.info("Waiting for workflow to complete...")
-        try:
-            result = await handle.result()
-            logger.info(f"Workflow completed!")
-            logger.info(f"Result: {json.dumps(result, indent=2, default=str)}")
-            return result
+  handle = await client.start_workflow(
+    ${workflowClassName}.run,
+    id = workflow_id,
+    task_queue = TASK_QUEUE,
+    arg = input_data or {},
+  )
+
+  logger.info(f"Workflow started successfully!")
+  logger.info(f"View in Temporal UI: http://localhost:8080/namespaces/{namespace}/workflows/{workflow_id}")
+
+  if wait_for_result:
+    logger.info("Waiting for workflow to complete...")
+  try:
+  result = await handle.result()
+  logger.info(f"Workflow completed!")
+  logger.info(f"Result: {json.dumps(result, indent=2, default=str)}")
+  return result
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
-            raise
+  logger.error(f"Workflow failed: {e}")
+  raise
     else:
-        return {"workflow_id": workflow_id, "status": "started"}
+  return { "workflow_id": workflow_id, "status": "started" }
 
 
 async def main():
-    """Main entry point with CLI argument parsing."""
-    parser = argparse.ArgumentParser(
-        description='Start the ${workflow.name} workflow',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+  """Main entry point with CLI argument parsing."""
+  parser = argparse.ArgumentParser(
+    description = 'Start the ${workflow.name} workflow',
+    formatter_class = argparse.RawDescriptionHelpFormatter,
+    epilog = """
 Examples:
-  python starter.py
-  python starter.py --input '{"key": "value"}'
-  python starter.py --id my-custom-id --no-wait
+    python starter.py
+  python starter.py--input '{"key": "value"}'
+  python starter.py--id my - custom - id--no - wait
         """
-    )
-    parser.add_argument(
-        '--input', '-i',
-        type=str,
-        help='JSON input data for the workflow',
+  )
+  parser.add_argument(
+    '--input', '-i',
+    type = str,
+    help = 'JSON input data for the workflow',
         default='{}'
-    )
-    parser.add_argument(
-        '--id',
-        type=str,
-        help='Custom workflow ID (auto-generated if not provided)',
+  )
+  parser.add_argument(
+    '--id',
+    type = str,
+    help = 'Custom workflow ID (auto-generated if not provided)',
         default=None
-    )
-    parser.add_argument(
-        '--no-wait',
-        action='store_true',
-        help='Start the workflow without waiting for the result'
-    )
-    
-    args = parser.parse_args()
-    
-    try:
-        input_data = json.loads(args.input)
+  )
+  parser.add_argument(
+    '--no-wait',
+    action = 'store_true',
+    help = 'Start the workflow without waiting for the result'
+  )
+
+  args = parser.parse_args()
+
+  try:
+  input_data = json.loads(args.input)
     except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON input: {e}")
-        sys.exit(1)
-    
-    await start_workflow(
-        input_data=input_data,
-        wait_for_result=not args.no_wait,
-        workflow_id=args.id
-    )
+  logger.error(f"Invalid JSON input: {e}")
+  sys.exit(1)
+
+  await start_workflow(
+    input_data = input_data,
+    wait_for_result = not args.no_wait,
+    workflow_id = args.id
+  )
 
 
-if __name__ == "__main__":
+  if __name__ == "__main__":
     asyncio.run(main())
 `;
 }
@@ -919,12 +1018,12 @@ ${workflow.description || 'A Temporal workflow generated from Twiddle.'}
 
 Before running this workflow, ensure the following services are running:
 
-- **Temporal Server** - The workflow orchestration engine
-- Any databases or services used by your workflow nodes
+- ** Temporal Server ** - The workflow orchestration engine
+    - Any databases or services used by your workflow nodes
 
 ## Quick Start with Docker
 
-\`\`\`bash
+  \`\`\`bash
 # Configure your environment
 cp .env.example .env
 # Edit .env with your Temporal and database connection settings
@@ -1412,6 +1511,7 @@ export function generatePythonExport(workflow: WorkflowData): Record<string, str
   return {
     'workflow.py': generateWorkflowFile(workflow),
     'activities.py': generateActivitiesFile(workflow),
+    'worker.py': generateWorkerFile(workflow),
     'starter.py': generateStarterFile(workflow),
     'requirements.txt': generateRequirements(workflow),
     'Dockerfile': generateDockerfile(workflow),

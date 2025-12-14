@@ -246,7 +246,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       if (workflow.githubRepo && workflow.localPath) {
         const gitResult = await commitWorkflowToGitHub(workflow);
         if (!gitResult.success) {
-          console.error('GitHub commit failed:', gitResult.error);
+          request.log.error({ error: gitResult.error }, 'GitHub commit failed');
           // Don't fail the save, just log the error
         }
       }

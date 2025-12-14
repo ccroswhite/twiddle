@@ -155,7 +155,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
     });
 
     if (!user) {
-      console.log(`[Auth] Login failed: User not found for email "${email}"`);
+      request.log.warn(`[Auth] Login failed: User not found for email "${email}"`);
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
@@ -174,7 +174,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
     // Verify password
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) {
-      console.log(`[Auth] Login failed: Invalid password for user "${email}"`);
+      request.log.warn(`[Auth] Login failed: Invalid password for user "${email}"`);
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
@@ -372,7 +372,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
 
     // Check if body was received
     if (!email && !password) {
-      console.log('Setup request body:', request.body);
+      request.log.debug({ body: request.body }, 'Setup request body');
       return reply.status(400).send({ error: 'Email and password are required' });
     }
 
@@ -482,7 +482,7 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
     // Always return success to prevent email enumeration
     if (!user || user.provider !== 'local') {
       // Log for debugging but don't reveal to user
-      console.log(`Password reset requested for non-existent or SSO user: ${email}`);
+      request.log.info(`Password reset requested for non-existent or SSO user: ${email}`);
       return { success: true, message: 'If an account exists with this email, a reset link has been generated.' };
     }
 
@@ -505,8 +505,8 @@ export const localAuthRoutes: FastifyPluginAsync = async (app) => {
 
     // Log token in dev for testing
     if (isDev) {
-      console.log(`[DEV ONLY] Password reset token generated for ${email}: ${resetToken}`);
-      console.log(`[DEV ONLY] Reset URL: /reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`);
+      request.log.info(`[DEV ONLY] Password reset token generated for ${email}: ${resetToken}`);
+      request.log.info(`[DEV ONLY] Reset URL: /reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`);
     }
 
     return {

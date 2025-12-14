@@ -3,9 +3,11 @@
  */
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
+import { logger } from './logger.js';
+
 export interface AuthConfig {
   enabled: boolean;
-  provider: 'azure-entra' | 'none';
+  provider: 'azure-entra' | 'none' | 'local';
   azure?: {
     tenantId: string;
     clientId: string;
@@ -34,6 +36,10 @@ export function getAuthConfig(): AuthConfig {
     return { enabled: false, provider: 'none' };
   }
 
+  if (provider === 'local') {
+    return { enabled: true, provider: 'local' };
+  }
+
   if (provider === 'azure-entra') {
     const tenantId = process.env.AZURE_TENANT_ID;
     const clientId = process.env.AZURE_CLIENT_ID;
@@ -41,7 +47,7 @@ export function getAuthConfig(): AuthConfig {
     const redirectUri = process.env.AZURE_REDIRECT_URI || 'http://localhost:3000/api/auth/callback';
 
     if (!tenantId || !clientId || !clientSecret) {
-      console.warn('Azure Entra SSO enabled but missing configuration');
+      logger.warn('Azure Entra SSO enabled but missing configuration');
       return { enabled: false, provider: 'none' };
     }
 
@@ -350,7 +356,7 @@ export async function optionalAuthMiddleware(
       }
     }
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    request.log.error({ err: error }, 'Auth middleware error');
   }
 }
 

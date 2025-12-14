@@ -1,8 +1,9 @@
-
 import { describe, it, expect } from 'vitest';
-import { generatePythonCode } from '../src/lib/python-export';
+import { generatePythonCode, generatePythonExport } from '../src/lib/python-export';
+
 
 describe('Python Export Generation', () => {
+
     it('should generate valid python code for a simple workflow', () => {
         const workflow = {
             id: 'wf-1',
@@ -63,5 +64,30 @@ describe('Python Export Generation', () => {
         const result = generatePythonCode(workflow);
         // Verify simple existence of logical flow or comments if applicable
         expect(result.pythonWorkflow).toContain('class Connected_workflowWorkflow:');
+    });
+    it('should generate worker with logging configuration', () => {
+        const workflow = {
+            id: 'wf-3',
+            name: 'Logging Workflow',
+            nodes: [{
+                id: 'n1',
+                type: 'twiddle.log',
+                name: 'Log Node',
+                parameters: {},
+                position: { x: 0, y: 0 }
+            }],
+            connections: []
+        };
+
+        // const { generatePythonExport } = require('../src/lib/python-export');
+        const files = generatePythonExport(workflow);
+
+
+        expect(files['worker.py']).toBeDefined();
+
+        const workerContent = files['worker.py'];
+        expect(workerContent).toContain('logging.basicConfig');
+        expect(workerContent).toContain("level=os.environ.get('LOG_LEVEL', 'INFO').upper()");
+        expect(workerContent).toContain('logger.info');
     });
 });

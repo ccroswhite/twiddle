@@ -2,6 +2,8 @@
  * Credential testing utilities
  * Tests connectivity for various credential types
  */
+import { logger } from './logger.js';
+
 
 interface CredentialData {
   // Common fields
@@ -84,7 +86,7 @@ async function testHttpBasicAuth(data: CredentialData): Promise<TestResult> {
   if (!data.username || !data.password) {
     return { success: false, message: 'Username and password are required' };
   }
-  
+
   // Basic auth credentials are valid if they're non-empty
   // Real testing would require a URL to test against
   return {
@@ -100,12 +102,12 @@ async function testHttpBearerToken(data: CredentialData): Promise<TestResult> {
   if (!data.token) {
     return { success: false, message: 'Token is required' };
   }
-  
+
   // Check token format (basic validation)
   if (data.token.length < 10) {
     return { success: false, message: 'Token appears to be too short' };
   }
-  
+
   return {
     success: true,
     message: 'Token format is valid. Actual connectivity depends on the target service.',
@@ -119,11 +121,11 @@ async function testApiKey(data: CredentialData): Promise<TestResult> {
   if (!data.apiKey) {
     return { success: false, message: 'API Key is required' };
   }
-  
+
   if (data.apiKey.length < 8) {
     return { success: false, message: 'API Key appears to be too short' };
   }
-  
+
   return {
     success: true,
     message: 'API Key format is valid. Actual connectivity depends on the target service.',
@@ -137,7 +139,7 @@ async function testGitHub(data: CredentialData): Promise<TestResult> {
   if (!data.token) {
     return { success: false, message: 'Personal Access Token is required' };
   }
-  
+
   try {
     const response = await fetch('https://api.github.com/user', {
       headers: {
@@ -146,7 +148,7 @@ async function testGitHub(data: CredentialData): Promise<TestResult> {
         'User-Agent': 'Twiddle-Credential-Test',
       },
     });
-    
+
     if (response.ok) {
       const user = await response.json() as { login: string; name: string };
       return {
@@ -171,12 +173,12 @@ async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
-  
+
   const port = data.port || 5432;
   if (port < 1 || port > 65535) {
     return { success: false, message: 'Invalid port number' };
   }
-  
+
   try {
     const pg = await import('pg');
     const client = new pg.default.Client({
@@ -188,15 +190,15 @@ async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
       ssl: data.useTls ? { rejectUnauthorized: false } : false,
       connectionTimeoutMillis: 10000,
     });
-    
+
     await client.connect();
     const result = await client.query('SELECT version()');
     await client.end();
-    
+
     const version = result.rows[0]?.version || 'Unknown version';
     // Extract just the PostgreSQL version part
     const versionMatch = version.match(/PostgreSQL [\d.]+/);
-    
+
     return {
       success: true,
       message: `Successfully connected to ${versionMatch ? versionMatch[0] : 'PostgreSQL'}`,
@@ -206,9 +208,9 @@ async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
     const err = error as Error & { code?: string };
     const message = err.message || String(error);
     const code = err.code || '';
-    
-    console.error('PostgreSQL connection error:', { message, code, error });
-    
+
+    logger.error({ message, code, error }, 'PostgreSQL connection error');
+
     // Provide more helpful error messages
     if (code === 'ECONNREFUSED' || message.includes('ECONNREFUSED')) {
       return { success: false, message: `Connection refused. Check that PostgreSQL is running on ${data.host}:${port}` };
@@ -239,12 +241,12 @@ async function testMySQL(data: CredentialData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
-  
+
   const port = data.port || 3306;
   if (port < 1 || port > 65535) {
     return { success: false, message: 'Invalid port number' };
   }
-  
+
   return {
     success: true,
     message: `Credentials validated for ${data.host}:${port}/${data.database || ''}. Install 'mysql2' package for actual connectivity testing.`,
@@ -258,12 +260,12 @@ async function testMSSQL(data: CredentialData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
-  
+
   const port = data.port || 1433;
   if (port < 1 || port > 65535) {
     return { success: false, message: 'Invalid port number' };
   }
-  
+
   return {
     success: true,
     message: `Credentials validated for ${data.host}:${port}/${data.database || 'master'}. Install 'mssql' package for actual connectivity testing.`,
@@ -277,37 +279,37 @@ async function testRedis(data: CredentialData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
-  
+
   const port = data.port || 6379;
   if (port < 1 || port > 65535) {
     return { success: false, message: 'Invalid port number' };
   }
-  
+
   try {
     const { createClient } = await import('redis');
-    
-    const url = data.password 
+
+    const url = data.password
       ? `redis://:${data.password}@${data.host}:${port}`
       : `redis://${data.host}:${port}`;
-    
+
     const client = createClient({
       url,
       socket: {
         connectTimeout: 10000,
       },
     });
-    
-    client.on('error', () => {}); // Suppress error events during test
-    
+
+    client.on('error', () => { }); // Suppress error events during test
+
     await client.connect();
     const pong = await client.ping();
     const info = await client.info('server');
     await client.quit();
-    
+
     // Extract Redis version from info
     const versionMatch = info.match(/redis_version:([\d.]+)/);
     const version = versionMatch ? versionMatch[1] : 'unknown';
-    
+
     return {
       success: true,
       message: `Successfully connected to Redis ${version}`,
@@ -335,11 +337,11 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
   if (!data.host || !data.username) {
     return { success: false, message: 'Host and username are required' };
   }
-  
+
   if (!data.password && !data.privateKey) {
     return { success: false, message: 'Either password or private key is required' };
   }
-  
+
   // SSH testing requires the ssh2 library which may not be installed
   // For now, just validate the credentials format
   return {
@@ -355,39 +357,39 @@ async function testElasticsearch(data: CredentialData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
-  
+
   try {
     const protocol = data.useTls ? 'https' : 'http';
     const port = data.port || 9200;
     const url = `${protocol}://${data.host}:${port}`;
-    
+
     const headers: Record<string, string> = {
       'Accept': 'application/json',
     };
-    
+
     if (data.username && data.password) {
       const auth = Buffer.from(`${data.username}:${data.password}`).toString('base64');
       headers['Authorization'] = `Basic ${auth}`;
     } else if (data.apiKey) {
       headers['Authorization'] = `ApiKey ${data.apiKey}`;
     }
-    
+
     const response = await fetch(url, {
       headers,
       // @ts-expect-error - Node fetch supports this
       rejectUnauthorized: false,
     });
-    
+
     if (response.ok) {
-      const info = await response.json() as { 
-        name?: string; 
-        cluster_name?: string; 
-        version?: { number?: string } 
+      const info = await response.json() as {
+        name?: string;
+        cluster_name?: string;
+        version?: { number?: string }
       };
       return {
         success: true,
         message: `Successfully connected to ${info.cluster_name || 'cluster'}`,
-        details: { 
+        details: {
           name: info.name,
           cluster_name: info.cluster_name,
           version: info.version?.number,

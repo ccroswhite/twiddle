@@ -99,7 +99,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     // Check for OAuth errors
     if (error) {
-      console.error('OAuth error:', error, error_description);
+      request.log.error({ error, error_description }, 'OAuth error');
       return reply.redirect(`/?auth_error=${encodeURIComponent(error_description || error)}`);
     }
 
@@ -154,7 +154,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       // Redirect to app
       return reply.redirect('/');
     } catch (err) {
-      console.error('Auth callback error:', err);
+      request.log.error({ err }, 'Auth callback error');
       return reply.redirect('/?auth_error=authentication_failed');
     }
   });
