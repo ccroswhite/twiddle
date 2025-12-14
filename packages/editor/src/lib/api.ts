@@ -9,7 +9,7 @@ async function request<T>(
   if (options.body) {
     headers['Content-Type'] = 'application/json';
   }
-  
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     credentials: options.credentials || 'include',
@@ -62,7 +62,7 @@ export const workflowsApi = {
     const disposition = response.headers.get('Content-Disposition');
     const filenameMatch = disposition?.match(/filename="([^"]+)"/);
     const filename = filenameMatch?.[1] || 'workflow.tar.gz';
-    
+
     // Download the blob
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -115,6 +115,59 @@ export const workflowsApi = {
     request<Workflow>(`/workflows/${id}/demote`, {
       method: 'POST',
       body: JSON.stringify({ targetEnvironment }),
+    }),
+};
+
+// Promotions API
+export type PromotionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface PromotionRequest {
+  id: string;
+  workflowId: string;
+  fromEnv: WorkflowEnvironment;
+  toEnv: WorkflowEnvironment;
+  requesterId: string;
+  reviewerId?: string;
+  status: PromotionStatus;
+  requestNotes?: string;
+  reviewNotes?: string;
+  createdAt: string;
+  workflow?: {
+    name: string;
+    environment: WorkflowEnvironment;
+    version: number;
+  };
+  requester?: {
+    name?: string;
+    email: string;
+  };
+  reviewer?: {
+    name?: string;
+    email: string;
+  };
+}
+
+export const promotionsApi = {
+  list: (status?: PromotionStatus, workflowId?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (workflowId) params.append('workflowId', workflowId);
+    return request<PromotionRequest[]>(`/promotions?${params.toString()}`);
+  },
+  request: (workflowId: string, notes?: string) =>
+    request<PromotionRequest>('/promotions/request', {
+      method: 'POST',
+      body: JSON.stringify({ workflowId, notes }),
+    }),
+  approve: (id: string, notes?: string) =>
+    request<PromotionRequest>(`/promotions/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
+    }),
+  reject: (id: string, notes?: string) =>
+    request<PromotionRequest>(`/promotions/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ notes }),
     }),
 };
 

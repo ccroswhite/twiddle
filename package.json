@@ -25,10 +25,10 @@
     "docker:down": "docker-compose down"
   },
   "devDependencies": {
-    "@types/node": "^20.17.0",
-    "turbo": "^2.3.0",
-    "typescript": "^5.7.0",
-    "prettier": "^3.4.0",
-    "eslint": "^9.16.0"
+    "@types/node": "^20.19.27",
+    "eslint": "^9.39.2",
+    "prettier": "^3.7.4",
+    "turbo": "^2.6.3",
+    "typescript": "^5.9.3"
   }
 }

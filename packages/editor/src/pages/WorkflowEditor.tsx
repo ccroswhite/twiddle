@@ -24,6 +24,7 @@ import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
 import { GitHubSettings } from '@/components/GitHubSettings';
 import { EnvironmentBadge, getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
+import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 
 
 interface NodeTypeInfo {
@@ -60,7 +61,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
   const [environment, setEnvironment] = useState<Environment>('DV');
-  const [promoting, setPromoting] = useState(false);
+
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showWorkflowBrowser, setShowWorkflowBrowser] = useState(false);
   const [isClosingBrowser, setIsClosingBrowser] = useState(false);
@@ -85,6 +86,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   // Folder permissions state
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [permissionsFolder, setPermissionsFolder] = useState<FolderType | null>(null);
   const [folderPermissions, setFolderPermissions] = useState<FolderPermission[]>([]);
   const [loadingPermissions, setLoadingPermissions] = useState(false);
@@ -569,27 +571,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       return;
     }
 
-    // Warn about production promotion
-    if (nextEnv === 'PD') {
-      if (!confirm('Promoting to Production requires administrator privileges. Continue?')) {
-        return;
-      }
-    } else {
-      if (!confirm(`Promote workflow from ${environment} to ${nextEnv}?`)) {
-        return;
-      }
-    }
-
-    try {
-      setPromoting(true);
-      const updated = await workflowsApi.promote(id, nextEnv as 'UT' | 'LT' | 'PD');
-      setEnvironment((updated as unknown as { environment: Environment }).environment);
-      alert(`Workflow promoted to ${nextEnv}`);
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setPromoting(false);
-    }
+    setShowPromotionModal(true);
   }
 
   function handleOpenWorkflowBrowser() {
@@ -863,12 +845,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               {getNextEnvironment(environment) && (
                 <button
                   onClick={handlePromote}
-                  disabled={promoting}
                   className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                  title={`Promote to ${getNextEnvironment(environment)}`}
+                  title={`Request promotion to ${getNextEnvironment(environment)}`}
                 >
                   <ChevronRight className="w-3 h-3" />
-                  {promoting ? 'Promoting...' : `Promote to ${getNextEnvironment(environment)}`}
+                  {`Request ${getNextEnvironment(environment)}`}
                 </button>
               )}
             </div>
@@ -1674,6 +1655,18 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             </div>
           </div>
         </div>
+      )}
+      {showPromotionModal && id && (
+        <PromotionRequestModal
+          workflowId={id}
+          workflowName={workflowName}
+          currentEnv={environment}
+          nextEnv={getNextEnvironment(environment)!}
+          onClose={() => setShowPromotionModal(false)}
+          onSuccess={() => {
+            alert('Promotion request submitted successfully!');
+          }}
+        />
       )}
     </div>
   );
