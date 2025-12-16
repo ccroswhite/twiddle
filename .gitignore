@@ -5,6 +5,8 @@ node_modules/
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
+build/
 .next/
 out/
 
@@ -46,3 +48,11 @@ coverage/
 
 # Generated
 packages/api/src/generated/
+
+# Python
+.venv/
+venv/
+__pycache__/
+
+# Node
+package-lock.json

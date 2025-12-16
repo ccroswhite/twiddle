@@ -228,7 +228,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
     // if still unlocked and user is present, acquire lock
     if (!workflow.lock && !lockedByObject && user) {
       try {
-        const newLock = await prisma.workflowLock.create({
+        await prisma.workflowLock.create({
           data: {
             workflowId: id,
             userId: user.id,
@@ -484,9 +484,9 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
         data: {
           workflowId: id,
           version: workflow.version,
-          nodes: workflow.nodes,
-          connections: workflow.connections,
-          settings: workflow.settings,
+          nodes: workflow.nodes as Prisma.InputJsonValue,
+          connections: workflow.connections as Prisma.InputJsonValue,
+          settings: workflow.settings as Prisma.InputJsonValue,
           createdById: userId
         }
       });
@@ -756,7 +756,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Get all versions for a workflow
-  app.get<{ Params: { id: string } }>('/:id/versions', async (request, reply) => {
+  app.get<{ Params: { id: string } }>('/:id/versions', async (request) => {
     const { id } = request.params;
 
     const versions = await prisma.workflowVersion.findMany({

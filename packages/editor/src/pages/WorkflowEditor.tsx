@@ -107,7 +107,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versions, setVersions] = useState<{ id: string; version: number; createdAt: string; createdBy: { name: string; email: string } | null }[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
-  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+
 
   // Undo history - stores snapshots of nodes and edges
   const MAX_HISTORY = 30;
@@ -1188,7 +1188,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             }
 
                             // Set Viewing Version State (Read Only Mode)
-                            setViewingVersion(ver.version); // Could be used to show a banner "Viewing Version X"
+                            // setViewingVersion(ver.version); // Could be used to show a banner "Viewing Version X"
 
                             // Overwrite nodes/edges
                             const flowNodes: Node[] = (versionData.nodes as any[]).map((node: any) => ({
@@ -1238,7 +1238,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             // Simply calling Update on the workflow with this data effectively restores it.
 
                             // Convert back to workflow format
-                            const workflowNodes = versionData.nodes; // Already in workflow format in DB? NO, check schema. `nodes` is Json.
+                            // const workflowNodes = versionData.nodes; // Already in workflow format in DB? NO, check schema. `nodes` is Json.
                             // Actually schema says it stores the same structure as Workflow.nodes.
                             // Workflow.nodes is stored as {id, name, type, position, parameters}
 
