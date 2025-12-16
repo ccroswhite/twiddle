@@ -18,7 +18,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "clean": "turbo run clean && rm -rf node_modules",
+    "clean": "turbo run clean && rm -rf node_modules .turbo packages/*/.turbo",
     "db:migrate": "pnpm --filter @twiddle/api db:migrate",
     "db:generate": "pnpm --filter @twiddle/api db:generate",
     "docker:up": "docker-compose up -d",
