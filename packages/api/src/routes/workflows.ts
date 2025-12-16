@@ -126,19 +126,255 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
     return workflows;
   });
 
-  // Get a single workflow
+  // Get a single workflow with locking logic
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { id } = request.params;
-    const workflow = await prisma.workflow.findUnique({
+    const user = (request as { user?: { id: string; name?: string; email: string } }).user;
+
+    // 1. Fetch workflow with current lock
+    let workflow = await prisma.workflow.findUnique({
       where: { id },
+      include: {
+        lock: {
+          include: { user: true },
+        },
+      },
     });
 
     if (!workflow) {
       return reply.status(404).send({ error: 'Workflow not found' });
     }
 
-    return workflow;
+    // 2. Handle Lock Logic
+    let lockedByObject = null;
+    const now = new Date();
+    const LOCK_TIMEOUT = 2 * 60 * 1000; // 2 minutes
+
+    // Check for stale lock
+    if (workflow.lock) {
+      if (now.getTime() - new Date(workflow.lock.updatedAt).getTime() > LOCK_TIMEOUT) {
+        // Stale lock - delete it
+        try {
+          await prisma.workflowLock.delete({ where: { id: workflow.lock.id } });
+          workflow.lock = null; // Clear from memory object
+        } catch (e) {
+          // Ignore delete errors (race condition)
+        }
+      } else if (workflow.lock.requestingAt) {
+        // Check for request timeout (1 minute)
+        const REQUEST_TIMEOUT = 1 * 60 * 1000;
+        if (now.getTime() - new Date(workflow.lock.requestingAt).getTime() > REQUEST_TIMEOUT) {
+          // Forced Swap
+          try {
+            await prisma.workflowLock.update({
+              where: { id: workflow.lock.id },
+              data: {
+                userId: workflow.lock.requestingUserId!,
+                requestingUserId: null,
+                requestingAt: null,
+                updatedAt: new Date()
+              }
+            });
+            // Update memory object for response
+            workflow.lock.userId = workflow.lock.requestingUserId!;
+            workflow.lock.requestingUserId = null;
+          } catch (e) {
+            // Race condition
+          }
+        }
+      }
+    }
+
+    if (workflow.lock) {
+      // Logic for existing lock
+      if (user && workflow.lock.userId === user.id) {
+        // Locked by current user - refresh heartbeat
+        try {
+          await prisma.workflowLock.update({
+            where: { id: workflow.lock.id },
+            data: { updatedAt: new Date() },
+          });
+          lockedByObject = { id: user.id, name: user.name || user.email, email: user.email, isMe: true };
+        } catch (e) {
+          // Lock might have been deleted by race condition, treat as lost
+          lockedByObject = null;
+        }
+      } else {
+        // Locked by someone else
+        lockedByObject = {
+          id: workflow.lock.userId,
+          name: workflow.lock.user.name || workflow.lock.user.email,
+          email: workflow.lock.user.email,
+          isMe: false,
+        };
+      }
+    }
+
+    if (lockedByObject) {
+      // Add request info if present
+      if (workflow.lock?.requestingUserId) {
+        const requestingUser = await prisma.user.findUnique({ where: { id: workflow.lock.requestingUserId } });
+        if (requestingUser) {
+          (lockedByObject as any).request = {
+            userId: requestingUser.id,
+            name: requestingUser.name || requestingUser.email,
+            email: requestingUser.email,
+            requestedAt: workflow.lock.requestingAt
+          };
+        }
+      }
+    }
+
+    // if still unlocked and user is present, acquire lock
+    if (!workflow.lock && !lockedByObject && user) {
+      try {
+        const newLock = await prisma.workflowLock.create({
+          data: {
+            workflowId: id,
+            userId: user.id,
+          },
+          include: { user: true },
+        });
+        lockedByObject = { id: user.id, name: user.name || user.email, email: user.email, isMe: true };
+      } catch (e) {
+        // Race condition - someone else locked it
+        const raceLock = await prisma.workflowLock.findUnique({ where: { workflowId: id }, include: { user: true } });
+        if (raceLock) {
+          lockedByObject = {
+            id: raceLock.userId,
+            name: raceLock.user.name || raceLock.user.email,
+            email: raceLock.user.email,
+            isMe: false
+          };
+        }
+      }
+    }
+
+    return { ...workflow, lockedBy: lockedByObject };
   });
+
+  // Heartbeat - refresh lock & check requests
+  app.post<{ Params: { id: string } }>('/:id/lock', async (request, reply) => {
+    const { id } = request.params;
+    const user = (request as { user?: { id: string } }).user;
+
+    if (!user) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const lock = await prisma.workflowLock.findUnique({ where: { workflowId: id } });
+    if (!lock) {
+      // Try to acquire
+      try {
+        await prisma.workflowLock.create({
+          data: { workflowId: id, userId: user.id }
+        });
+        return { success: true, status: 'acquired' };
+      } catch (e) {
+        return reply.status(409).send({ error: 'Workflow is locked by another user' });
+      }
+    }
+
+    if (lock.userId !== user.id) {
+      // Check if stale
+      const now = new Date();
+      const LOCK_TIMEOUT = 2 * 60 * 1000;
+      if (now.getTime() - new Date(lock.updatedAt).getTime() > LOCK_TIMEOUT) {
+        // Takeover
+        await prisma.workflowLock.delete({ where: { id: lock.id } });
+        await prisma.workflowLock.create({
+          data: { workflowId: id, userId: user.id }
+        });
+        return { success: true, status: 'taken_over' };
+      }
+      return reply.status(409).send({ error: 'Workflow is locked by another user' });
+    }
+
+    // Refresh
+    const updatedLock = await prisma.workflowLock.update({
+      where: { id: lock.id },
+      data: { updatedAt: new Date() },
+      include: { requestingUser: true }
+    });
+
+    // Check for active request
+    let requestInfo = null;
+    if (updatedLock.requestingUserId) {
+      requestInfo = {
+        userId: updatedLock.requestingUserId,
+        name: updatedLock.requestingUser?.name || updatedLock.requestingUser?.email,
+        email: updatedLock.requestingUser?.email,
+        requestedAt: updatedLock.requestingAt
+      };
+    }
+
+    return { success: true, status: 'refreshed', request: requestInfo };
+  });
+
+  // Request Lock Takeover
+  app.post<{ Params: { id: string } }>('/:id/lock/request', async (request, reply) => {
+    const { id } = request.params;
+    const user = (request as { user?: { id: string } }).user;
+    if (!user) return reply.status(401).send({ error: 'Unauthorized' });
+
+    const lock = await prisma.workflowLock.findUnique({ where: { workflowId: id } });
+    if (!lock) return { success: true, status: 'acquired' }; // Logic elsewhere will acquire it on next load, but this signals 'go ahead'
+
+    if (lock.userId === user.id) return { success: true, status: 'already_locked' };
+
+    await prisma.workflowLock.update({
+      where: { id: lock.id },
+      data: { requestingUserId: user.id, requestingAt: new Date() }
+    });
+    return { success: true, status: 'requested' };
+  });
+
+  // Resolve Lock Request (Accept/Deny)
+  app.post<{ Params: { id: string }, Body: { action: 'ACCEPT' | 'DENY' } }>('/:id/lock/resolve', async (request, reply) => {
+    const { id } = request.params;
+    const { action } = request.body;
+    const user = (request as { user?: { id: string } }).user;
+    if (!user) return reply.status(401).send({ error: 'Unauthorized' });
+
+    const lock = await prisma.workflowLock.findUnique({ where: { workflowId: id } });
+    if (!lock || lock.userId !== user.id) return reply.status(400).send({ error: 'Invalid lock state' });
+
+    if (action === 'ACCEPT' && lock.requestingUserId) {
+      await prisma.workflowLock.update({
+        where: { id: lock.id },
+        data: {
+          userId: lock.requestingUserId,
+          requestingUserId: null,
+          requestingAt: null,
+          updatedAt: new Date()
+        }
+      });
+      return { success: true, status: 'swapped' };
+    } else {
+      // Deny or no request
+      await prisma.workflowLock.update({
+        where: { id: lock.id },
+        data: { requestingUserId: null, requestingAt: null }
+      });
+      return { success: true, status: 'denied' };
+    }
+  });
+
+  // Unlock - release lock
+  app.post<{ Params: { id: string } }>('/:id/unlock', async (request, reply) => {
+    const { id } = request.params;
+    const user = (request as { user?: { id: string } }).user;
+
+    if (!user) return reply.status(401).send({ error: 'Unauthorized' });
+
+    // Only delete if owned by user
+    const lock = await prisma.workflowLock.findUnique({ where: { workflowId: id } });
+    if (lock && lock.userId === user.id) {
+      await prisma.workflowLock.delete({ where: { id: lock.id } });
+    }
+    return { success: true };
+  });
+
 
   // Create a new workflow
   app.post<{ Body: WorkflowCreateInput & { groupId?: string; folderId?: string } }>('/', async (request, reply) => {
@@ -240,6 +476,19 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
           ...(tags !== undefined && { tags }),
           ...pythonCodeUpdate,
         },
+      });
+
+      // Create a version snapshot
+      const userId = (request as { user?: { id: string } }).user?.id;
+      await prisma.workflowVersion.create({
+        data: {
+          workflowId: id,
+          version: workflow.version,
+          nodes: workflow.nodes,
+          connections: workflow.connections,
+          settings: workflow.settings,
+          createdById: userId
+        }
       });
 
       // Commit to GitHub if configured
@@ -504,6 +753,40 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       },
       files,
     };
+  });
+
+  // Get all versions for a workflow
+  app.get<{ Params: { id: string } }>('/:id/versions', async (request, reply) => {
+    const { id } = request.params;
+
+    const versions = await prisma.workflowVersion.findMany({
+      where: { workflowId: id },
+      orderBy: { version: 'desc' },
+      select: {
+        id: true,
+        version: true,
+        createdAt: true,
+        createdBy: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+    return versions;
+  });
+
+  // Get a specific version
+  app.get<{ Params: { id: string, versionId: string } }>('/:id/versions/:versionId', async (request, reply) => {
+    const { id, versionId } = request.params;
+
+    const version = await prisma.workflowVersion.findUnique({
+      where: { id: versionId }
+    });
+
+    if (!version || version.workflowId !== id) {
+      return reply.status(404).send({ error: 'Version not found' });
+    }
+
+    return version;
   });
 
   // Import workflow from exported JSON

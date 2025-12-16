@@ -116,7 +116,30 @@ export const workflowsApi = {
       method: 'POST',
       body: JSON.stringify({ targetEnvironment }),
     }),
+  heartbeat: (id: string) =>
+    request<{ success: boolean; status: string; request?: { userId: string; name: string; email: string; requestedAt: string } }>(`/workflows/${id}/lock`, {
+      method: 'POST',
+    }),
+  requestLock: (id: string) =>
+    request<{ success: boolean; status: string }>(`/workflows/${id}/lock/request`, {
+      method: 'POST',
+    }),
+  resolveLock: (id: string, action: 'ACCEPT' | 'DENY') =>
+    request<{ success: boolean; status: string }>(`/workflows/${id}/lock/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    }),
+  unlock: (id: string) =>
+    request<{ success: boolean }>(`/workflows/${id}/unlock`, {
+      method: 'POST',
+    }),
+  getVersions: (id: string) =>
+    request<{ id: string; version: number; createdAt: string; createdBy: { name: string; email: string } | null }[]>(`/workflows/${id}/versions`),
+  getVersion: (id: string, versionId: string) =>
+    request<{ id: string; version: number; nodes: any[]; connections: any[]; settings: any }>(`/workflows/${id}/versions/${versionId}`),
 };
+
+
 
 // Promotions API
 export type PromotionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -252,7 +275,14 @@ export interface Workflow {
     id: string;
     name: string;
   };
+  lockedBy?: {
+    id: string;
+    name: string;
+    email: string;
+    isMe: boolean;
+  } | null;
 }
+
 
 export interface Folder {
   id: string;

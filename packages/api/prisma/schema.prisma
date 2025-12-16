@@ -45,11 +45,18 @@ model User {
   
   // Workflows created by this user
   workflows     Workflow[]
+  createdVersions WorkflowVersion[]
   credentials   Credential[]
 
   // SDLC Promotions
   requestedPromotions PromotionRequest[] @relation("RequestedPromotions")
   reviewedPromotions  PromotionRequest[] @relation("ReviewedPromotions")
+
+  // Workflow Locks
+  workflowLocks WorkflowLock[]
+  lockRequests  WorkflowLock[] @relation("LockRequests")
+
+
 
   @@unique([provider, providerId])
   @@index([email])
@@ -250,6 +257,10 @@ model Workflow {
 
   // SDLC
   promotionRequests PromotionRequest[]
+  
+  // Locking
+  lock WorkflowLock?
+
 
   @@index([active])
   @@index([environment])
@@ -257,6 +268,29 @@ model Workflow {
   @@index([groupId])
   @@index([createdById])
   @@index([folderId])
+  
+  // Versions
+  versions WorkflowVersion[]
+}
+
+model WorkflowVersion {
+  id          String   @id @default(cuid())
+  workflowId  String
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  
+  version     Int
+  
+  // Snapshot data
+  nodes       Json     @default("[]")
+  connections Json     @default("[]")
+  settings    Json     @default("{}")
+  
+  createdAt   DateTime @default(now())
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([workflowId, version])
+  @@index([workflowId])
 }
 
 model Credential {
@@ -323,3 +357,26 @@ enum PromotionStatus {
   APPROVED
   REJECTED
 }
+
+model WorkflowLock {
+  id        String   @id @default(cuid())
+  
+  workflowId String  @unique 
+  workflow  Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  updatedAt DateTime @updatedAt // Used as heartbeat timestamp to track active sessions
+  createdAt DateTime @default(now())
+
+  // Takeover Request
+  requestingUserId String?
+  requestingUser   User?   @relation("LockRequests", fields: [requestingUserId], references: [id])
+  requestingAt     DateTime?
+
+  @@index([userId])
+  @@index([requestingUserId])
+}
+
+

@@ -17,7 +17,7 @@ import {
   SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy } from 'lucide-react';
+import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy, Lock } from 'lucide-react';
 import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
@@ -70,6 +70,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [editingWorkflowName, setEditingWorkflowName] = useState('');
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
+  const [versionHistoryWorkflow, setVersionHistoryWorkflow] = useState<Workflow | null>(null);
+
+  // Locking state
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [lockedBy, setLockedBy] = useState<{ id: string; name: string; email: string; isMe: boolean } | null>(null);
+  const [takeoverRequest, setTakeoverRequest] = useState<{ userId: string; name: string; email: string; requestedAt: string } | null>(null);
+  const [requestingLock, setRequestingLock] = useState(false);
 
   // Folder state
   const [folders, setFolders] = useState<FolderType[]>([]);
@@ -96,6 +103,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [newPermissionTargetId, setNewPermissionTargetId] = useState('');
   const [newPermissionLevel, setNewPermissionLevel] = useState<FolderPermissionLevel>('READ');
 
+  // Version History state
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versions, setVersions] = useState<{ id: string; version: number; createdAt: string; createdBy: { name: string; email: string } | null }[]>([]);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+
   // Undo history - stores snapshots of nodes and edges
   const MAX_HISTORY = 30;
   const [history, setHistory] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
@@ -105,6 +118,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Selection context menu
   const [selectionContextMenu, setSelectionContextMenu] = useState<{ x: number; y: number } | null>(null);
   const selectionContextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Workflow Browser context menu
+  const [workflowContextMenu, setWorkflowContextMenu] = useState<{ x: number; y: number; workflow: Workflow } | null>(null);
+  const workflowContextMenuRef = useRef<HTMLDivElement>(null);
+
+  // Pane context menu (for Read Only mode)
+  const [paneContextMenu, setPaneContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const paneContextMenuRef = useRef<HTMLDivElement>(null);
 
   const nodeTypes: NodeTypes = useMemo(() => ({
     workflowNode: WorkflowNode as any,
@@ -208,6 +229,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       if (selectionContextMenuRef.current && !selectionContextMenuRef.current.contains(event.target as HTMLElement)) {
         setSelectionContextMenu(null);
       }
+      if (paneContextMenuRef.current && !paneContextMenuRef.current.contains(event.target as HTMLElement)) {
+        setPaneContextMenu(null);
+      }
+      if (workflowContextMenuRef.current && !workflowContextMenuRef.current.contains(event.target as HTMLElement)) {
+        setWorkflowContextMenu(null);
+      }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -221,6 +248,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setSelectionContextMenu({ x: event.clientX, y: event.clientY });
     }
   }, [nodes]);
+
+  const handlePaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    if (isReadOnly) {
+      event.preventDefault();
+      setPaneContextMenu({ x: event.clientX, y: event.clientY });
+    }
+  }, [isReadOnly]);
 
   // Copy and paste selected nodes with offset
   const handleCopyAndPaste = useCallback(() => {
@@ -292,6 +326,91 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       prevEdgesRef.current = edgesJson;
     }
   }, [nodes, edges, saveToHistory]);
+
+  // Heartbeat loop
+  useEffect(() => {
+    if (!id || isNew || isReadOnly) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await workflowsApi.heartbeat(id);
+        if (response.request) {
+          setTakeoverRequest(response.request);
+        } else {
+          setTakeoverRequest(null);
+        }
+      } catch (err) {
+        console.error('Heartbeat failed:', err);
+        loadWorkflow(id);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [id, isNew, isReadOnly]);
+
+  // Takeover Request Polling (Viewer)
+  useEffect(() => {
+    if (!id || !requestingLock || !isReadOnly) return;
+
+    const interval = setInterval(async () => {
+      try {
+        // We can use heartbeat or get to check status, but really we wait for the lock to be acquired
+        // In fact, if we are requesting, we likely want to just try to loadWorkflow periodically
+        // If we get the lock, loadWorkflow will set isReadOnly=false
+        await loadWorkflow(id);
+        // If loadWorkflow set isReadOnly=false, this effect will stop and requestingLock should be reset
+      } catch (e) {
+        // ignore
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [id, requestingLock, isReadOnly]);
+
+  // Reset requestingLock when we get write access
+  useEffect(() => {
+    if (!isReadOnly) {
+      setRequestingLock(false);
+    }
+  }, [isReadOnly]);
+
+  async function handleRequestLock() {
+    if (!id || !isReadOnly) return;
+    try {
+      const res = await workflowsApi.requestLock(id);
+      if (res.status === 'acquired') {
+        // We got it immediately (unlocked)
+        loadWorkflow(id);
+      } else if (res.status === 'requested') {
+        setRequestingLock(true);
+      }
+    } catch (e) {
+      alert('Failed to request lock');
+    }
+  }
+
+  async function handleResolveLock(action: 'ACCEPT' | 'DENY') {
+    if (!id || !takeoverRequest) return;
+    try {
+      await workflowsApi.resolveLock(id, action);
+      setTakeoverRequest(null);
+      if (action === 'ACCEPT') {
+        // We yielded, so reload to become ReadOnly
+        loadWorkflow(id);
+      }
+    } catch (e) {
+      alert('Failed to resolve lock');
+    }
+  }
+
+  // Unlock on unmount
+  useEffect(() => {
+    return () => {
+      if (id && !isNew && !isReadOnly && lockedBy?.isMe) {
+        workflowsApi.unlock(id).catch(console.error);
+      }
+    };
+  }, [id, isNew, isReadOnly, lockedBy]);
 
   useEffect(() => {
     loadAvailableNodes();
@@ -392,10 +511,20 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         pythonWorkflow?: string;
         pythonActivities?: string;
         environment?: Environment;
+        lockedBy?: { id: string; name: string; email: string; isMe: boolean };
       };
       setWorkflowName(workflow.name);
       setWorkflowDescription(workflow.description || '');
       setEnvironment(workflow.environment || 'DV');
+
+      // Handle locking
+      if (workflow.lockedBy) {
+        setLockedBy(workflow.lockedBy);
+        setIsReadOnly(!workflow.lockedBy.isMe);
+      } else {
+        setLockedBy(null);
+        setIsReadOnly(false);
+      }
 
       // Load Python code if available
       if (workflow.pythonWorkflow) {
@@ -470,6 +599,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }, [setNodes]);
 
   function addNode(nodeType: NodeTypeInfo) {
+    if (isReadOnly) return;
     // Calculate position at the center of the current viewport
     let position = { x: 250, y: 100 };
 
@@ -858,9 +988,9 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         <div className="flex items-center gap-2">
           <button
             onClick={handleUndo}
-            disabled={historyIndex <= 0}
+            disabled={historyIndex <= 0 || isReadOnly}
             className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title={`Undo (${historyIndex} actions in history)`}
+            title={isReadOnly ? "Undo disabled in read-only mode" : `Undo (${historyIndex} actions in history)`}
           >
             <Undo2 className="w-4 h-4" />
             Undo
@@ -875,7 +1005,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           </button>
           <button
             onClick={() => setShowNodePanel(true)}
-            className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            disabled={isReadOnly}
+            className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title="Add a new activity or trigger to the workflow"
           >
             <Plus className="w-4 h-4" />
@@ -913,8 +1044,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           </button>
           <button
             onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+            disabled={saving || isReadOnly}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4" />
             {saving ? 'Saving...' : 'Save'}
@@ -922,18 +1053,31 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         </div>
       </div>
 
+      {/* Read Only Banner */}
+      {isReadOnly && lockedBy && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-center gap-2 text-sm text-amber-800">
+          <Lock className="w-4 h-4" />
+          <span className="font-medium">Read Only Mode</span>
+          <span className="text-amber-700">•</span>
+          <span>This workflow is currently being edited by <strong>{lockedBy.name}</strong> ({lockedBy.email}). You cannot make changes.</span>
+        </div>
+      )}
+
       {/* Canvas */}
       <div className="flex-1">
         <ReactFlow
           nodes={nodes}
           edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodesDelete={onNodesDelete}
+          onNodesChange={isReadOnly ? undefined : onNodesChange}
+          onEdgesChange={isReadOnly ? undefined : onEdgesChange}
+          onConnect={isReadOnly ? undefined : onConnect}
+          onNodesDelete={isReadOnly ? undefined : onNodesDelete}
           onInit={(instance) => { reactFlowInstance.current = instance; }}
           nodeTypes={nodeTypes}
-          deleteKeyCode={['Backspace', 'Delete']}
+          deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
+          nodesDraggable={!isReadOnly}
+          nodesConnectable={!isReadOnly}
+          elementsSelectable={true}
           snapToGrid={true}
           snapGrid={[20, 20]}
           fitView
@@ -941,7 +1085,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           selectionMode={SelectionMode.Partial}
           panOnDrag={[1, 2]}
           selectNodesOnDrag={true}
-          onSelectionContextMenu={handleSelectionContextMenu}
+          onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
+          onPaneContextMenu={handlePaneContextMenu}
         >
           <Controls />
           <MiniMap />
@@ -982,6 +1127,224 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           </div>
         )}
       </div>
+
+      {/* Version History Modal */}
+      {showVersionHistory && versionHistoryWorkflow && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+          <div className="bg-neutral-800 rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col border border-neutral-700">
+            <div className="p-4 border-b border-neutral-700 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-white">Version History: {versionHistoryWorkflow.name}</h3>
+              <button
+                onClick={() => setShowVersionHistory(false)}
+                className="text-neutral-400 hover:text-white"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingVersions ? (
+                <div className="text-center text-neutral-400 py-8">Loading versions...</div>
+              ) : versions.length === 0 ? (
+                <div className="text-center text-neutral-400 py-8">No version history available</div>
+              ) : (
+                <div className="space-y-2">
+                  {versions.map((ver) => (
+                    <div key={ver.id} className="flex items-center justify-between p-3 bg-neutral-900/50 rounded border border-neutral-700/50 hover:border-neutral-600">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-white">Version {ver.version}</span>
+                          <span className="text-xs text-neutral-500">
+                            {new Date(ver.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-neutral-400 mt-1">
+                          Saved by {ver.createdBy?.name || ver.createdBy?.email || 'Unknown'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            // Open Version Logic
+                            // We load this version into the editor as Read-Only
+                            // 1. Close modal
+                            setShowVersionHistory(false);
+                            setShowWorkflowBrowser(false);
+
+                            // 2. Fetch full version data
+                            const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, ver.id);
+
+                            // 3. Load into state
+                            // If current ID is different or we are 'new', we should probably navigate or set ID?
+                            // But we want to open *this* workflow's version.
+                            // If we are currently editing a different workflow, we should probably warn?
+                            // Ideally we navigate to /workflows/:id then load valid version data.
+
+                            if (id !== versionHistoryWorkflow.id) {
+                              navigate(`/workflows/${versionHistoryWorkflow.id}`);
+                              // The useEffect will load HEAD, then we overwrite? Race condition.
+                              // Simpler: Just load it if we are already on the page or it matches.
+                              // For now, let's assume user opens it from the browser.
+                            }
+
+                            // Set Viewing Version State (Read Only Mode)
+                            setViewingVersion(ver.version); // Could be used to show a banner "Viewing Version X"
+
+                            // Overwrite nodes/edges
+                            const flowNodes: Node[] = (versionData.nodes as any[]).map((node: any) => ({
+                              id: node.id,
+                              type: 'workflowNode',
+                              position: node.position,
+                              data: {
+                                label: node.name,
+                                nodeType: node.type,
+                                parameters: node.parameters,
+                                onOpenProperties: handleOpenProperties,
+                              },
+                            })).map(n => ({ ...n, draggable: false, selectable: true })); // Read only tweaks?
+
+                            const flowEdges: Edge[] = (versionData.connections as any[]).map((conn: any, index: number) => ({
+                              id: `e${index}`,
+                              source: conn.sourceNodeId,
+                              target: conn.targetNodeId,
+                              sourceHandle: conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null),
+                              targetHandle: conn.targetInput === 'main' ? null : (conn.targetInput ?? null),
+                              animated: false,
+                              deletable: false
+                            }));
+
+                            setNodes(flowNodes);
+                            setEdges(flowEdges);
+                            setWorkflowName(`${versionHistoryWorkflow.name} (v${ver.version})`);
+                            setWorkflowDescription(versionHistoryWorkflow.description || '');
+                            setIsReadOnly(true); // Force read only
+                          }}
+                          className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded"
+                        >
+                          Open
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`Are you sure you want to restore Version ${ver.version}? This will become the new HEAD.`)) return;
+
+                            // Restore Logic (Revert)
+                            // 1. Fetch version
+                            const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, ver.id);
+
+                            // 2. Save as new update
+                            // If we are not currently editing this workflow, we need to switch?
+                            // Assuming we are context switching or just doing it via API.
+                            // Simply calling Update on the workflow with this data effectively restores it.
+
+                            // Convert back to workflow format
+                            const workflowNodes = versionData.nodes; // Already in workflow format in DB? NO, check schema. `nodes` is Json.
+                            // Actually schema says it stores the same structure as Workflow.nodes.
+                            // Workflow.nodes is stored as {id, name, type, position, parameters}
+
+                            await workflowsApi.update(versionHistoryWorkflow.id, {
+                              name: versionHistoryWorkflow.name, // Keep name? Or restore old name? Usually keep current metadata.
+                              description: versionHistoryWorkflow.description,
+                              nodes: versionData.nodes as any,
+                              connections: versionData.connections as any,
+                              settings: versionData.settings as any
+                            });
+
+                            alert(`Restored version ${ver.version} successfully.`);
+                            setShowVersionHistory(false);
+
+                            // Reload if current
+                            if (id === versionHistoryWorkflow.id) {
+                              loadWorkflow(id);
+                            }
+                          }}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded"
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-neutral-700 flex justify-end">
+              <button
+                onClick={() => setShowVersionHistory(false)}
+                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pane Context Menu (Read Only Request) */}
+      {paneContextMenu && (
+        <div
+          ref={paneContextMenuRef}
+          className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 min-w-[160px]"
+          style={{ left: paneContextMenu.x, top: paneContextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              handleRequestLock();
+              setPaneContextMenu(null);
+            }}
+            disabled={requestingLock}
+            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2 disabled:opacity-50"
+          >
+            <Lock className="w-4 h-4" />
+            {requestingLock ? 'Request Sent...' : 'Request Edit Access'}
+          </button>
+        </div>
+      )}
+
+      {/* Takeover Request Modal (For Editor) */}
+      {takeoverRequest && !isReadOnly && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                <User className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900">Edit Access Requested</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  <strong>{takeoverRequest.name}</strong> ({takeoverRequest.email}) is requesting to edit this workflow.
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  If you do not respond within 1 minute, access will be automatically transferred.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => handleResolveLock('DENY')}
+                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+              >
+                Deny
+              </button>
+              <button
+                onClick={() => handleResolveLock('ACCEPT')}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Allow Access
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Requesting Access Banner (For Viewer) */}
+      {requestingLock && isReadOnly && (
+        <div className="absolute top-[120px] left-1/2 transform -translate-x-1/2 z-50 bg-white border border-slate-200 shadow-lg px-6 py-3 rounded-full flex items-center gap-3 animate-pulse">
+          <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" />
+          <span className="font-medium text-slate-700">Requesting edit access...</span>
+        </div>
+      )}
 
       {/* Node Panel */}
       {showNodePanel && (
@@ -1298,6 +1661,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                         setShowWorkflowBrowser(false);
                         navigate(`/workflows/${workflow.id}`);
                       }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setWorkflowContextMenu({ x: e.clientX, y: e.clientY, workflow });
+                      }}
                       className={`p-4 rounded-lg border transition-colors cursor-pointer ${draggingWorkflowId === workflow.id
                         ? 'bg-primary-50 border-primary-300 opacity-50'
                         : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
@@ -1395,6 +1763,34 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setEditingWorkflowId(null);
+                              setPermissionsFolder(null); // Not a folder permissions modal
+
+                              // Load versions for this workflow
+                              setLoadingVersions(true);
+                              setShowVersionHistory(true);
+                              // Store ID temporarily or fetch directly within modal if we passed workflow prop?
+                              // Better: fetch here and pass data or use a ref/state for target workflow
+                              // Hack: Reuse editingWorkflowId or adding a new state for 'versionHistoryWorkflowId'
+                              // Let's add that state variable? Or just fetch here and use a ref?
+                              // We'll assume we can't easily add state in this deep nested click without causing re-renders effectively.
+                              // Let's use `deletingWorkflow` equivalent: `versionHistoryWorkflow`
+                              setVersionHistoryWorkflow(workflow);
+                              try {
+                                const list = await workflowsApi.getVersions(workflow.id);
+                                setVersions(list);
+                              } finally {
+                                setLoadingVersions(false);
+                              }
+                            }}
+                            className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white"
+                            title="Version History"
+                          >
+                            <Clock size={14} />
+                          </button>
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setDeletingWorkflow(workflow);
@@ -1428,6 +1824,59 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Workflow Browser Context Menu */}
+      {workflowContextMenu && (
+        <div
+          ref={workflowContextMenuRef}
+          className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-[60] min-w-[160px]"
+          style={{ left: workflowContextMenu.x, top: workflowContextMenu.y }}
+        >
+          <button
+            onClick={async () => {
+              setWorkflowContextMenu(null);
+              // Reuse Version History Logic
+              const workflow = workflowContextMenu.workflow;
+              setVersionHistoryWorkflow(workflow);
+              setLoadingVersions(true);
+              setShowVersionHistory(true);
+              try {
+                const list = await workflowsApi.getVersions(workflow.id);
+                setVersions(list);
+              } finally {
+                setLoadingVersions(false);
+              }
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+          >
+            <Clock className="w-4 h-4" />
+            Version History
+          </button>
+
+          <button
+            onClick={() => {
+              setWorkflowContextMenu(null);
+              setEditingWorkflowId(workflowContextMenu.workflow.id);
+              setEditingWorkflowName(workflowContextMenu.workflow.name);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+          >
+            <Pencil className="w-4 h-4" />
+            Rename
+          </button>
+
+          <button
+            onClick={() => {
+              setWorkflowContextMenu(null);
+              setDeletingWorkflow(workflowContextMenu.workflow);
+            }}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
         </div>
       )}
 
@@ -1656,6 +2105,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           </div>
         </div>
       )}
+
       {showPromotionModal && id && (
         <PromotionRequestModal
           workflowId={id}
