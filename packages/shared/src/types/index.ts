@@ -2,3 +2,8 @@ export * from './workflow.js';
 export * from './execution.js';
 export * from './node.js';
 export * from './credential.js';
+export * from './folder.js';
+export * from './group.js';
+export * from './user.js';
+export * from './github.js';
+export * from './system.js';

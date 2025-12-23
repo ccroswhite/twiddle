@@ -2,6 +2,44 @@
  * Core workflow types for Twiddle
  */
 
+// ============================================================================
+// Environment & Promotion Types
+// ============================================================================
+
+export type WorkflowEnvironment = 'DV' | 'UT' | 'LT' | 'PD';
+
+export type PromotionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface PromotionRequest {
+  id: string;
+  workflowId: string;
+  fromEnv: WorkflowEnvironment;
+  toEnv: WorkflowEnvironment;
+  requesterId: string;
+  reviewerId?: string;
+  status: PromotionStatus;
+  requestNotes?: string;
+  reviewNotes?: string;
+  createdAt: string;
+  workflow?: {
+    name: string;
+    environment: WorkflowEnvironment;
+    version: number;
+  };
+  requester?: {
+    name?: string;
+    email: string;
+  };
+  reviewer?: {
+    name?: string;
+    email: string;
+  };
+}
+
+// ============================================================================
+// Core Workflow Types
+// ============================================================================
+
 export interface WorkflowNode {
   id: string;
   type: string;

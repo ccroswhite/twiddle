@@ -27,3 +27,18 @@ export interface CredentialTestResult {
   success: boolean;
   message: string;
 }
+
+export interface CredentialWithAccess {
+  id: string;
+  name: string;
+  type: string;
+  createdAt: string;
+  updatedAt: string;
+  createdById?: string;
+  groupId?: string | null;
+  group?: {
+    id: string;
+    name: string;
+  } | null;
+  isOwner: boolean;
+}

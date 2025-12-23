@@ -1,4 +1,58 @@
-import type { WorkflowCreateInput, WorkflowUpdateInput } from '@twiddle/shared';
+export type {
+  WorkflowCreateInput,
+  WorkflowUpdateInput,
+  WorkflowEnvironment,
+  PromotionStatus,
+  PromotionRequest,
+  Folder,
+  FolderPermission,
+  FolderPermissionLevel,
+  FolderCreateInput,
+  FolderUpdateInput,
+  CredentialWithAccess,
+  CredentialCreateInput,
+  CredentialUpdateInput,
+  Group,
+  GroupMember,
+  GroupCreateInput,
+  GroupUpdateInput,
+  User,
+  AuthUser,
+  AuthResponse,
+  AuthMeResponse,
+  GitHubUser,
+  GitHubRepo,
+  GitHubStatus,
+  SystemSettings,
+} from '@twiddle/shared';
+
+import type {
+  WorkflowCreateInput,
+  WorkflowUpdateInput,
+  WorkflowEnvironment,
+  PromotionStatus,
+  PromotionRequest,
+  Folder,
+  FolderPermission,
+  FolderPermissionLevel,
+  FolderCreateInput,
+  FolderUpdateInput,
+  CredentialWithAccess,
+  CredentialCreateInput,
+  CredentialUpdateInput,
+  Group,
+  GroupMember,
+  GroupCreateInput,
+  GroupUpdateInput,
+  User,
+  AuthResponse,
+  AuthMeResponse,
+  GitHubUser,
+  GitHubRepo,
+  GitHubStatus,
+  SystemSettings,
+} from '@twiddle/shared';
+
 
 const API_BASE = '/api';
 
@@ -144,33 +198,6 @@ export const workflowsApi = {
 
 
 // Promotions API
-export type PromotionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
-
-export interface PromotionRequest {
-  id: string;
-  workflowId: string;
-  fromEnv: WorkflowEnvironment;
-  toEnv: WorkflowEnvironment;
-  requesterId: string;
-  reviewerId?: string;
-  status: PromotionStatus;
-  requestNotes?: string;
-  reviewNotes?: string;
-  createdAt: string;
-  workflow?: {
-    name: string;
-    environment: WorkflowEnvironment;
-    version: number;
-  };
-  requester?: {
-    name?: string;
-    email: string;
-  };
-  reviewer?: {
-    name?: string;
-    email: string;
-  };
-}
 
 export const promotionsApi = {
   list: (status?: PromotionStatus, workflowId?: string) => {
@@ -206,15 +233,7 @@ export const nodesApi = {
 };
 
 // Credentials API
-export interface CredentialWithAccess extends CredentialInfo {
-  createdById?: string;
-  groupId?: string | null;
-  group?: {
-    id: string;
-    name: string;
-  } | null;
-  isOwner: boolean;
-}
+
 
 export const credentialsApi = {
   list: () => request<CredentialWithAccess[]>('/credentials'),
@@ -246,8 +265,6 @@ export const credentialsApi = {
 };
 
 // Types
-export type WorkflowEnvironment = 'DV' | 'UT' | 'LT' | 'PD';
-
 export interface Workflow {
   id: string;
   name: string;
@@ -286,55 +303,6 @@ export interface Workflow {
 }
 
 
-export interface Folder {
-  id: string;
-  name: string;
-  description?: string;
-  color?: string;
-  parentId?: string;
-  groupId?: string;
-  createdById?: string;
-  createdAt: string;
-  updatedAt: string;
-  createdBy?: {
-    id: string;
-    name?: string;
-    email: string;
-  };
-  group?: {
-    id: string;
-    name: string;
-  };
-  _count?: {
-    workflows: number;
-    children: number;
-  };
-  children?: Folder[];
-  workflows?: Workflow[];
-  permissions?: FolderPermission[];
-}
-
-export type FolderPermissionLevel = 'READ' | 'WRITE' | 'ADMIN';
-
-export interface FolderPermission {
-  id: string;
-  folderId: string;
-  userId?: string;
-  groupId?: string;
-  permission: FolderPermissionLevel;
-  createdAt: string;
-  user?: {
-    id: string;
-    email: string;
-    name?: string;
-  };
-  group?: {
-    id: string;
-    name: string;
-  };
-}
-
-
 interface NodeTypeInfo {
   type: string;
   displayName: string;
@@ -353,64 +321,10 @@ interface NodeDefinition extends NodeTypeInfo {
   subtitle?: string;
 }
 
-interface CredentialInfo {
-  id: string;
-  name: string;
-  type: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CredentialCreateInput {
-  name: string;
-  type: string;
-  data: Record<string, unknown>;
-}
-
-interface CredentialUpdateInput {
-  name?: string;
-  data?: Record<string, unknown>;
-}
 
 // ============================================================================
 // Groups API
 // ============================================================================
-
-interface Group {
-  id: string;
-  name: string;
-  description?: string;
-  isDefault: boolean;
-  createdAt: string;
-  updatedAt: string;
-  memberCount?: number;
-  workflowCount?: number;
-  role?: string;
-}
-
-interface GroupMember {
-  id: string;
-  role: string;
-  createdAt: string;
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-    avatarUrl?: string;
-  };
-}
-
-interface GroupCreateInput {
-  name: string;
-  description?: string;
-  isDefault?: boolean;
-}
-
-interface GroupUpdateInput {
-  name?: string;
-  description?: string;
-  isDefault?: boolean;
-}
 
 export const groupsApi = {
   list: () => request<Group[]>('/groups'),
@@ -454,22 +368,6 @@ export const groupsApi = {
 // ============================================================================
 // Folders API
 // ============================================================================
-
-interface FolderCreateInput {
-  name: string;
-  description?: string;
-  color?: string;
-  parentId?: string;
-  groupId?: string;
-}
-
-interface FolderUpdateInput {
-  name?: string;
-  description?: string;
-  color?: string;
-  parentId?: string;
-  groupId?: string;
-}
 
 export const foldersApi = {
   list: (parentId?: string) =>
@@ -528,16 +426,6 @@ export const foldersApi = {
 // Users API
 // ============================================================================
 
-interface User {
-  id: string;
-  email: string;
-  name?: string;
-  avatarUrl?: string;
-  isAdmin: boolean;
-  isActive: boolean;
-  groups?: { id: string; name: string; role: string }[];
-}
-
 export const usersApi = {
   list: () => request<User[]>('/users'),
   get: (id: string) => request<User>(`/users/${id}`),
@@ -548,31 +436,6 @@ export const usersApi = {
 // ============================================================================
 // GitHub API
 // ============================================================================
-
-interface GitHubUser {
-  login: string;
-  name: string;
-  avatarUrl: string;
-}
-
-interface GitHubRepo {
-  fullName: string;
-  name: string;
-  isPrivate: boolean;
-  description: string;
-  defaultBranch: string;
-  url: string;
-}
-
-interface GitHubStatus {
-  connected: boolean;
-  repo?: string;
-  branch?: string;
-  path?: string;
-  localPath?: string;
-  lastCommitSha?: string;
-  repoUrl?: string;
-}
 
 export const githubApi = {
   validateToken: (token: string) =>
@@ -642,25 +505,6 @@ export const githubApi = {
 // ============================================================================
 // Local Auth API
 // ============================================================================
-
-interface AuthUser {
-  id: string;
-  email: string;
-  name?: string;
-  isAdmin: boolean;
-  provider?: string;
-}
-
-interface AuthResponse {
-  success: boolean;
-  user?: AuthUser;
-  error?: string;
-}
-
-interface AuthMeResponse {
-  authenticated: boolean;
-  user: AuthUser | null;
-}
 
 export const localAuthApi = {
   // Check if setup is required (no users exist)
@@ -735,44 +579,6 @@ export const localAuthApi = {
 };
 
 // System Settings API (admin only)
-export interface SystemSettings {
-  sso: {
-    enabled: boolean;
-    provider: 'azure-entra' | 'okta' | 'none';
-    azureEntra?: {
-      clientId: string;
-      clientSecret: string;
-      tenantId: string;
-      redirectUri: string;
-    };
-    okta?: {
-      clientId: string;
-      clientSecret: string;
-      domain: string;
-      redirectUri: string;
-    };
-  };
-  general: {
-    siteName: string;
-    allowRegistration: boolean;
-    requireEmailVerification: boolean;
-  };
-  security: {
-    sessionDurationDays: number;
-    maxLoginAttempts: number;
-    lockoutDurationMinutes: number;
-    passwordMinLength: number;
-    passwordRequireUppercase: boolean;
-    passwordRequireLowercase: boolean;
-    passwordRequireNumber: boolean;
-    passwordRequireSpecial: boolean;
-  };
-  temporal: {
-    serverAddress: string;
-    namespace: string;
-    taskQueue: string;
-  };
-}
 
 export const settingsApi = {
   get: () => request<SystemSettings>('/settings'),
