@@ -115,6 +115,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isUndoing = useRef(false);
 
+  // Pending node being dragged to place
+  const [pendingNode, setPendingNode] = useState<{
+    type: NodeTypeInfo;
+    screenPos: { x: number; y: number };
+  } | null>(null);
+
   // Selection context menu
   const [selectionContextMenu, setSelectionContextMenu] = useState<{ x: number; y: number } | null>(null);
   const selectionContextMenuRef = useRef<HTMLDivElement>(null);
@@ -142,7 +148,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Defined early so it can be used in loadWorkflow
   const handleOpenPropertiesRef = useRef<(nodeId: string) => void>(undefined);
   handleOpenPropertiesRef.current = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
+    const node = nodes.find((n: Node) => n.id === nodeId);
     if (node) {
       setSelectedNode(node);
     }
@@ -155,19 +161,83 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Callback for toggling expand state of composed workflow nodes
   const handleToggleExpandRef = useRef<(nodeId: string) => void>(undefined);
   handleToggleExpandRef.current = (nodeId: string) => {
-    const node = nodes.find(n => n.id === nodeId);
+    const node = nodes.find((n: Node) => n.id === nodeId);
     if (!node || node.data.nodeType !== 'twiddle.composedWorkflow') return;
 
     const parameters = (node.data.parameters || {}) as Record<string, any>;
     const isExpanded = parameters.isExpanded === 'true';
 
     if (isExpanded) {
-      // Collapse: Remove all embedded child nodes
-      setNodes((nds) =>
-        nds.filter((n) => !(n as any).parentId || (n as any).parentId !== nodeId).map((n) =>
+      // Collapse: Remap external connections and remove embedded nodes
+
+      // Get handle mappings to remap external connections
+      const inputHandles = parameters.inputHandles
+        ? JSON.parse(parameters.inputHandles as string)
+        : [];
+      const outputHandles = parameters.outputHandles
+        ? JSON.parse(parameters.outputHandles as string)
+        : [];
+
+      // Create mapping: embedded node ID -> parent handle ID
+      const inputMap = new Map<string, string>();  // embedded node ID -> parent input handle
+      const outputMap = new Map<string, string>(); // embedded node ID -> parent output handle
+
+      inputHandles.forEach((h: any) => {
+        inputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
+      });
+      outputHandles.forEach((h: any) => {
+        outputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
+      });
+
+      // Remap external connections
+      setEdges((eds: Edge[]) => eds.map((e: Edge) => {
+        // Check if edge connects to an embedded node
+        const isSourceEmbedded = e.source.startsWith(`${nodeId}_embedded_`);
+        const isTargetEmbedded = e.target.startsWith(`${nodeId}_embedded_`);
+        const isInternalEdge = e.id.startsWith(`${nodeId}_embedded_`);
+
+        // Remove internal edges
+        if (isInternalEdge) return null;
+
+        // Remap source if it's an embedded node (output from embedded)
+        let newSource = e.source;
+        let newSourceHandle = e.sourceHandle;
+        if (isSourceEmbedded && outputMap.has(e.source)) {
+          newSource = nodeId;
+          newSourceHandle = outputMap.get(e.source) || e.sourceHandle;
+        }
+
+        // Remap target if it's an embedded node (input to embedded)
+        let newTarget = e.target;
+        let newTargetHandle = e.targetHandle;
+        if (isTargetEmbedded && inputMap.has(e.target)) {
+          newTarget = nodeId;
+          newTargetHandle = inputMap.get(e.target) || e.targetHandle;
+        }
+
+        // Return remapped edge or original
+        if (isSourceEmbedded || isTargetEmbedded) {
+          return {
+            ...e,
+            source: newSource,
+            sourceHandle: newSourceHandle,
+            target: newTarget,
+            targetHandle: newTargetHandle,
+          };
+        }
+
+        return e;
+      }).filter((e): e is Edge => e !== null));
+
+      // Remove embedded nodes
+      setNodes((nds: Node[]) =>
+        nds.filter((n: Node) => !(n as any).parentId || (n as any).parentId !== nodeId).map((n: Node) =>
           n.id === nodeId
             ? {
               ...n,
+              width: undefined, // Reset dimensions to compact size
+              height: undefined,
+              zIndex: undefined, // Reset z-index
               style: undefined, // Remove container styling
               data: {
                 ...n.data,
@@ -180,9 +250,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             : n
         )
       );
-
-      // Remove internal connections
-      setEdges((eds) => eds.filter((e) => !e.id.startsWith(`${nodeId}_embedded_`)));
     } else {
       // Expand: Add embedded child nodes
       const embeddedNodes = parameters.embeddedNodes
@@ -254,8 +321,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }));
 
       // Update all nodes in a single batch: update parent and add children
-      setNodes((nds) => [
-        ...nds.map((n) =>
+      setNodes((nds: Node[]) => [
+        ...nds.map((n: Node) =>
           n.id === nodeId
             ? {
               ...n,
@@ -277,8 +344,64 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         ...childNodes,
       ]);
 
-      // Add edges in separate update
-      setEdges((eds) => [...eds, ...internalEdges]);
+      // Add edges in separate update - including remapped external connections
+      setEdges((eds: Edge[]) => {
+        // Get handle mappings for remapping external connections
+        const inputHandles = parameters.inputHandles
+          ? JSON.parse(parameters.inputHandles as string)
+          : [];
+        const outputHandles = parameters.outputHandles
+          ? JSON.parse(parameters.outputHandles as string)
+          : [];
+
+        // Create mapping: parent handle ID -> embedded node ID
+        const inputHandleMap = new Map<string, string>();  // parent input handle -> embedded node ID
+        const outputHandleMap = new Map<string, string>(); // parent output handle -> embedded node ID
+
+        inputHandles.forEach((h: any) => {
+          inputHandleMap.set(h.handle, `${nodeId}_embedded_${h.sourceNodeId}`);
+        });
+        outputHandles.forEach((h: any) => {
+          outputHandleMap.set(h.handle, `${nodeId}_embedded_${h.sourceNodeId}`);
+        });
+
+        // Remap external connections from parent to embedded nodes
+        const remappedEdges = eds.map((e: Edge) => {
+          // Check if edge connects to the parent node
+          const isSourceParent = e.source === nodeId;
+          const isTargetParent = e.target === nodeId;
+
+          if (!isSourceParent && !isTargetParent) {
+            return e; // Not connected to parent, keep as-is
+          }
+
+          // Remap source if parent is source (output from parent)
+          let newSource = e.source;
+          let newSourceHandle = e.sourceHandle;
+          if (isSourceParent && e.sourceHandle && outputHandleMap.has(e.sourceHandle)) {
+            newSource = outputHandleMap.get(e.sourceHandle) || e.source;
+            newSourceHandle = null; // Clear handle as we're connecting directly to embedded node
+          }
+
+          // Remap target if parent is target (input to parent)
+          let newTarget = e.target;
+          let newTargetHandle = e.targetHandle;
+          if (isTargetParent && e.targetHandle && inputHandleMap.has(e.targetHandle)) {
+            newTarget = inputHandleMap.get(e.targetHandle) || e.target;
+            newTargetHandle = null; // Clear handle as we're connecting directly to embedded node
+          }
+
+          return {
+            ...e,
+            source: newSource,
+            sourceHandle: newSourceHandle,
+            target: newTarget,
+            targetHandle: newTargetHandle,
+          };
+        });
+
+        return [...remappedEdges, ...internalEdges];
+      });
     }
   };
 
@@ -376,7 +499,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   // Handle right-click on canvas to show selection context menu
   const handleSelectionContextMenu = useCallback((event: React.MouseEvent) => {
-    const selectedNodes = nodes.filter(node => node.selected);
+    const selectedNodes = nodes.filter((node: Node) => node.selected);
     if (selectedNodes.length > 0) {
       event.preventDefault();
       setSelectionContextMenu({ x: event.clientX, y: event.clientY });
@@ -392,20 +515,20 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   // Copy and paste selected nodes with offset
   const handleCopyAndPaste = useCallback(() => {
-    const selectedNodes = nodes.filter(node => node.selected);
+    const selectedNodes = nodes.filter((node: Node) => node.selected);
     if (selectedNodes.length === 0) return;
 
     // Get edges that connect selected nodes
-    const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+    const selectedNodeIds = new Set(selectedNodes.map((n: Node) => n.id));
     const selectedEdges = edges.filter(
-      edge => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target)
+      (edge: Edge) => selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target)
     );
 
     // Generate new IDs and offset positions
     const idMap = new Map<string, string>();
     const offset = { x: 50, y: 50 };
 
-    const newNodes = selectedNodes.map(node => {
+    const newNodes = selectedNodes.map((node: Node) => {
       const newId = `${node.data.nodeType}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       idMap.set(node.id, newId);
       return {
@@ -424,7 +547,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     });
 
     // Update edge references to new node IDs
-    const newEdges = selectedEdges.map(edge => ({
+    const newEdges = selectedEdges.map((edge: Edge) => ({
       ...edge,
       id: `e-${idMap.get(edge.source)}-${idMap.get(edge.target)}`,
       source: idMap.get(edge.source) || edge.source,
@@ -432,11 +555,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }));
 
     // Deselect existing nodes and add new ones
-    setNodes(prev => [
-      ...prev.map(n => ({ ...n, selected: false })),
+    setNodes((prev: Node[]) => [
+      ...prev.map((n: Node) => ({ ...n, selected: false })),
       ...newNodes,
     ]);
-    setEdges(prev => [...prev, ...newEdges]);
+    setEdges((prev: Edge[]) => [...prev, ...newEdges]);
     setSelectionContextMenu(null);
   }, [nodes, edges, handleOpenProperties, setNodes, setEdges]);
 
@@ -447,7 +570,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   useEffect(() => {
     if (isUndoing.current) return;
 
-    const nodesJson = JSON.stringify(nodes.map(n => ({ id: n.id, position: n.position, data: { label: n.data.label, nodeType: n.data.nodeType, parameters: n.data.parameters } })));
+    const nodesJson = JSON.stringify(nodes.map((n: Node) => ({ id: n.id, position: n.position, data: { label: n.data.label, nodeType: n.data.nodeType, parameters: n.data.parameters } })));
     const edgesJson = JSON.stringify(edges);
 
     // Only save if there's an actual change
@@ -758,100 +881,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   async function addNode(nodeType: NodeTypeInfo) {
     if (isReadOnly) return;
 
-    // Check if this is a workflow type (for composed workflows)
-    const isWorkflowType = nodeType.type.startsWith('workflow.');
-
-    // Calculate position at the center of the current viewport
-    let position = { x: 250, y: 100 };
-
-    if (reactFlowInstance.current) {
-      const { getViewport } = reactFlowInstance.current;
-      const viewport = getViewport();
-
-      // Get the center of the visible area in flow coordinates
-      const canvasElement = document.querySelector('.react-flow');
-      if (canvasElement) {
-        const rect = canvasElement.getBoundingClientRect();
-        const centerX = rect.width / 2;
-        const centerY = rect.height / 2;
-
-        // Convert screen coordinates to flow coordinates
-        position = {
-          x: (centerX - viewport.x) / viewport.zoom,
-          y: (centerY - viewport.y) / viewport.zoom,
-        };
-
-        // Snap to grid (20px)
-        position.x = Math.round(position.x / 20) * 20;
-        position.y = Math.round(position.y / 20) * 20;
-      }
-    }
-
-    if (isWorkflowType) {
-      // Extract workflow ID from the type string (format: workflow.{id})
-      const workflowId = nodeType.type.replace('workflow.', '');
-
-      try {
-        // Fetch the workflow details to get nodes and connections
-        const workflow = await workflowsApi.get(workflowId) as {
-          id: string;
-          name: string;
-          description?: string;
-          version: number;
-          nodes: any[];
-          connections: any[];
-        };
-
-        // Calculate edge handles (input/output connection points)
-        const { inputHandles, outputHandles } = calculateEdgeHandles(
-          workflow.nodes,
-          workflow.connections
-        );
-
-        // Create composed workflow node
-        const newNode: Node = {
-          id: `node_${Date.now()}`,
-          type: 'workflowNode',
-          position,
-          data: {
-            label: workflow.name,
-            nodeType: 'twiddle.composedWorkflow',
-            parameters: {
-              workflowId: workflow.id,
-              workflowName: workflow.name,
-              workflowVersion: workflow.version,
-              isExpanded: 'false', // Always start collapsed
-              embeddedNodes: JSON.stringify(workflow.nodes),
-              embeddedConnections: JSON.stringify(workflow.connections),
-              inputHandles: JSON.stringify(inputHandles),
-              outputHandles: JSON.stringify(outputHandles),
-            },
-            onOpenProperties: handleOpenProperties,
-            onToggleExpand: handleToggleExpand,
-          },
-        };
-
-        setNodes((nds: Node[]) => [...nds, newNode]);
-      } catch (err) {
-        console.error('Failed to create composed workflow node:', err);
-        alert('Failed to load workflow for embedding');
-      }
-    } else {
-      // Regular node creation
-      const newNode: Node = {
-        id: `node_${Date.now()}`,
-        type: 'workflowNode',
-        position,
-        data: {
-          label: nodeType.displayName,
-          nodeType: nodeType.type,
-          parameters: {},
-          onOpenProperties: handleOpenProperties,
-          onToggleExpand: handleToggleExpand,
-        },
-      };
-      setNodes((nds: Node[]) => [...nds, newNode]);
-    }
+    // For all node types (including workflows), start drag-to-place mode
+    setPendingNode({
+      type: nodeType,
+      screenPos: { x: 0, y: 0 } // Will be updated on first mouse move
+    });
 
     setShowNodePanel(false);
   }
@@ -921,7 +955,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         }));
 
       // Get IDs of all saved nodes for filtering edges
-      const savedNodeIds = new Set(workflowNodes.map(n => n.id));
+      const savedNodeIds = new Set(workflowNodes.map((n: any) => n.id));
 
       // Convert React Flow edges back to workflow connections
       // Filter out internal connections of embedded workflows
@@ -1335,7 +1369,17 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       )}
 
       {/* Canvas */}
-      <div className="flex-1">
+      <div
+        className="flex-1"
+        onMouseMove={(e: React.MouseEvent) => {
+          if (pendingNode) {
+            setPendingNode({
+              ...pendingNode,
+              screenPos: { x: e.clientX, y: e.clientY }
+            });
+          }
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -1343,7 +1387,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           onEdgesChange={isReadOnly ? undefined : onEdgesChange}
           onConnect={isReadOnly ? undefined : onConnect}
           onNodesDelete={isReadOnly ? undefined : onNodesDelete}
-          onInit={(instance) => { reactFlowInstance.current = instance; }}
+          onInit={(instance: any) => { reactFlowInstance.current = instance; }}
           nodeTypes={nodeTypes}
           deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
           nodesDraggable={!isReadOnly}
@@ -1355,15 +1399,123 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           fitView
           selectionOnDrag={true}
           selectionMode={SelectionMode.Partial}
-          panOnDrag={[1, 2]}
+          panOnDrag={true}
           selectNodesOnDrag={true}
           onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
           onPaneContextMenu={handlePaneContextMenu}
+          onPaneMouseMove={(event: React.MouseEvent) => {
+            if (pendingNode) {
+              // Update screen position for preview
+              setPendingNode({
+                ...pendingNode,
+                screenPos: { x: event.clientX, y: event.clientY }
+              });
+            }
+          }}
+          onPaneClick={async (event: React.MouseEvent) => {
+            if (pendingNode && reactFlowInstance.current) {
+              const { screenToFlowPosition } = reactFlowInstance.current;
+              let position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+
+              // Snap to grid
+              position.x = Math.round(position.x / 20) * 20;
+              position.y = Math.round(position.y / 20) * 20;
+
+              // Check if this is a workflow type (for composed workflows)
+              const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
+
+              if (isWorkflowType) {
+                // Fetch workflow data and create composed workflow node
+                const workflowId = pendingNode.type.type.replace('workflow.', '');
+                try {
+                  const workflow = await workflowsApi.get(workflowId) as {
+                    id: string;
+                    name: string;
+                    description?: string;
+                    version: number;
+                    nodes: any[];
+                    connections: any[];
+                  };
+
+                  const { inputHandles, outputHandles } = calculateEdgeHandles(
+                    workflow.nodes,
+                    workflow.connections
+                  );
+
+                  const newNode: Node = {
+                    id: `node_${Date.now()}`,
+                    type: 'workflowNode',
+                    position,
+                    zIndex: 100,
+                    data: {
+                      label: workflow.name,
+                      nodeType: 'twiddle.composedWorkflow',
+                      parameters: {
+                        workflowId: workflow.id,
+                        workflowName: workflow.name,
+                        workflowVersion: workflow.version,
+                        isExpanded: 'false',
+                        embeddedNodes: JSON.stringify(workflow.nodes),
+                        embeddedConnections: JSON.stringify(workflow.connections),
+                        inputHandles: JSON.stringify(inputHandles),
+                        outputHandles: JSON.stringify(outputHandles),
+                      },
+                      onOpenProperties: handleOpenProperties,
+                      onToggleExpand: handleToggleExpand,
+                    },
+                  };
+
+                  setNodes((nds: Node[]) => [...nds, newNode]);
+                  setPendingNode(null);
+                } catch (err) {
+                  console.error('Failed to create composed workflow node:', err);
+                  alert('Failed to load workflow for embedding');
+                  setPendingNode(null);
+                }
+              } else {
+                // Create regular node
+                const newNode: Node = {
+                  id: `node_${Date.now()}`,
+                  type: 'workflowNode',
+                  position,
+                  zIndex: 100,
+                  data: {
+                    label: pendingNode.type.displayName,
+                    nodeType: pendingNode.type.type,
+                    parameters: {},
+                    onOpenProperties: handleOpenProperties,
+                    onToggleExpand: handleToggleExpand,
+                  },
+                };
+
+                setNodes((nds: Node[]) => [...nds, newNode]);
+                setPendingNode(null);
+              }
+            }
+          }}
         >
           <Controls />
           <MiniMap />
           <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
         </ReactFlow>
+
+        {/* Visual preview of pending node - outside ReactFlow for proper positioning */}
+        {pendingNode && (
+          <div
+            className="pointer-events-none fixed"
+            style={{
+              left: pendingNode.screenPos.x,
+              top: pendingNode.screenPos.y,
+              transform: 'translate(-50%, -50%)',
+              zIndex: 1000,
+            }}
+          >
+            <div className="bg-white/90 rounded shadow-lg border-2 border-primary-500 border-dashed px-4 py-2">
+              <div className="font-medium text-sm text-slate-700">{pendingNode.type.displayName}</div>
+              <div className="text-xs text-slate-500">Click to place</div>
+            </div>
+          </div>
+        )}
 
         {/* Selection Context Menu */}
         {selectionContextMenu && (
@@ -1385,10 +1537,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             <div className="border-t border-slate-200 my-1" />
             <button
               onClick={() => {
-                const selectedNodes = nodes.filter(n => n.selected);
-                const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
-                setNodes(nodes.filter(n => !n.selected));
-                setEdges(edges.filter(e => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target)));
+                const selectedNodes = nodes.filter((n: Node) => n.selected);
+                const selectedNodeIds = new Set(selectedNodes.map((n: Node) => n.id));
+                setNodes(nodes.filter((n: Node) => !n.selected));
+                setEdges(edges.filter((e: Edge) => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target)));
                 setSelectionContextMenu(null);
               }}
               className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"

@@ -201,7 +201,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
     return (
       <>
         <div
-          className="bg-violet-50/30 rounded-lg border-2 border-dashed border-violet-300 relative pointer-events-none"
+          className="bg-violet-50/30 rounded-lg border-2 border-dashed border-violet-300 relative"
           style={{ width: '100%', height: '100%', padding: 0, margin: 0 }}
           onContextMenu={handleContextMenu}
         >
@@ -287,13 +287,90 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
           } ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
         onContextMenu={handleContextMenu}
       >
-        {/* Input Handle */}
-        {data.nodeType !== 'twiddle.manualTrigger' && (
-          <Handle
-            type="target"
-            position={Position.Left}
-            className="!bg-slate-400 !w-2 !h-2"
-          />
+        {/* Dynamic handles for collapsed composed workflows */}
+        {isComposedWorkflow && !isExpanded ? (() => {
+          const inputHandles = data.parameters?.inputHandles
+            ? JSON.parse(data.parameters.inputHandles as string)
+            : [];
+          const outputHandles = data.parameters?.outputHandles
+            ? JSON.parse(data.parameters.outputHandles as string)
+            : [];
+
+          return (
+            <>
+              {/* Input handles on the left */}
+              {inputHandles.length > 0 && inputHandles.map((handle: any, index: number) => {
+                const position = inputHandles.length > 1
+                  ? (index / (inputHandles.length - 1)) * 100
+                  : 50;
+                return (
+                  <Handle
+                    key={`input-${handle.handle}`}
+                    type="target"
+                    position={Position.Left}
+                    id={handle.handle}
+                    className="!bg-violet-500 !w-2.5 !h-2.5"
+                    style={{ top: `${position}%` }}
+                  />
+                );
+              })}
+
+              {/* Output handles on the right */}
+              {outputHandles.length > 0 && outputHandles.map((handle: any, index: number) => {
+                const position = outputHandles.length > 1
+                  ? (index / (outputHandles.length - 1)) * 100
+                  : 50;
+                return (
+                  <Handle
+                    key={`output-${handle.handle}`}
+                    type="source"
+                    position={Position.Right}
+                    id={handle.handle}
+                    className="!bg-violet-500 !w-2.5 !h-2.5"
+                    style={{ top: `${position}%` }}
+                  />
+                );
+              })}
+            </>
+          );
+        })() : (
+          <>
+            {/* Default handles for regular nodes */}
+            {/* Input Handle */}
+            {data.nodeType !== 'twiddle.manualTrigger' && (
+              <Handle
+                type="target"
+                position={Position.Left}
+                className="!bg-slate-400 !w-2 !h-2"
+              />
+            )}
+
+            {/* Output Handle */}
+            {data.nodeType === 'twiddle.if' ? (
+              <>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id="true"
+                  className="!bg-green-500 !w-2 !h-2"
+                  style={{ top: '30%' }}
+                />
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id="false"
+                  className="!bg-red-500 !w-2 !h-2"
+                  style={{ top: '70%' }}
+                />
+              </>
+            ) : (
+              <Handle
+                type="source"
+                position={Position.Right}
+                className="!bg-slate-400 !w-2 !h-2"
+              />
+            )}
+          </>
         )}
 
         {/* Node Content */}
@@ -303,7 +380,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
           </div>
           <div className="min-w-0">
             <div className="font-medium text-xs text-slate-900">{data.label}</div>
-            {!isCredential && (
+            {!isCredential && !isComposedWorkflow && (
               <div className="flex items-center gap-1">
                 {isActivityNode(data.nodeType) ? (
                   <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1 rounded">
@@ -317,34 +394,13 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                 )}
               </div>
             )}
+            {isComposedWorkflow && !isExpanded && (
+              <span className="text-[9px] font-medium text-violet-600 bg-violet-50 px-1 rounded">
+                Composed
+              </span>
+            )}
           </div>
         </div>
-
-        {/* Output Handle */}
-        {data.nodeType === 'twiddle.if' ? (
-          <>
-            <Handle
-              type="source"
-              position={Position.Right}
-              id="true"
-              className="!bg-green-500 !w-2 !h-2"
-              style={{ top: '30%' }}
-            />
-            <Handle
-              type="source"
-              position={Position.Right}
-              id="false"
-              className="!bg-red-500 !w-2 !h-2"
-              style={{ top: '70%' }}
-            />
-          </>
-        ) : (
-          <Handle
-            type="source"
-            position={Position.Right}
-            className="!bg-slate-400 !w-2 !h-2"
-          />
-        )}
       </div>
 
       {/* Context Menu - rendered via portal to escape ReactFlow transforms */}
