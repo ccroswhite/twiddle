@@ -378,7 +378,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
 
   // Create a new workflow
   app.post<{ Body: WorkflowCreateInput & { groupId?: string; folderId?: string } }>('/', async (request, reply) => {
-    const { name, description, nodes, connections, settings, tags, groupId, folderId } = request.body;
+    const { name, description, nodes, connections, settings, tags, groupId, folderId, properties, schedule } = request.body;
     const userId = (request as { user?: { id: string } }).user?.id;
 
     // Generate Python code from workflow definition
@@ -408,6 +408,9 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
         pythonWorkflow: pythonCode.pythonWorkflow,
         pythonActivities: pythonCode.pythonActivities,
         pythonRequirements: pythonCode.pythonRequirements,
+        // Store properties and schedule
+        properties: (properties || []) as unknown as Prisma.InputJsonValue,
+        schedule: (schedule || null) as unknown as Prisma.InputJsonValue,
       },
       include: {
         group: {
@@ -433,7 +436,7 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
     '/:id',
     async (request, _reply) => {
       const { id } = request.params;
-      const { name, description, nodes, connections, settings, active, tags } = request.body;
+      const { name, description, nodes, connections, settings, active, tags, properties, schedule } = request.body;
 
       // Get existing workflow to merge with updates
       const existing = await prisma.workflow.findUnique({ where: { id } });
@@ -474,6 +477,8 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
           ...(settings !== undefined && { settings: settings as unknown as Prisma.InputJsonValue }),
           ...(active !== undefined && { active }),
           ...(tags !== undefined && { tags }),
+          ...(properties !== undefined && { properties: properties as unknown as Prisma.InputJsonValue }),
+          ...(schedule !== undefined && { schedule: schedule as unknown as Prisma.InputJsonValue }),
           ...pythonCodeUpdate,
         },
       });

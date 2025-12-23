@@ -17,11 +17,12 @@ import {
   SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy, Lock } from 'lucide-react';
+import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy, Lock, Settings } from 'lucide-react';
 import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
+import { WorkflowPropertiesPanel, WorkflowProperty, WorkflowSchedule } from '@/components/WorkflowPropertiesPanel';
 import { GitHubSettings } from '@/components/GitHubSettings';
 import { EnvironmentBadge, getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
@@ -57,6 +58,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showNodePanel, setShowNodePanel] = useState(false);
   const [showPythonCode, setShowPythonCode] = useState(false);
   const [showGitHubSettings, setShowGitHubSettings] = useState(false);
+  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+  const [workflowProperties, setWorkflowProperties] = useState<WorkflowProperty[]>([]);
+  const [workflowSchedule, setWorkflowSchedule] = useState<WorkflowSchedule>({
+    enabled: false,
+    mode: 'simple',
+    simple: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+  });
   const [githubConnected, setGithubConnected] = useState(false);
   const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
@@ -404,6 +412,31 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       });
     }
   };
+
+  // Property management functions
+  const handleAddProperty = useCallback(() => {
+    const newProp: WorkflowProperty = {
+      id: `prop_${Date.now()}`,
+      key: '',
+      type: 'string',
+      value: '',
+    };
+    setWorkflowProperties((props) => [...props, newProp]);
+  }, []);
+
+  const handleUpdateProperty = useCallback((id: string, updates: Partial<WorkflowProperty>) => {
+    setWorkflowProperties((props) =>
+      props.map((p) => (p.id === id ? { ...p, ...updates } : p))
+    );
+  }, []);
+
+  const handleDeleteProperty = useCallback((id: string) => {
+    setWorkflowProperties((props) => props.filter((p) => p.id !== id));
+  }, []);
+
+  const handleUpdateSchedule = useCallback((updates: Partial<WorkflowSchedule>) => {
+    setWorkflowSchedule((prev) => ({ ...prev, ...updates }));
+  }, []);
 
   const handleToggleExpand = useCallback((nodeId: string) => {
     handleToggleExpandRef.current?.(nodeId);
@@ -1264,7 +1297,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col" style={{ '--header-height': '57px' } as React.CSSProperties}>
       {/* Toolbar */}
       <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between relative z-50">
         <div className="flex items-center gap-4">
@@ -1346,6 +1379,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           >
             <Github className="w-4 h-4" />
             {githubConnected ? 'GitHub' : 'GitHub'}
+          </button>
+          <button
+            onClick={() => setShowPropertiesPanel(true)}
+            className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Workflow properties and schedule"
+          >
+            <Settings className="w-4 h-4" />
+            Properties
           </button>
           <button
             onClick={handleSave}
@@ -1854,7 +1895,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       {/* Workflow Browser Panel */}
       {showWorkflowBrowser && (
-        <div className="absolute inset-0 top-[57px] z-40 flex justify-end">
+        <div className="absolute inset-0 z-40 flex justify-end" style={{ top: 'var(--header-height)' }}>
           {/* Backdrop */}
           <div
             className={`absolute inset-0 bg-black/20 transition-opacity duration-200 ${isClosingBrowser ? 'opacity-0' : 'opacity-100'}`}
@@ -2541,6 +2582,21 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             alert('Promotion request submitted successfully!');
           }}
         />
+      )}
+
+      {/* Workflow Properties Panel */}
+      {showPropertiesPanel && (
+        <div className="fixed right-0 inset-y-0 z-40" style={{ top: 'var(--header-height)' }}>
+          <WorkflowPropertiesPanel
+            properties={workflowProperties}
+            schedule={workflowSchedule}
+            onAddProperty={handleAddProperty}
+            onUpdateProperty={handleUpdateProperty}
+            onDeleteProperty={handleDeleteProperty}
+            onUpdateSchedule={handleUpdateSchedule}
+            onClose={() => setShowPropertiesPanel(false)}
+          />
+        </div>
       )}
     </div>
   );

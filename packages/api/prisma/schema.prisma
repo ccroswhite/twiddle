@@ -230,6 +230,12 @@ model Workflow {
   pythonActivities String?  @db.Text  // activities.py content
   pythonRequirements String? @db.Text // requirements.txt content
   
+  // Workflow properties (global variables)
+  properties  Json?    @default("[]")
+  
+  // Workflow schedule (when to run)
+  schedule    Json?
+  
   // GitHub integration
   githubRepo       String?  // GitHub repository URL (e.g., owner/repo)
   githubBranch     String?  @default("main") // Branch to commit to
