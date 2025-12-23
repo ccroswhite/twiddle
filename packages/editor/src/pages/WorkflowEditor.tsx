@@ -24,6 +24,7 @@ import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
 import { WorkflowPropertiesPanel, WorkflowProperty, WorkflowSchedule } from '@/components/WorkflowPropertiesPanel';
 import { GitHubSettings } from '@/components/GitHubSettings';
+import { RightPanel } from '@/components/RightPanel';
 import { EnvironmentBadge, getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 
@@ -72,7 +73,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [showWorkflowBrowser, setShowWorkflowBrowser] = useState(false);
-  const [isClosingBrowser, setIsClosingBrowser] = useState(false);
   const [availableWorkflows, setAvailableWorkflows] = useState<Workflow[]>([]);
   const [loadingWorkflows, setLoadingWorkflows] = useState(false);
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
@@ -728,7 +728,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         // Subsequent clicks - toggle the panel
         if (showWorkflowBrowser) {
           // Closing - use animated close
-          handleCloseWorkflowBrowser();
+          setShowWorkflowBrowser(false);
         } else {
           // Opening
           handleOpenWorkflowBrowser();
@@ -1065,20 +1065,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
   function handleOpenWorkflowBrowser() {
-    setIsClosingBrowser(false);
+
     setShowWorkflowBrowser(true);
     setCurrentFolderId(null);
     setFolderPath([]);
     loadFolderContents(null);
-  }
-
-  function handleCloseWorkflowBrowser() {
-    setIsClosingBrowser(true);
-    // Wait for animation to complete before hiding
-    setTimeout(() => {
-      setShowWorkflowBrowser(false);
-      setIsClosingBrowser(false);
-    }, 200); // Match animation duration
   }
 
   async function loadFolderContents(folderId: string | null) {
@@ -1916,710 +1907,711 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       )}
 
       {/* Workflow Browser Panel */}
-      {showWorkflowBrowser && (
-        <div className="absolute inset-0 z-40 flex justify-end" style={{ top: 'var(--header-height)' }}>
-          {/* Backdrop */}
-          <div
-            className={`absolute inset-0 bg-black/20 transition-opacity duration-200 ${isClosingBrowser ? 'opacity-0' : 'opacity-100'}`}
-            onClick={handleCloseWorkflowBrowser}
-          />
+      <RightPanel
+        isOpen={showWorkflowBrowser}
+        onClose={() => setShowWorkflowBrowser(false)}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-slate-200">
+          <h2 className="text-lg font-semibold text-slate-900">Open Workflow</h2>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowNewFolderInput(true)}
+              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+              title="New folder"
+            >
+              <FolderPlus className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setShowWorkflowBrowser(false)}
+              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
-          {/* Panel */}
-          <div className={`relative w-[480px] bg-white shadow-xl flex flex-col ${isClosingBrowser ? 'animate-slide-out-right' : 'animate-slide-in-right'}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="text-lg font-semibold text-slate-900">Open Workflow</h2>
-              <div className="flex items-center gap-2">
+        {/* Breadcrumb */}
+        <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center gap-1 text-sm">
+            <button
+              onClick={() => handleNavigateToBreadcrumb(-1)}
+              className={`hover:text-primary-600 ${folderPath.length === 0 ? 'font-medium text-slate-900' : 'text-slate-500'}`}
+            >
+              All Workflows
+            </button>
+            {folderPath.map((folder, index) => (
+              <span key={folder.id} className="flex items-center gap-1">
+                <ChevronRight className="w-4 h-4 text-slate-400" />
                 <button
-                  onClick={() => setShowNewFolderInput(true)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
-                  title="New folder"
+                  onClick={() => handleNavigateToBreadcrumb(index)}
+                  className={`hover:text-primary-600 ${index === folderPath.length - 1 ? 'font-medium text-slate-900' : 'text-slate-500'}`}
                 >
-                  <FolderPlus className="w-5 h-5" />
+                  {folder.name}
+                </button>
+              </span>
+            ))}
+          </div>
+          {folderPath.length > 0 && folderPath[folderPath.length - 1]?.group && (
+            <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
+              <Users className="w-3 h-3" />
+              <span>Group: {folderPath[folderPath.length - 1].group?.name}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* New folder input */}
+          {showNewFolderInput && (
+            <div className="mb-3 flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <Folder className="w-5 h-5 text-amber-600" />
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateFolder();
+                  if (e.key === 'Escape') {
+                    setShowNewFolderInput(false);
+                    setNewFolderName('');
+                  }
+                }}
+                placeholder="Folder name..."
+                className="flex-1 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                autoFocus
+              />
+              <button
+                onClick={handleCreateFolder}
+                className="p-1 text-green-600 hover:bg-green-100 rounded"
+              >
+                <Check className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => {
+                  setShowNewFolderInput(false);
+                  setNewFolderName('');
+                }}
+                className="p-1 text-slate-400 hover:bg-slate-200 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {loadingWorkflows ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+            </div>
+          ) : (folders.length === 0 && availableWorkflows.length === 0) ? (
+            <div className="text-center py-12 text-slate-500">
+              {folderPath.length > 0 ? 'This folder is empty' : 'No workflows found'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* Drop zone for moving to parent/root */}
+              {folderPath.length > 0 && draggingWorkflowId && (
+                <div
+                  onDragOver={(e) => handleDragOver(e, null)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, null)}
+                  className={`p-3 border-2 border-dashed rounded-lg text-center text-sm transition-colors ${dragOverFolderId === null
+                    ? 'border-primary-400 bg-primary-50 text-primary-600'
+                    : 'border-slate-300 text-slate-500'
+                    }`}
+                >
+                  Drop here to move to parent folder
+                </div>
+              )}
+
+              {/* Folders */}
+              {folders.map((folder) => (
+                <div
+                  key={folder.id}
+                  onDragOver={(e) => handleDragOver(e, folder.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, folder.id)}
+                  className={`p-3 rounded-lg border transition-colors ${dragOverFolderId === folder.id
+                    ? 'bg-primary-100 border-primary-400'
+                    : 'bg-amber-50 hover:bg-amber-100 border-amber-200'
+                    }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    {editingFolderId === folder.id ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <Folder className="w-5 h-5 text-amber-600" />
+                        <input
+                          type="text"
+                          value={editingFolderName}
+                          onChange={(e) => setEditingFolderName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameFolder(folder.id, editingFolderName);
+                            if (e.key === 'Escape') {
+                              setEditingFolderId(null);
+                              setEditingFolderName('');
+                            }
+                          }}
+                          className="flex-1 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => handleRenameFolder(folder.id, editingFolderName)}
+                          className="p-1 text-green-600 hover:bg-green-100 rounded"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingFolderId(null);
+                            setEditingFolderName('');
+                          }}
+                          className="p-1 text-slate-400 hover:bg-slate-200 rounded"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => handleNavigateToFolder(folder)}
+                          className="flex-1 flex items-center gap-2 text-left"
+                        >
+                          <Folder className="w-5 h-5 text-amber-600" />
+                          <div>
+                            <div className="font-medium text-slate-900">{folder.name}</div>
+                            <div className="text-xs text-slate-500">
+                              {folder._count?.workflows || 0} workflows, {folder._count?.children || 0} folders
+                              {folder.group && (
+                                <span className="ml-2">
+                                  <Users className="w-3 h-3 inline" /> {folder.group.name}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenPermissions(folder)}
+                            className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded"
+                            title="Manage permissions"
+                          >
+                            <Shield className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingFolderId(folder.id);
+                              setEditingFolderName(folder.name);
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
+                            title="Rename folder"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteFolder(folder.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            title="Delete folder"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                          <ChevronRight className="w-4 h-4 text-slate-400" />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Workflows */}
+              {availableWorkflows.map((workflow) => (
+                <div
+                  key={workflow.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, workflow.id)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => {
+                    setShowWorkflowBrowser(false);
+                    navigate(`/workflows/${workflow.id}`);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setWorkflowContextMenu({ x: e.clientX, y: e.clientY, workflow });
+                  }}
+                  className={`p-4 rounded-lg border transition-colors cursor-pointer ${draggingWorkflowId === workflow.id
+                    ? 'bg-primary-50 border-primary-300 opacity-50'
+                    : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                    }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
+                      <GripVertical className="w-4 h-4 text-slate-400 mt-1 flex-shrink-0" />
+                      {/* Editable name */}
+                      {editingWorkflowId === workflow.id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editingWorkflowName}
+                            onChange={(e) => setEditingWorkflowName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleRenameWorkflow(workflow.id, editingWorkflowName);
+                              } else if (e.key === 'Escape') {
+                                setEditingWorkflowId(null);
+                                setEditingWorkflowName('');
+                              }
+                            }}
+                            className="flex-1 px-2 py-1 text-sm font-medium border border-primary-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={() => handleRenameWorkflow(workflow.id, editingWorkflowName)}
+                            className="p-1 text-green-600 hover:bg-green-100 rounded"
+                            title="Save"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingWorkflowId(null);
+                              setEditingWorkflowName('');
+                            }}
+                            className="p-1 text-slate-400 hover:bg-slate-200 rounded"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="font-medium text-slate-900 truncate block text-left">
+                          {workflow.name}
+                        </span>
+                      )}
+
+                      {workflow.description && (
+                        <div className="text-sm text-slate-500 truncate mt-0.5">
+                          {workflow.description}
+                        </div>
+                      )}
+
+                      {/* Metadata */}
+                      <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
+                        {/* Owner */}
+                        <div className="flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          <span>
+                            {workflow.createdBy?.name || workflow.createdBy?.email || 'System'}
+                          </span>
+                        </div>
+
+                        {/* Group */}
+                        {workflow.group && (
+                          <div className="flex items-center gap-1">
+                            <Users className="w-3 h-3" />
+                            <span>{workflow.group.name}</span>
+                          </div>
+                        )}
+
+                        {/* Last updated */}
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDate(workflow.updatedAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1">
+                      <EnvironmentBadge environment={workflow.environment} />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingWorkflowId(workflow.id);
+                          setEditingWorkflowName(workflow.name);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
+                        title="Rename workflow"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setEditingWorkflowId(null);
+                          setPermissionsFolder(null); // Not a folder permissions modal
+
+                          // Load versions for this workflow
+                          setLoadingVersions(true);
+                          setShowVersionHistory(true);
+                          // Store ID temporarily or fetch directly within modal if we passed workflow prop?
+                          // Better: fetch here and pass data or use a ref/state for target workflow
+                          // Hack: Reuse editingWorkflowId or adding a new state for 'versionHistoryWorkflowId'
+                          // Let's add that state variable? Or just fetch here and use a ref?
+                          // We'll assume we can't easily add state in this deep nested click without causing re-renders effectively.
+                          // Let's use `deletingWorkflow` equivalent: `versionHistoryWorkflow`
+                          setVersionHistoryWorkflow(workflow);
+                          try {
+                            const list = await workflowsApi.getVersions(workflow.id);
+                            setVersions(list);
+                          } finally {
+                            setLoadingVersions(false);
+                          }
+                        }}
+                        className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white"
+                        title="Version History"
+                      >
+                        <Clock size={14} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeletingWorkflow(workflow);
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Delete workflow"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-200 bg-slate-50">
+          <button
+            onClick={() => {
+              // Store the current folder ID so the new workflow is created in this folder
+              setNewWorkflowFolderId(currentFolderId);
+              setShowWorkflowBrowser(false);
+              navigate('/workflows/new');
+            }}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Workflow{currentFolderId ? ` in ${folderPath[folderPath.length - 1]?.name || 'folder'}` : ''}
+          </button>
+        </div>
+      </RightPanel>
+
+      {/* Workflow Browser Context Menu */}
+      {
+        workflowContextMenu && (
+          <div
+            ref={workflowContextMenuRef}
+            className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-[60] min-w-[160px]"
+            style={{ left: workflowContextMenu.x, top: workflowContextMenu.y }}
+          >
+            <button
+              onClick={async () => {
+                setWorkflowContextMenu(null);
+                // Reuse Version History Logic
+                const workflow = workflowContextMenu.workflow;
+                setVersionHistoryWorkflow(workflow);
+                setLoadingVersions(true);
+                setShowVersionHistory(true);
+                try {
+                  const list = await workflowsApi.getVersions(workflow.id);
+                  setVersions(list);
+                } finally {
+                  setLoadingVersions(false);
+                }
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              <Clock className="w-4 h-4" />
+              Version History
+            </button>
+
+            <button
+              onClick={() => {
+                setWorkflowContextMenu(null);
+                setEditingWorkflowId(workflowContextMenu.workflow.id);
+                setEditingWorkflowName(workflowContextMenu.workflow.name);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              <Pencil className="w-4 h-4" />
+              Rename
+            </button>
+
+            <button
+              onClick={() => {
+                setWorkflowContextMenu(null);
+                setDeletingWorkflow(workflowContextMenu.workflow);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete
+            </button>
+          </div>
+        )
+      }
+
+      {/* Delete Confirmation Modal */}
+      {
+        deletingWorkflow && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setDeletingWorkflow(null)}
+            />
+
+            {/* Modal */}
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Delete Workflow
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Are you sure you want to delete <strong>"{deletingWorkflow.name}"</strong>?
+                    This action cannot be undone.
+                  </p>
+                  {deletingWorkflow.environment !== 'DV' && (
+                    <p className="mt-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
+                      ⚠️ This workflow is in <strong>{deletingWorkflow.environment}</strong> environment.
+                      Deleting it may affect production systems.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => setDeletingWorkflow(null)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
                 </button>
                 <button
-                  onClick={handleCloseWorkflowBrowser}
+                  onClick={() => handleDeleteWorkflow(deletingWorkflow)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete Workflow
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      }
+
+      {/* Folder Permissions Modal */}
+      {
+        showPermissionsModal && permissionsFolder && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center">
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                setShowPermissionsModal(false);
+                setPermissionsFolder(null);
+              }}
+            />
+
+            {/* Modal */}
+            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary-600" />
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    Folder Permissions
+                  </h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowPermissionsModal(false);
+                    setPermissionsFolder(null);
+                  }}
                   className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-            </div>
 
-            {/* Breadcrumb */}
-            <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
-              <div className="flex items-center gap-1 text-sm">
-                <button
-                  onClick={() => handleNavigateToBreadcrumb(-1)}
-                  className={`hover:text-primary-600 ${folderPath.length === 0 ? 'font-medium text-slate-900' : 'text-slate-500'}`}
-                >
-                  All Workflows
-                </button>
-                {folderPath.map((folder, index) => (
-                  <span key={folder.id} className="flex items-center gap-1">
-                    <ChevronRight className="w-4 h-4 text-slate-400" />
-                    <button
-                      onClick={() => handleNavigateToBreadcrumb(index)}
-                      className={`hover:text-primary-600 ${index === folderPath.length - 1 ? 'font-medium text-slate-900' : 'text-slate-500'}`}
-                    >
-                      {folder.name}
-                    </button>
-                  </span>
-                ))}
-              </div>
-              {folderPath.length > 0 && folderPath[folderPath.length - 1]?.group && (
-                <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
-                  <Users className="w-3 h-3" />
-                  <span>Group: {folderPath[folderPath.length - 1].group?.name}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {/* New folder input */}
-              {showNewFolderInput && (
-                <div className="mb-3 flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              {/* Folder info */}
+              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+                <div className="flex items-center gap-2">
                   <Folder className="w-5 h-5 text-amber-600" />
-                  <input
-                    type="text"
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCreateFolder();
-                      if (e.key === 'Escape') {
-                        setShowNewFolderInput(false);
-                        setNewFolderName('');
-                      }
-                    }}
-                    placeholder="Folder name..."
-                    className="flex-1 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    autoFocus
-                  />
-                  <button
-                    onClick={handleCreateFolder}
-                    className="p-1 text-green-600 hover:bg-green-100 rounded"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowNewFolderInput(false);
-                      setNewFolderName('');
-                    }}
-                    className="p-1 text-slate-400 hover:bg-slate-200 rounded"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <span className="font-medium text-slate-900">{permissionsFolder.name}</span>
                 </div>
-              )}
-
-              {loadingWorkflows ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
-                </div>
-              ) : (folders.length === 0 && availableWorkflows.length === 0) ? (
-                <div className="text-center py-12 text-slate-500">
-                  {folderPath.length > 0 ? 'This folder is empty' : 'No workflows found'}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {/* Drop zone for moving to parent/root */}
-                  {folderPath.length > 0 && draggingWorkflowId && (
-                    <div
-                      onDragOver={(e) => handleDragOver(e, null)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, null)}
-                      className={`p-3 border-2 border-dashed rounded-lg text-center text-sm transition-colors ${dragOverFolderId === null
-                        ? 'border-primary-400 bg-primary-50 text-primary-600'
-                        : 'border-slate-300 text-slate-500'
-                        }`}
-                    >
-                      Drop here to move to parent folder
-                    </div>
-                  )}
-
-                  {/* Folders */}
-                  {folders.map((folder) => (
-                    <div
-                      key={folder.id}
-                      onDragOver={(e) => handleDragOver(e, folder.id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, folder.id)}
-                      className={`p-3 rounded-lg border transition-colors ${dragOverFolderId === folder.id
-                        ? 'bg-primary-100 border-primary-400'
-                        : 'bg-amber-50 hover:bg-amber-100 border-amber-200'
-                        }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        {editingFolderId === folder.id ? (
-                          <div className="flex-1 flex items-center gap-2">
-                            <Folder className="w-5 h-5 text-amber-600" />
-                            <input
-                              type="text"
-                              value={editingFolderName}
-                              onChange={(e) => setEditingFolderName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleRenameFolder(folder.id, editingFolderName);
-                                if (e.key === 'Escape') {
-                                  setEditingFolderId(null);
-                                  setEditingFolderName('');
-                                }
-                              }}
-                              className="flex-1 px-2 py-1 text-sm border border-amber-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-500"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleRenameFolder(folder.id, editingFolderName)}
-                              className="p-1 text-green-600 hover:bg-green-100 rounded"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingFolderId(null);
-                                setEditingFolderName('');
-                              }}
-                              className="p-1 text-slate-400 hover:bg-slate-200 rounded"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => handleNavigateToFolder(folder)}
-                              className="flex-1 flex items-center gap-2 text-left"
-                            >
-                              <Folder className="w-5 h-5 text-amber-600" />
-                              <div>
-                                <div className="font-medium text-slate-900">{folder.name}</div>
-                                <div className="text-xs text-slate-500">
-                                  {folder._count?.workflows || 0} workflows, {folder._count?.children || 0} folders
-                                  {folder.group && (
-                                    <span className="ml-2">
-                                      <Users className="w-3 h-3 inline" /> {folder.group.name}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleOpenPermissions(folder)}
-                                className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded"
-                                title="Manage permissions"
-                              >
-                                <Shield className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingFolderId(folder.id);
-                                  setEditingFolderName(folder.name);
-                                }}
-                                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
-                                title="Rename folder"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteFolder(folder.id)}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                title="Delete folder"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              <ChevronRight className="w-4 h-4 text-slate-400" />
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Workflows */}
-                  {availableWorkflows.map((workflow) => (
-                    <div
-                      key={workflow.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, workflow.id)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => {
-                        setShowWorkflowBrowser(false);
-                        navigate(`/workflows/${workflow.id}`);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setWorkflowContextMenu({ x: e.clientX, y: e.clientY, workflow });
-                      }}
-                      className={`p-4 rounded-lg border transition-colors cursor-pointer ${draggingWorkflowId === workflow.id
-                        ? 'bg-primary-50 border-primary-300 opacity-50'
-                        : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          <GripVertical className="w-4 h-4 text-slate-400 mt-1 flex-shrink-0" />
-                          {/* Editable name */}
-                          {editingWorkflowId === workflow.id ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="text"
-                                value={editingWorkflowName}
-                                onChange={(e) => setEditingWorkflowName(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleRenameWorkflow(workflow.id, editingWorkflowName);
-                                  } else if (e.key === 'Escape') {
-                                    setEditingWorkflowId(null);
-                                    setEditingWorkflowName('');
-                                  }
-                                }}
-                                className="flex-1 px-2 py-1 text-sm font-medium border border-primary-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                autoFocus
-                              />
-                              <button
-                                onClick={() => handleRenameWorkflow(workflow.id, editingWorkflowName)}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded"
-                                title="Save"
-                              >
-                                <Check className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingWorkflowId(null);
-                                  setEditingWorkflowName('');
-                                }}
-                                className="p-1 text-slate-400 hover:bg-slate-200 rounded"
-                                title="Cancel"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="font-medium text-slate-900 truncate block text-left">
-                              {workflow.name}
-                            </span>
-                          )}
-
-                          {workflow.description && (
-                            <div className="text-sm text-slate-500 truncate mt-0.5">
-                              {workflow.description}
-                            </div>
-                          )}
-
-                          {/* Metadata */}
-                          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
-                            {/* Owner */}
-                            <div className="flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              <span>
-                                {workflow.createdBy?.name || workflow.createdBy?.email || 'System'}
-                              </span>
-                            </div>
-
-                            {/* Group */}
-                            {workflow.group && (
-                              <div className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                <span>{workflow.group.name}</span>
-                              </div>
-                            )}
-
-                            {/* Last updated */}
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              <span>{formatDate(workflow.updatedAt)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex items-center gap-1">
-                          <EnvironmentBadge environment={workflow.environment} />
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingWorkflowId(workflow.id);
-                              setEditingWorkflowName(workflow.name);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
-                            title="Rename workflow"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setEditingWorkflowId(null);
-                              setPermissionsFolder(null); // Not a folder permissions modal
-
-                              // Load versions for this workflow
-                              setLoadingVersions(true);
-                              setShowVersionHistory(true);
-                              // Store ID temporarily or fetch directly within modal if we passed workflow prop?
-                              // Better: fetch here and pass data or use a ref/state for target workflow
-                              // Hack: Reuse editingWorkflowId or adding a new state for 'versionHistoryWorkflowId'
-                              // Let's add that state variable? Or just fetch here and use a ref?
-                              // We'll assume we can't easily add state in this deep nested click without causing re-renders effectively.
-                              // Let's use `deletingWorkflow` equivalent: `versionHistoryWorkflow`
-                              setVersionHistoryWorkflow(workflow);
-                              try {
-                                const list = await workflowsApi.getVersions(workflow.id);
-                                setVersions(list);
-                              } finally {
-                                setLoadingVersions(false);
-                              }
-                            }}
-                            className="p-1 hover:bg-neutral-700 rounded text-neutral-400 hover:text-white"
-                            title="Version History"
-                          >
-                            <Clock size={14} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeletingWorkflow(workflow);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                            title="Delete workflow"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50">
-              <button
-                onClick={() => {
-                  // Store the current folder ID so the new workflow is created in this folder
-                  setNewWorkflowFolderId(currentFolderId);
-                  setShowWorkflowBrowser(false);
-                  navigate('/workflows/new');
-                }}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Create New Workflow{currentFolderId ? ` in ${folderPath[folderPath.length - 1]?.name || 'folder'}` : ''}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Workflow Browser Context Menu */}
-      {workflowContextMenu && (
-        <div
-          ref={workflowContextMenuRef}
-          className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-[60] min-w-[160px]"
-          style={{ left: workflowContextMenu.x, top: workflowContextMenu.y }}
-        >
-          <button
-            onClick={async () => {
-              setWorkflowContextMenu(null);
-              // Reuse Version History Logic
-              const workflow = workflowContextMenu.workflow;
-              setVersionHistoryWorkflow(workflow);
-              setLoadingVersions(true);
-              setShowVersionHistory(true);
-              try {
-                const list = await workflowsApi.getVersions(workflow.id);
-                setVersions(list);
-              } finally {
-                setLoadingVersions(false);
-              }
-            }}
-            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-          >
-            <Clock className="w-4 h-4" />
-            Version History
-          </button>
-
-          <button
-            onClick={() => {
-              setWorkflowContextMenu(null);
-              setEditingWorkflowId(workflowContextMenu.workflow.id);
-              setEditingWorkflowName(workflowContextMenu.workflow.name);
-            }}
-            className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-          >
-            <Pencil className="w-4 h-4" />
-            Rename
-          </button>
-
-          <button
-            onClick={() => {
-              setWorkflowContextMenu(null);
-              setDeletingWorkflow(workflowContextMenu.workflow);
-            }}
-            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </button>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingWorkflow && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => setDeletingWorkflow(null)}
-          />
-
-          {/* Modal */}
-          <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Delete Workflow
-                </h3>
-                <p className="mt-2 text-sm text-slate-600">
-                  Are you sure you want to delete <strong>"{deletingWorkflow.name}"</strong>?
-                  This action cannot be undone.
+                <p className="text-xs text-slate-500 mt-1">
+                  Users and groups with access to this folder can view or edit workflows within it.
                 </p>
-                {deletingWorkflow.environment !== 'DV' && (
-                  <p className="mt-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                    ⚠️ This workflow is in <strong>{deletingWorkflow.environment}</strong> environment.
-                    Deleting it may affect production systems.
-                  </p>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-4">
+                {loadingPermissions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Add new permission */}
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="text-sm font-medium text-slate-700 mb-2">Add Permission</div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={newPermissionType}
+                          onChange={(e) => {
+                            setNewPermissionType(e.target.value as 'user' | 'group');
+                            setNewPermissionTargetId('');
+                          }}
+                          className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="user">User</option>
+                          <option value="group">Group</option>
+                        </select>
+                        <select
+                          value={newPermissionTargetId}
+                          onChange={(e) => setNewPermissionTargetId(e.target.value)}
+                          className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="">Select {newPermissionType}...</option>
+                          {newPermissionType === 'user'
+                            ? availableUsers.map((u) => (
+                              <option key={u.id} value={u.id}>
+                                {u.name || u.email}
+                              </option>
+                            ))
+                            : availableGroups.map((g) => (
+                              <option key={g.id} value={g.id}>
+                                {g.name}
+                              </option>
+                            ))}
+                        </select>
+                        <select
+                          value={newPermissionLevel}
+                          onChange={(e) => setNewPermissionLevel(e.target.value as FolderPermissionLevel)}
+                          className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        >
+                          <option value="READ">Read</option>
+                          <option value="WRITE">Write</option>
+                          <option value="ADMIN">Admin</option>
+                        </select>
+                        <button
+                          onClick={handleAddPermission}
+                          disabled={!newPermissionTargetId}
+                          className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Existing permissions */}
+                    <div>
+                      <div className="text-sm font-medium text-slate-700 mb-2">Current Permissions</div>
+                      {folderPermissions.length === 0 ? (
+                        <div className="text-sm text-slate-500 text-center py-4">
+                          No permissions set. Only the folder owner has access.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {folderPermissions.map((perm) => (
+                            <div
+                              key={perm.id}
+                              className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded"
+                            >
+                              <div className="flex items-center gap-2">
+                                {perm.user ? (
+                                  <>
+                                    <User className="w-4 h-4 text-slate-400" />
+                                    <span className="text-sm">{perm.user.name || perm.user.email}</span>
+                                  </>
+                                ) : perm.group ? (
+                                  <>
+                                    <Users className="w-4 h-4 text-slate-400" />
+                                    <span className="text-sm">{perm.group.name}</span>
+                                  </>
+                                ) : null}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={perm.permission}
+                                  onChange={(e) =>
+                                    handleUpdatePermission(perm.id, e.target.value as FolderPermissionLevel)
+                                  }
+                                  className="px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                >
+                                  <option value="READ">Read</option>
+                                  <option value="WRITE">Write</option>
+                                  <option value="ADMIN">Admin</option>
+                                </select>
+                                <button
+                                  onClick={() => handleDeletePermission(perm.id)}
+                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                  title="Remove permission"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-            </div>
 
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setDeletingWorkflow(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleDeleteWorkflow(deletingWorkflow)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Delete Workflow
-              </button>
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-200 flex justify-end">
+                <button
+                  onClick={() => {
+                    setShowPermissionsModal(false);
+                    setPermissionsFolder(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {/* Folder Permissions Modal */}
-      {showPermissionsModal && permissionsFolder && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/50"
-            onClick={() => {
-              setShowPermissionsModal(false);
-              setPermissionsFolder(null);
+      {
+        showPromotionModal && id && (
+          <PromotionRequestModal
+            workflowId={id}
+            workflowName={workflowName}
+            currentEnv={environment}
+            nextEnv={getNextEnvironment(environment)!}
+            onClose={() => setShowPromotionModal(false)}
+            onSuccess={() => {
+              alert('Promotion request submitted successfully!');
             }}
           />
-
-          {/* Modal */}
-          <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary-600" />
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Folder Permissions
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setShowPermissionsModal(false);
-                  setPermissionsFolder(null);
-                }}
-                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Folder info */}
-            <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
-              <div className="flex items-center gap-2">
-                <Folder className="w-5 h-5 text-amber-600" />
-                <span className="font-medium text-slate-900">{permissionsFolder.name}</span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1">
-                Users and groups with access to this folder can view or edit workflows within it.
-              </p>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {loadingPermissions ? (
-                <div className="flex items-center justify-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Add new permission */}
-                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="text-sm font-medium text-slate-700 mb-2">Add Permission</div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={newPermissionType}
-                        onChange={(e) => {
-                          setNewPermissionType(e.target.value as 'user' | 'group');
-                          setNewPermissionTargetId('');
-                        }}
-                        className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="user">User</option>
-                        <option value="group">Group</option>
-                      </select>
-                      <select
-                        value={newPermissionTargetId}
-                        onChange={(e) => setNewPermissionTargetId(e.target.value)}
-                        className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="">Select {newPermissionType}...</option>
-                        {newPermissionType === 'user'
-                          ? availableUsers.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {u.name || u.email}
-                            </option>
-                          ))
-                          : availableGroups.map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.name}
-                            </option>
-                          ))}
-                      </select>
-                      <select
-                        value={newPermissionLevel}
-                        onChange={(e) => setNewPermissionLevel(e.target.value as FolderPermissionLevel)}
-                        className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      >
-                        <option value="READ">Read</option>
-                        <option value="WRITE">Write</option>
-                        <option value="ADMIN">Admin</option>
-                      </select>
-                      <button
-                        onClick={handleAddPermission}
-                        disabled={!newPermissionTargetId}
-                        className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Existing permissions */}
-                  <div>
-                    <div className="text-sm font-medium text-slate-700 mb-2">Current Permissions</div>
-                    {folderPermissions.length === 0 ? (
-                      <div className="text-sm text-slate-500 text-center py-4">
-                        No permissions set. Only the folder owner has access.
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {folderPermissions.map((perm) => (
-                          <div
-                            key={perm.id}
-                            className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded"
-                          >
-                            <div className="flex items-center gap-2">
-                              {perm.user ? (
-                                <>
-                                  <User className="w-4 h-4 text-slate-400" />
-                                  <span className="text-sm">{perm.user.name || perm.user.email}</span>
-                                </>
-                              ) : perm.group ? (
-                                <>
-                                  <Users className="w-4 h-4 text-slate-400" />
-                                  <span className="text-sm">{perm.group.name}</span>
-                                </>
-                              ) : null}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={perm.permission}
-                                onChange={(e) =>
-                                  handleUpdatePermission(perm.id, e.target.value as FolderPermissionLevel)
-                                }
-                                className="px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              >
-                                <option value="READ">Read</option>
-                                <option value="WRITE">Write</option>
-                                <option value="ADMIN">Admin</option>
-                              </select>
-                              <button
-                                onClick={() => handleDeletePermission(perm.id)}
-                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                title="Remove permission"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-200 flex justify-end">
-              <button
-                onClick={() => {
-                  setShowPermissionsModal(false);
-                  setPermissionsFolder(null);
-                }}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showPromotionModal && id && (
-        <PromotionRequestModal
-          workflowId={id}
-          workflowName={workflowName}
-          currentEnv={environment}
-          nextEnv={getNextEnvironment(environment)!}
-          onClose={() => setShowPromotionModal(false)}
-          onSuccess={() => {
-            alert('Promotion request submitted successfully!');
-          }}
-        />
-      )}
+        )
+      }
 
       {/* Workflow Properties Panel */}
-      {showPropertiesPanel && (
-        <div className="fixed right-0 inset-y-0 z-40" style={{ top: 'var(--header-height)' }}>
-          <WorkflowPropertiesPanel
-            properties={workflowProperties}
-            schedule={workflowSchedule}
-            onAddProperty={handleAddProperty}
-            onUpdateProperty={handleUpdateProperty}
-            onDeleteProperty={handleDeleteProperty}
-            onUpdateSchedule={handleUpdateSchedule}
-            onClose={() => setShowPropertiesPanel(false)}
-          />
-        </div>
-      )}
-    </div>
+      <RightPanel
+        isOpen={showPropertiesPanel}
+        onClose={() => setShowPropertiesPanel(false)}
+      >
+        <WorkflowPropertiesPanel
+          properties={workflowProperties}
+          schedule={workflowSchedule}
+          onAddProperty={handleAddProperty}
+          onUpdateProperty={handleUpdateProperty}
+          onDeleteProperty={handleDeleteProperty}
+          onUpdateSchedule={handleUpdateSchedule}
+          onClose={() => setShowPropertiesPanel(false)}
+        />
+      </RightPanel>
+    </div >
   );
 }

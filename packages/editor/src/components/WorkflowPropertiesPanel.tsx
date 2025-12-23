@@ -92,13 +92,13 @@ export function WorkflowPropertiesPanel({
     };
 
     return (
-        <div className="w-[350px] bg-white border-l border-slate-200 flex flex-col h-full">
+        <div className="h-full w-full bg-white shadow-xl flex flex-col">
             {/* Header */}
-            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200">
                 <h2 className="text-lg font-semibold text-slate-900">Properties</h2>
                 <button
                     onClick={onClose}
-                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
                 >
                     <X className="w-5 h-5" />
                 </button>
