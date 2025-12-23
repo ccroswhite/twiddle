@@ -6,7 +6,7 @@ export const GraphQLNode: NodeDefinition = {
   description: 'Execute GraphQL queries and mutations against any GraphQL API',
   icon: 'share-2',
   iconColor: '#e535ab',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

@@ -7,7 +7,7 @@ export const OracleNode: NodeDefinition = {
   description: 'Execute queries on Oracle databases',
   icon: 'database',
   iconColor: '#f80000',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

@@ -7,7 +7,7 @@ export const SnowflakeNode: NodeDefinition = {
   description: 'Execute queries on Snowflake data warehouse',
   icon: 'database',
   iconColor: '#29b5e8',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

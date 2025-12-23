@@ -7,7 +7,7 @@ export const MySQLNode: NodeDefinition = {
   description: 'Execute queries on MySQL/MariaDB databases',
   icon: 'database',
   iconColor: '#4479a1',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

@@ -7,7 +7,7 @@ export const PostgreSQLNode: NodeDefinition = {
   description: 'Execute queries on PostgreSQL databases',
   icon: 'database',
   iconColor: '#336791',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

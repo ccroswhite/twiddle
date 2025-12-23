@@ -57,10 +57,10 @@ export interface NodeCredentialDefinition {
 export type NodeCategory =
   | 'core'
   | 'communication'
-  | 'data'
+  | 'Data Engines'
   | 'development'
   | 'finance'
-  | 'infrastructure'
+  | 'Remote Commands'
   | 'marketing'
   | 'productivity'
   | 'sales'

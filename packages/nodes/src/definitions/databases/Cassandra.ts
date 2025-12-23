@@ -6,7 +6,7 @@ export const CassandraNode: NodeDefinition = {
   description: 'Execute queries on Apache Cassandra databases',
   icon: 'database',
   iconColor: '#1287b1',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

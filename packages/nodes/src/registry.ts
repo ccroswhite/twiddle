@@ -1,18 +1,11 @@
 import type { NodeDefinition, NodeTypeInfo } from '@twiddle/shared';
 import {
-  StartNode,
-  ManualTriggerNode,
   WebhookNode,
-  IntervalNode,
   HttpRequestNode,
   RespondToWebhookNode,
   HtmlExtractNode,
   CodeNode,
   IfNode,
-  SwitchNode,
-  SetDataNode,
-  DateTimeNode,
-  WaitNode,
   WinRMNode,
   SSHNode,
   ReportNode,
@@ -36,19 +29,12 @@ const nodeRegistry = new Map<string, NodeDefinition>();
 
 // Register all built-in nodes
 const builtInNodes: NodeDefinition[] = [
-  StartNode,
-  ManualTriggerNode,
   WebhookNode,
-  IntervalNode,
   HttpRequestNode,
   RespondToWebhookNode,
   HtmlExtractNode,
   CodeNode,
   IfNode,
-  SwitchNode,
-  SetDataNode,
-  DateTimeNode,
-  WaitNode,
   WinRMNode,
   SSHNode,
   ReportNode,

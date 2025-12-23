@@ -7,7 +7,7 @@ export const MSSqlNode: NodeDefinition = {
   description: 'Execute queries on Microsoft SQL Server databases',
   icon: 'database',
   iconColor: '#cc2927',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

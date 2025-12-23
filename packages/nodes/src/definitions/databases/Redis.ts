@@ -6,7 +6,7 @@ export const RedisNode: NodeDefinition = {
   description: 'Execute commands on Redis databases',
   icon: 'database',
   iconColor: '#dc382d',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

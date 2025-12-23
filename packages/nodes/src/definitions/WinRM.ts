@@ -2,11 +2,11 @@ import type { NodeDefinition } from '@twiddle/shared';
 
 export const WinRMNode: NodeDefinition = {
   type: 'twiddle.winrm',
-  displayName: 'WinRM',
+  displayName: 'Remote Windows Command',
   description: 'Execute commands on remote Windows machines via WinRM',
   icon: 'terminal',
   iconColor: '#0078d4',
-  category: 'infrastructure',
+  category: 'Remote Commands',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

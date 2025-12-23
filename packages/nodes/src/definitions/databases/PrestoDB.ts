@@ -7,7 +7,7 @@ export const PrestoDBNode: NodeDefinition = {
   description: 'Execute queries on PrestoDB/Trino distributed SQL engine',
   icon: 'database',
   iconColor: '#5890ff',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

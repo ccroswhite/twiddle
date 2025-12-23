@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { X, Search, Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Server, Clock, Key, Send, Webhook, FileCode, Zap } from 'lucide-react';
+import { X, Search, Globe, Code, GitBranch, Terminal, Database, Server, Key, Send, Webhook, FileCode, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Trigger nodes are not activities - they start workflows
 const TRIGGER_NODE_TYPES = new Set([
-  'twiddle.manualTrigger',
   'twiddle.webhook',
-  'twiddle.interval',
 ]);
 
 // Check if a node type is an activity (not a trigger)
@@ -33,10 +31,6 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'twiddle.httpRequest': Globe,
   'twiddle.code': Code,
   'twiddle.if': GitBranch,
-  'twiddle.switch': GitMerge,
-  'twiddle.setData': Edit,
-  'twiddle.manualTrigger': Play,
-  'twiddle.interval': Clock,
   'twiddle.respondToWebhook': Send,
   'twiddle.webhook': Webhook,
   'twiddle.htmlExtract': FileCode,
@@ -59,10 +53,6 @@ const colorMap: Record<string, string> = {
   'twiddle.httpRequest': 'bg-blue-500',
   'twiddle.code': 'bg-orange-500',
   'twiddle.if': 'bg-yellow-500',
-  'twiddle.switch': 'bg-violet-500',
-  'twiddle.setData': 'bg-purple-500',
-  'twiddle.manualTrigger': 'bg-green-500',
-  'twiddle.interval': 'bg-teal-500',
   'twiddle.respondToWebhook': 'bg-emerald-500',
   'twiddle.webhook': 'bg-indigo-500',
   'twiddle.htmlExtract': 'bg-pink-500',
@@ -124,7 +114,7 @@ export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
         <div className="flex-1 overflow-auto p-4">
           {categories.map((category) => (
             <div key={category} className="mb-6">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+              <h3 className="text-xs font-semibold text-slate-400 tracking-wider mb-2">
                 {category}
               </h3>
               <div className="space-y-2">

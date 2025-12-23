@@ -2,11 +2,11 @@ import type { NodeDefinition } from '@twiddle/shared';
 
 export const SSHNode: NodeDefinition = {
   type: 'twiddle.ssh',
-  displayName: 'SSH',
+  displayName: 'Remote Linux Command',
   description: 'Execute commands on remote Linux/Unix machines via SSH',
   icon: 'terminal',
   iconColor: '#22c55e',
-  category: 'infrastructure',
+  category: 'Remote Commands',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

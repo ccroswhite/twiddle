@@ -6,7 +6,7 @@ export const ValkeyNode: NodeDefinition = {
   description: 'Execute commands on Valkey databases (Redis-compatible)',
   icon: 'database',
   iconColor: '#6366f1',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

@@ -6,7 +6,7 @@ export const ElasticsearchNode: NodeDefinition = {
   description: 'Search and manage data in Elasticsearch clusters',
   icon: 'search',
   iconColor: '#fed10a',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

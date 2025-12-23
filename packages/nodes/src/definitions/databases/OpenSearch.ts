@@ -6,7 +6,7 @@ export const OpenSearchNode: NodeDefinition = {
   description: 'Search and manage data in OpenSearch clusters',
   icon: 'search',
   iconColor: '#005eb8',
-  category: 'data',
+  category: 'Data Engines',
   version: 1,
   inputs: ['main'],
   outputs: ['main'],

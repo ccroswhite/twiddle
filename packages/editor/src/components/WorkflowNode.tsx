@@ -1,13 +1,11 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-import { Globe, Code, GitBranch, GitMerge, Edit, Play, Terminal, Database, Search, Server, Clock, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap } from 'lucide-react';
+import { Globe, Code, GitBranch, Terminal, Database, Search, Server, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap } from 'lucide-react';
 
 // Trigger nodes are not activities - they start workflows
 const TRIGGER_NODE_TYPES = new Set([
-  'twiddle.manualTrigger',
   'twiddle.webhook',
-  'twiddle.interval',
 ]);
 
 // Check if a node type is an activity (not a trigger)
@@ -19,10 +17,6 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'twiddle.httpRequest': Globe,
   'twiddle.code': Code,
   'twiddle.if': GitBranch,
-  'twiddle.switch': GitMerge,
-  'twiddle.setData': Edit,
-  'twiddle.manualTrigger': Play,
-  'twiddle.interval': Clock,
   'twiddle.respondToWebhook': Send,
   'twiddle.report': Mail,
   'twiddle.slack': MessageSquare,
@@ -47,10 +41,6 @@ const colorMap: Record<string, string> = {
   'twiddle.httpRequest': 'bg-blue-500',
   'twiddle.code': 'bg-orange-500',
   'twiddle.if': 'bg-yellow-500',
-  'twiddle.switch': 'bg-violet-500',
-  'twiddle.setData': 'bg-purple-500',
-  'twiddle.manualTrigger': 'bg-green-500',
-  'twiddle.interval': 'bg-teal-500',
   'twiddle.respondToWebhook': 'bg-emerald-500',
   'twiddle.report': 'bg-emerald-500',
   'twiddle.slack': 'bg-purple-700',
@@ -86,7 +76,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   const { deleteElements, setNodes, getNode } = useReactFlow();
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
   // Check if this is a credential node
   const isCredential = data.nodeType.startsWith('credential.');
   const Icon = isCredential ? Key : (iconMap[data.nodeType] || Code);
@@ -148,7 +138,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
       // This ensures each subsequent copy is offset from the last one
       const baseX = currentNode.position.x;
       const baseY = currentNode.position.y;
-      
+
       // Find nodes that are in the "copy zone" (offset from original)
       let maxOffset = 0;
       nodes.forEach((node) => {
@@ -173,7 +163,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
         data: {
           ...currentNode.data,
           // Deep copy parameters to avoid reference issues
-          parameters: currentNode.data.parameters 
+          parameters: currentNode.data.parameters
             ? JSON.parse(JSON.stringify(currentNode.data.parameters))
             : {},
         },
@@ -194,9 +184,8 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   return (
     <>
       <div
-        className={`bg-white rounded shadow-sm border min-w-[80px] relative ${
-          selected ? 'border-primary-500' : 'border-slate-200'
-        }`}
+        className={`bg-white rounded shadow-sm border min-w-[80px] relative ${selected ? 'border-primary-500' : 'border-slate-200'
+          }`}
         onContextMenu={handleContextMenu}
       >
         {/* Input Handle */}
