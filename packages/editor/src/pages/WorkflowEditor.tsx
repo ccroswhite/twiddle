@@ -1026,8 +1026,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         const created = await workflowsApi.create({
           name: workflowName,
           description: workflowDescription,
-          nodes: workflowNodes,
-          connections: workflowConnections,
+          nodes: workflowNodes as any,
+          connections: workflowConnections as any,
           properties: workflowProperties,
           schedule: workflowSchedule,
           folderId: newWorkflowFolderId || undefined,
@@ -1039,8 +1039,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         await workflowsApi.update(id!, {
           name: workflowName,
           description: workflowDescription,
-          nodes: workflowNodes,
-          connections: workflowConnections,
+          nodes: workflowNodes as any,
+          connections: workflowConnections as any,
           properties: workflowProperties,
           schedule: workflowSchedule,
         });

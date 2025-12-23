@@ -76,6 +76,7 @@ export interface WorkflowCreateInput {
   connections?: WorkflowConnection[];
   settings?: WorkflowSettings;
   tags?: string[];
+  folderId?: string;
   properties?: Array<{
     id: string;
     key: string;

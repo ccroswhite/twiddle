@@ -1,3 +1,5 @@
+import type { WorkflowCreateInput, WorkflowUpdateInput } from '@twiddle/shared';
+
 const API_BASE = '/api';
 
 async function request<T>(
@@ -332,25 +334,6 @@ export interface FolderPermission {
   };
 }
 
-interface WorkflowCreateInput {
-  name: string;
-  description?: string;
-  nodes?: unknown[];
-  connections?: unknown[];
-  settings?: unknown;
-  tags?: string[];
-  folderId?: string;
-}
-
-interface WorkflowUpdateInput {
-  name?: string;
-  description?: string;
-  nodes?: unknown[];
-  connections?: unknown[];
-  settings?: unknown;
-  active?: boolean;
-  tags?: string[];
-}
 
 interface NodeTypeInfo {
   type: string;
