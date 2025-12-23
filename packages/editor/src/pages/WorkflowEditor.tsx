@@ -804,6 +804,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   async function loadWorkflow(workflowId: string) {
     try {
+      // Reset properties/schedule state first to prevent stale data from previous workflow
+      setWorkflowProperties([]);
+      setWorkflowSchedule({
+        enabled: false,
+        mode: 'simple',
+        simple: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+      });
+
       const workflow = await workflowsApi.get(workflowId) as {
         name: string;
         description?: string;
@@ -813,6 +821,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         pythonActivities?: string;
         environment?: Environment;
         lockedBy?: { id: string; name: string; email: string; isMe: boolean };
+        properties?: WorkflowProperty[];
+        schedule?: WorkflowSchedule;
       };
       setWorkflowName(workflow.name);
       setWorkflowDescription(workflow.description || '');
@@ -884,6 +894,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       setNodes(flowNodes);
       setEdges(flowEdges);
+
+      // Load properties and schedule from API (use defaults if not present)
+      setWorkflowProperties(workflow.properties || []);
+      setWorkflowSchedule(workflow.schedule || {
+        enabled: false,
+        mode: 'simple',
+        simple: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
+      });
     } catch (err) {
       console.error('Failed to load workflow:', err);
       alert('Failed to load workflow');
@@ -1010,6 +1028,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           description: workflowDescription,
           nodes: workflowNodes,
           connections: workflowConnections,
+          properties: workflowProperties,
+          schedule: workflowSchedule,
           folderId: newWorkflowFolderId || undefined,
         });
         // Clear the folder ID after creating
@@ -1021,6 +1041,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           description: workflowDescription,
           nodes: workflowNodes,
           connections: workflowConnections,
+          properties: workflowProperties,
+          schedule: workflowSchedule,
         });
       }
     } catch (err) {
