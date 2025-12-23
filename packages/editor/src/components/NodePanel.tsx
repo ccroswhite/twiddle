@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, Globe, Code, GitBranch, Terminal, Database, Server, Key, Send, Webhook, FileCode, Zap } from 'lucide-react';
+import { X, Search, Globe, Code, GitBranch, Terminal, Database, Server, Key, Send, Webhook, FileCode, Zap, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Trigger nodes are not activities - they start workflows
@@ -36,6 +36,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'twiddle.htmlExtract': FileCode,
   'twiddle.winrm': Terminal,
   'twiddle.ssh': Server,
+  'twiddle.composedWorkflow': Layers,
   // Database nodes
   'twiddle.mssql': Database,
   'twiddle.postgresql': Database,
@@ -58,6 +59,7 @@ const colorMap: Record<string, string> = {
   'twiddle.htmlExtract': 'bg-pink-500',
   'twiddle.winrm': 'bg-sky-600',
   'twiddle.ssh': 'bg-green-600',
+  'twiddle.composedWorkflow': 'bg-violet-600',
   // Database nodes
   'twiddle.mssql': 'bg-red-600',
   'twiddle.postgresql': 'bg-blue-700',

@@ -1,7 +1,7 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-import { Globe, Code, GitBranch, Terminal, Database, Search, Server, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap } from 'lucide-react';
+import { Globe, Code, GitBranch, Terminal, Database, Search, Server, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap, Layers, Maximize2, Minimize2 } from 'lucide-react';
 
 // Trigger nodes are not activities - they start workflows
 const TRIGGER_NODE_TYPES = new Set([
@@ -24,6 +24,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   'twiddle.htmlExtract': FileCode,
   'twiddle.winrm': Terminal,
   'twiddle.ssh': Server,
+  'twiddle.composedWorkflow': Layers,
   // Database nodes
   'twiddle.mssql': Database,
   'twiddle.postgresql': Database,
@@ -48,6 +49,7 @@ const colorMap: Record<string, string> = {
   'twiddle.htmlExtract': 'bg-pink-500',
   'twiddle.winrm': 'bg-sky-600',
   'twiddle.ssh': 'bg-green-600',
+  'twiddle.composedWorkflow': 'bg-violet-600',
   // Database nodes
   'twiddle.mssql': 'bg-red-600',
   'twiddle.postgresql': 'bg-blue-700',
@@ -68,6 +70,8 @@ interface WorkflowNodeProps {
     nodeType: string;
     parameters?: Record<string, unknown>;
     onOpenProperties?: (nodeId: string) => void;
+    onToggleExpand?: (nodeId: string) => void;
+    isEmbedded?: boolean;
   };
   selected?: boolean;
 }
@@ -79,6 +83,10 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
 
   // Check if this is a credential node
   const isCredential = data.nodeType.startsWith('credential.');
+  const isComposedWorkflow = data.nodeType === 'twiddle.composedWorkflow';
+  const isExpanded = isComposedWorkflow && data.parameters?.isExpanded === 'true';
+  const isEmbedded = data.isEmbedded === true;
+
   const Icon = isCredential ? Key : (iconMap[data.nodeType] || Code);
   const bgColor = isCredential ? 'bg-amber-500' : (colorMap[data.nodeType] || 'bg-slate-500');
 
@@ -181,11 +189,102 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
     }
   };
 
+  const handleToggleExpand = () => {
+    setContextMenu(null);
+    if (data.onToggleExpand) {
+      data.onToggleExpand(id);
+    }
+  };
+
+  // Render as container for expanded composed workflows
+  if (isComposedWorkflow && isExpanded) {
+    return (
+      <>
+        <div
+          className="bg-violet-50/30 rounded-lg border-2 border-dashed border-violet-300 relative pointer-events-none"
+          style={{ width: '100%', height: '100%', padding: 0, margin: 0 }}
+          onContextMenu={handleContextMenu}
+        >
+          {/* Container header - make it clickable */}
+          <div
+            className="absolute top-2 left-2 flex items-center gap-2 bg-white/90 px-3 py-1.5 rounded shadow-sm border border-violet-200 z-10 pointer-events-auto"
+            onContextMenu={handleContextMenu}
+          >
+            <div className="bg-violet-600 p-1 rounded">
+              <Layers className="w-3 h-3 text-white" />
+            </div>
+            <div className="font-medium text-xs text-slate-900">{data.label}</div>
+            <span className="text-[9px] font-medium text-violet-600 bg-violet-50 px-1.5 rounded">
+              Composed
+            </span>
+          </div>
+
+          {/* Input/Output Handles on the container */}
+          <Handle
+            type="target"
+            position={Position.Left}
+            className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
+            style={{ top: '50%' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
+            style={{ top: '50%' }}
+          />
+        </div>
+
+        {/* Context Menu */}
+        {contextMenu && createPortal(
+          <div
+            ref={menuRef}
+            className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-[100] min-w-[140px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={handleOpenProperties}
+              className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Properties
+            </button>
+            <button
+              onClick={handleToggleExpand}
+              className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              <Minimize2 className="w-3.5 h-3.5" />
+              Collapse
+            </button>
+            <>
+              <button
+                onClick={handleCopy}
+                className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy
+              </button>
+              <div className="border-t border-slate-200 my-1" />
+              <button
+                onClick={handleDelete}
+                className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </>
+          </div>,
+          document.body
+        )}
+      </>
+    );
+  }
+
+  // Normal node rendering (collapsed or non-composed workflow)
   return (
     <>
       <div
         className={`bg-white rounded shadow-sm border min-w-[80px] relative ${selected ? 'border-primary-500' : 'border-slate-200'
-          }`}
+          } ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
         onContextMenu={handleContextMenu}
       >
         {/* Input Handle */}
@@ -262,21 +361,43 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
             <Settings className="w-3.5 h-3.5" />
             Properties
           </button>
-          <button
-            onClick={handleCopy}
-            className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            Copy
-          </button>
-          <div className="border-t border-slate-200 my-1" />
-          <button
-            onClick={handleDelete}
-            className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            Delete
-          </button>
+          {isComposedWorkflow && !isEmbedded && (
+            <button
+              onClick={handleToggleExpand}
+              className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+            >
+              {isExpanded ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5" />
+                  Collapse
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  Expand
+                </>
+              )}
+            </button>
+          )}
+          {!isEmbedded && (
+            <>
+              <button
+                onClick={handleCopy}
+                className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Copy
+              </button>
+              <div className="border-t border-slate-200 my-1" />
+              <button
+                onClick={handleDelete}
+                className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </button>
+            </>
+          )}
         </div>,
         document.body
       )}

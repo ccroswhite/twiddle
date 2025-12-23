@@ -152,6 +152,140 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     handleOpenPropertiesRef.current?.(nodeId);
   }, []);
 
+  // Callback for toggling expand state of composed workflow nodes
+  const handleToggleExpandRef = useRef<(nodeId: string) => void>(undefined);
+  handleToggleExpandRef.current = (nodeId: string) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (!node || node.data.nodeType !== 'twiddle.composedWorkflow') return;
+
+    const parameters = (node.data.parameters || {}) as Record<string, any>;
+    const isExpanded = parameters.isExpanded === 'true';
+
+    if (isExpanded) {
+      // Collapse: Remove all embedded child nodes
+      setNodes((nds) =>
+        nds.filter((n) => !(n as any).parentId || (n as any).parentId !== nodeId).map((n) =>
+          n.id === nodeId
+            ? {
+              ...n,
+              style: undefined, // Remove container styling
+              data: {
+                ...n.data,
+                parameters: {
+                  ...(n.data.parameters as Record<string, any> || {}),
+                  isExpanded: 'false',
+                },
+              },
+            }
+            : n
+        )
+      );
+
+      // Remove internal connections
+      setEdges((eds) => eds.filter((e) => !e.id.startsWith(`${nodeId}_embedded_`)));
+    } else {
+      // Expand: Add embedded child nodes
+      const embeddedNodes = parameters.embeddedNodes
+        ? JSON.parse(parameters.embeddedNodes as string)
+        : [];
+      const embeddedConnections = parameters.embeddedConnections
+        ? JSON.parse(parameters.embeddedConnections as string)
+        : [];
+
+      // Calculate bounding box of embedded nodes to determine container size
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      embeddedNodes.forEach((node: any) => {
+        const x = node.position?.x || 0;
+        const y = node.position?.y || 0;
+        // More accurate node size estimates (nodes are typically 80-120px wide, 40-50px tall)
+        const width = 100;
+        const height = 45;
+
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x + width);
+        maxY = Math.max(maxY, y + height);
+      });
+
+      // Add minimal padding - just enough for the header and some breathing room
+      const paddingLeft = 20;
+      const paddingRight = 40; // Extra padding on right to account for node width
+      const paddingTop = 80; // Space for header badge
+      const paddingBottom = 20;
+
+      const containerWidth = (maxX - minX) + paddingLeft + paddingRight;
+      const containerHeight = (maxY - minY) + paddingTop + paddingBottom;
+
+      // Normalize positions - offset by minX/minY and add top/left padding
+      const childNodes = embeddedNodes.map((embNode: any) => ({
+        id: `${nodeId}_embedded_${embNode.id}`,
+        type: 'workflowNode',
+        parentId: nodeId,  // Changed from parentNode to parentId
+        extent: 'parent' as const,
+        draggable: false,
+        selectable: false,
+        expandParent: false,
+        zIndex: 10, // Higher than parent so children appear on top
+        position: {
+          // Normalize to start at (0,0) relative to bounding box, then add padding
+          x: (embNode.position?.x || 0) - minX + paddingLeft,
+          y: (embNode.position?.y || 0) - minY + paddingTop,
+        },
+        data: {
+          label: embNode.name,
+          nodeType: embNode.type,
+          parameters: embNode.parameters || {},
+          isEmbedded: true,
+          onOpenProperties: handleOpenProperties,
+          onToggleExpand: handleToggleExpand,
+        },
+      } as any));
+
+      // Create internal connections
+      const internalEdges = embeddedConnections.map((conn: any, index: number) => ({
+        id: `${nodeId}_embedded_edge_${index}`,
+        source: `${nodeId}_embedded_${conn.sourceNodeId}`,
+        target: `${nodeId}_embedded_${conn.targetNodeId}`,
+        sourceHandle: conn.sourceOutput || null,
+        targetHandle: conn.targetInput || null,
+        type: 'default',
+        zIndex: 5, // Between parent and children
+        style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+      }));
+
+      // Update all nodes in a single batch: update parent and add children
+      setNodes((nds) => [
+        ...nds.map((n) =>
+          n.id === nodeId
+            ? {
+              ...n,
+              type: 'workflowNode',
+              // Set calculated dimensions for React Flow parent-child to work
+              width: containerWidth,
+              height: containerHeight,
+              zIndex: 0, // Lower z-index for parent container
+              data: {
+                ...n.data,
+                parameters: {
+                  ...(n.data.parameters as Record<string, any> || {}),
+                  isExpanded: 'true',
+                },
+              },
+            } as any
+            : n
+        ),
+        ...childNodes,
+      ]);
+
+      // Add edges in separate update
+      setEdges((eds) => [...eds, ...internalEdges]);
+    }
+  };
+
+  const handleToggleExpand = useCallback((nodeId: string) => {
+    handleToggleExpandRef.current?.(nodeId);
+  }, []);
+
   // Save current state to history
   const saveToHistory = useCallback(() => {
     if (isUndoing.current) return;
@@ -468,10 +602,21 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         type: `credential.${cred.type}.${cred.id}`,
         displayName: cred.name,
         description: `Use ${cred.name} credential (${getCredentialTypeLabel(cred.type)})`,
-        category: 'Credentials',
+        category: 'DEFINED CONNECTIONS',
       }));
 
-      setAvailableNodes([...(nodeTypes as NodeTypeInfo[]), ...credentialNodes]);
+      // Load workflows and convert them to node types for the "Existing Workflow" category
+      const workflows = await workflowsApi.list();
+      const workflowNodes: NodeTypeInfo[] = workflows.map((workflow: Workflow) => ({
+        type: `workflow.${workflow.id}`,
+        displayName: workflow.name,
+        description: workflow.description || `Embed ${workflow.name} workflow`,
+        category: 'Existing Workflow',
+        icon: 'layers',
+        iconColor: '#8b5cf6',
+      }));
+
+      setAvailableNodes([...(nodeTypes as NodeTypeInfo[]), ...credentialNodes, ...workflowNodes]);
     } catch (err) {
       console.error('Failed to load node types:', err);
     }
@@ -535,23 +680,35 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }
 
       // Convert workflow nodes to React Flow nodes
-      const flowNodes: Node[] = (workflow.nodes as Array<{
+      const flowNodes = (workflow.nodes as Array<{
         id: string;
         name: string;
         type: string;
         position: { x: number; y: number };
         parameters: Record<string, unknown>;
-      }>).map((node) => ({
-        id: node.id,
-        type: 'workflowNode',
-        position: node.position,
-        data: {
-          label: node.name,
-          nodeType: node.type,
-          parameters: node.parameters,
-          onOpenProperties: handleOpenProperties,
-        },
-      }));
+      }>).map((node) => {
+        // For composed workflows, ensure they load collapsed
+        let parameters = node.parameters;
+        if (node.type === 'twiddle.composedWorkflow' && parameters) {
+          parameters = {
+            ...parameters,
+            isExpanded: 'false', // Always load composed workflows collapsed
+          };
+        }
+
+        return {
+          id: node.id,
+          type: 'workflowNode',
+          position: node.position,
+          data: {
+            label: node.name,
+            nodeType: node.type,
+            parameters,
+            onOpenProperties: handleOpenProperties,
+            onToggleExpand: handleToggleExpand,
+          },
+        };
+      });
 
       // Convert workflow connections to React Flow edges
       // Handle null/undefined handle IDs - React Flow uses null for default handles
@@ -598,8 +755,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     setSelectedNode(null);
   }, [setNodes]);
 
-  function addNode(nodeType: NodeTypeInfo) {
+  async function addNode(nodeType: NodeTypeInfo) {
     if (isReadOnly) return;
+
+    // Check if this is a workflow type (for composed workflows)
+    const isWorkflowType = nodeType.type.startsWith('workflow.');
+
     // Calculate position at the center of the current viewport
     let position = { x: 250, y: 100 };
 
@@ -608,8 +769,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       const viewport = getViewport();
 
       // Get the center of the visible area in flow coordinates
-      // The viewport contains x, y (pan offset) and zoom level
-      // We need to find the center of the visible canvas
       const canvasElement = document.querySelector('.react-flow');
       if (canvasElement) {
         const rect = canvasElement.getBoundingClientRect();
@@ -628,20 +787,121 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }
     }
 
-    const newNode: Node = {
-      id: `node_${Date.now()}`,
-      type: 'workflowNode',
-      position,
-      data: {
-        label: nodeType.displayName,
-        nodeType: nodeType.type,
-        parameters: {},
-        onOpenProperties: handleOpenProperties,
-      },
-    };
-    setNodes((nds: Node[]) => [...nds, newNode]);
+    if (isWorkflowType) {
+      // Extract workflow ID from the type string (format: workflow.{id})
+      const workflowId = nodeType.type.replace('workflow.', '');
+
+      try {
+        // Fetch the workflow details to get nodes and connections
+        const workflow = await workflowsApi.get(workflowId) as {
+          id: string;
+          name: string;
+          description?: string;
+          version: number;
+          nodes: any[];
+          connections: any[];
+        };
+
+        // Calculate edge handles (input/output connection points)
+        const { inputHandles, outputHandles } = calculateEdgeHandles(
+          workflow.nodes,
+          workflow.connections
+        );
+
+        // Create composed workflow node
+        const newNode: Node = {
+          id: `node_${Date.now()}`,
+          type: 'workflowNode',
+          position,
+          data: {
+            label: workflow.name,
+            nodeType: 'twiddle.composedWorkflow',
+            parameters: {
+              workflowId: workflow.id,
+              workflowName: workflow.name,
+              workflowVersion: workflow.version,
+              isExpanded: 'false', // Always start collapsed
+              embeddedNodes: JSON.stringify(workflow.nodes),
+              embeddedConnections: JSON.stringify(workflow.connections),
+              inputHandles: JSON.stringify(inputHandles),
+              outputHandles: JSON.stringify(outputHandles),
+            },
+            onOpenProperties: handleOpenProperties,
+            onToggleExpand: handleToggleExpand,
+          },
+        };
+
+        setNodes((nds: Node[]) => [...nds, newNode]);
+      } catch (err) {
+        console.error('Failed to create composed workflow node:', err);
+        alert('Failed to load workflow for embedding');
+      }
+    } else {
+      // Regular node creation
+      const newNode: Node = {
+        id: `node_${Date.now()}`,
+        type: 'workflowNode',
+        position,
+        data: {
+          label: nodeType.displayName,
+          nodeType: nodeType.type,
+          parameters: {},
+          onOpenProperties: handleOpenProperties,
+          onToggleExpand: handleToggleExpand,
+        },
+      };
+      setNodes((nds: Node[]) => [...nds, newNode]);
+    }
+
     setShowNodePanel(false);
-    // Don't auto-open properties panel - user can right-click to open
+  }
+
+  // Helper function to calculate edge handles from embedded workflow DAG
+  function calculateEdgeHandles(nodes: any[], connections: any[]) {
+    const inputHandles: any[] = [];
+    const outputHandles: any[] = [];
+
+    // Build a map of node IDs to their connections
+    const nodeInputs = new Map<string, Set<string>>();
+    const nodeOutputs = new Map<string, Set<string>>();
+
+    nodes.forEach(node => {
+      nodeInputs.set(node.id, new Set());
+      nodeOutputs.set(node.id, new Set());
+    });
+
+    connections.forEach(conn => {
+      nodeOutputs.get(conn.sourceNodeId)?.add(conn.sourceOutput || 'main');
+      nodeInputs.get(conn.targetNodeId)?.add(conn.targetInput || 'main');
+    });
+
+    // Find edge nodes (nodes with unconnected handles)
+    nodes.forEach(node => {
+      // Check for unconnected input handles (potential input edges)
+      // For simplicity, we'll expose the first input if it has no incoming connections
+      const hasIncomingConnections = connections.some(c => c.targetNodeId === node.id);
+      if (!hasIncomingConnections) {
+        inputHandles.push({
+          handle: `${node.id}_main`,
+          label: node.name || 'Input',
+          sourceNodeId: node.id,
+          sourceHandle: 'main',
+        });
+      }
+
+      // Check for unconnected output handles (potential output edges)
+      const hasOutgoingConnections = connections.some(c => c.sourceNodeId === node.id);
+      if (!hasOutgoingConnections) {
+        outputHandles.push({
+          handle: `${node.id}_main`,
+          label: node.name || 'Output',
+          sourceNodeId: node.id,
+          sourceHandle: 'main',
+        });
+      }
+    });
+
+    return { inputHandles, outputHandles };
   }
 
   async function handleSave() {
@@ -649,22 +909,33 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setSaving(true);
 
       // Convert React Flow nodes back to workflow format
-      const workflowNodes = nodes.map((node: Node) => ({
-        id: node.id,
-        name: node.data.label,
-        type: node.data.nodeType,
-        position: node.position,
-        parameters: node.data.parameters || {},
-      }));
+      // Filter out embedded child nodes - they should not be saved as they're derived from parent parameters
+      const workflowNodes = nodes
+        .filter((node: Node) => !(node as any).parentId) // Exclude child nodes of composed workflows
+        .map((node: Node) => ({
+          id: node.id,
+          name: node.data.label,
+          type: node.data.nodeType,
+          position: node.position,
+          parameters: node.data.parameters || {},
+        }));
+
+      // Get IDs of all saved nodes for filtering edges
+      const savedNodeIds = new Set(workflowNodes.map(n => n.id));
 
       // Convert React Flow edges back to workflow connections
-      // Preserve null handle IDs - don't convert to 'main' as React Flow uses null for default handles
-      const workflowConnections = edges.map((edge: Edge) => ({
-        sourceNodeId: edge.source,
-        sourceOutput: edge.sourceHandle,
-        targetNodeId: edge.target,
-        targetInput: edge.targetHandle,
-      }));
+      // Filter out internal connections of embedded workflows
+      const workflowConnections = edges
+        .filter((edge: Edge) => {
+          // Only save edges where both source and target are saved nodes
+          return savedNodeIds.has(edge.source) && savedNodeIds.has(edge.target);
+        })
+        .map((edge: Edge) => ({
+          sourceNodeId: edge.source,
+          sourceOutput: edge.sourceHandle,
+          targetNodeId: edge.target,
+          targetInput: edge.targetHandle,
+        }));
 
       if (isNew) {
         const created = await workflowsApi.create({
@@ -1078,6 +1349,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           nodesDraggable={!isReadOnly}
           nodesConnectable={!isReadOnly}
           elementsSelectable={true}
+          elevateNodesOnSelect={false}
           snapToGrid={true}
           snapGrid={[20, 20]}
           fitView

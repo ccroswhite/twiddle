@@ -10,6 +10,7 @@ import {
   SSHNode,
   ReportNode,
   SlackNode,
+  ComposedWorkflowNode,
   // Database nodes
   MSSqlNode,
   PostgreSQLNode,
@@ -39,6 +40,7 @@ const builtInNodes: NodeDefinition[] = [
   SSHNode,
   ReportNode,
   SlackNode,
+  ComposedWorkflowNode,
   // Database nodes
   MSSqlNode,
   PostgreSQLNode,

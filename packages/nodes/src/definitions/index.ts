@@ -8,6 +8,7 @@ export { WinRMNode } from './WinRM.js';
 export { SSHNode } from './SSH.js';
 export { ReportNode } from './Report.js';
 export { SlackNode } from './Slack.js';
+export { ComposedWorkflowNode } from './ComposedWorkflow.js';
 
 // Database nodes
 export {
