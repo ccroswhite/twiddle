@@ -27,6 +27,8 @@ import { GitHubSettings } from '@/components/GitHubSettings';
 import { RightPanel } from '@/components/RightPanel';
 import { EnvironmentBadge, getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
+import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
+import { formatDate, generatePropertyId } from '@/utils/workflowUtils';
 
 
 interface NodeTypeInfo {
@@ -61,11 +63,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showGitHubSettings, setShowGitHubSettings] = useState(false);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [workflowProperties, setWorkflowProperties] = useState<WorkflowProperty[]>([]);
-  const [workflowSchedule, setWorkflowSchedule] = useState<WorkflowSchedule>({
-    enabled: false,
-    mode: 'simple',
-    simple: { frequency: 'daily', time: '09:00', timezone: 'UTC' },
-  });
+  const [workflowSchedule, setWorkflowSchedule] = useState<WorkflowSchedule>(DEFAULT_SCHEDULE);
   const [githubConnected, setGithubConnected] = useState(false);
   const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
@@ -118,7 +116,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
 
   // Undo history - stores snapshots of nodes and edges
-  const MAX_HISTORY = 30;
   const [history, setHistory] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isUndoing = useRef(false);
@@ -416,7 +413,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   // Property management functions
   const handleAddProperty = useCallback(() => {
     const newProp: WorkflowProperty = {
-      id: `prop_${Date.now()}`,
+      id: generatePropertyId(),
       key: '',
       type: 'string',
       value: '',
@@ -1281,20 +1278,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }
   }
 
-  function formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  }
 
   async function handleExportPython() {
     if (isNew) {
