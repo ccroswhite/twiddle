@@ -198,6 +198,192 @@ export function SetDataNodeEditor({ parameters, updateParameter }: ParameterEdit
 }
 
 // =============================================================================
+// RespondToWebhook Node Editor
+// =============================================================================
+
+export function RespondToWebhookNodeEditor({ parameters, updateParameter }: ParameterEditorProps) {
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Status Code
+                </label>
+                <select
+                    value={(parameters.statusCode as number) || 200}
+                    onChange={(e) => updateParameter('statusCode', parseInt(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                    <option value={200}>200 OK</option>
+                    <option value={201}>201 Created</option>
+                    <option value={202}>202 Accepted</option>
+                    <option value={204}>204 No Content</option>
+                    <option value={400}>400 Bad Request</option>
+                    <option value={401}>401 Unauthorized</option>
+                    <option value={403}>403 Forbidden</option>
+                    <option value={404}>404 Not Found</option>
+                    <option value={500}>500 Internal Server Error</option>
+                </select>
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Content Type
+                </label>
+                <select
+                    value={(parameters.contentType as string) || 'application/json'}
+                    onChange={(e) => updateParameter('contentType', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                    <option value="application/json">application/json</option>
+                    <option value="text/plain">text/plain</option>
+                    <option value="text/html">text/html</option>
+                    <option value="application/xml">application/xml</option>
+                </select>
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Response Headers (JSON)
+                </label>
+                <textarea
+                    value={(parameters.headers as string) || '{}'}
+                    onChange={(e) => updateParameter('headers', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-20"
+                    placeholder='{"X-Custom-Header": "value"}'
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Response Body (Python expression)
+                </label>
+                <textarea
+                    value={(parameters.body as string) || ''}
+                    onChange={(e) => updateParameter('body', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-32 bg-slate-900 text-green-400"
+                    placeholder='{"status": "success", "data": input_data}'
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                    Python expression that returns the response body. Use input_data to access data from previous nodes.
+                </p>
+            </div>
+        </div>
+    );
+}
+
+// =============================================================================
+// Webhook Node Editor
+// =============================================================================
+
+export function WebhookNodeEditor({ parameters, updateParameter }: ParameterEditorProps) {
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Webhook Path
+                </label>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-500">/webhook/</span>
+                    <input
+                        type="text"
+                        value={(parameters.path as string) || ''}
+                        onChange={(e) => updateParameter('path', e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="my-webhook-path"
+                    />
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                    Unique path for this webhook endpoint
+                </p>
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Allowed Methods
+                </label>
+                <div className="flex flex-wrap gap-2">
+                    {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((method) => {
+                        const methods = (parameters.methods as string[]) || ['POST'];
+                        const isSelected = methods.includes(method);
+                        return (
+                            <button
+                                key={method}
+                                type="button"
+                                onClick={() => {
+                                    const newMethods = isSelected
+                                        ? methods.filter((m) => m !== method)
+                                        : [...methods, method];
+                                    updateParameter('methods', newMethods.length > 0 ? newMethods : ['POST']);
+                                }}
+                                className={`px-3 py-1 text-sm rounded-lg border transition-colors ${isSelected
+                                    ? 'bg-primary-100 border-primary-300 text-primary-700'
+                                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                            >
+                                {method}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Authentication
+                </label>
+                <select
+                    value={(parameters.authentication as string) || 'none'}
+                    onChange={(e) => updateParameter('authentication', e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                    <option value="none">None (Public)</option>
+                    <option value="header">Header Token</option>
+                    <option value="basic">Basic Auth</option>
+                    <option value="query">Query Parameter</option>
+                </select>
+            </div>
+            {(parameters.authentication as string) && (parameters.authentication as string) !== 'none' && (
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        {(parameters.authentication as string) === 'header' ? 'Header Name' :
+                            (parameters.authentication as string) === 'query' ? 'Query Parameter Name' : 'Credential'}
+                    </label>
+                    <input
+                        type="text"
+                        value={(parameters.authKey as string) || ''}
+                        onChange={(e) => updateParameter('authKey', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder={(parameters.authentication as string) === 'header' ? 'X-API-Key' :
+                            (parameters.authentication as string) === 'query' ? 'api_key' : 'credential-id'}
+                    />
+                </div>
+            )}
+            {(parameters.authentication as string) && (parameters.authentication as string) !== 'none' && (parameters.authentication as string) !== 'basic' && (
+                <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Expected Token Value
+                    </label>
+                    <input
+                        type="password"
+                        value={(parameters.authValue as string) || ''}
+                        onChange={(e) => updateParameter('authValue', e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="secret-token"
+                    />
+                </div>
+            )}
+            <div className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="respondImmediately"
+                    checked={(parameters.respondImmediately as boolean) ?? false}
+                    onChange={(e) => updateParameter('respondImmediately', e.target.checked)}
+                    className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label htmlFor="respondImmediately" className="text-sm text-slate-700">
+                    Respond immediately (don't wait for workflow completion)
+                </label>
+            </div>
+        </div>
+    );
+}
+
+// =============================================================================
 // Default Editor (fallback)
 // =============================================================================
 
@@ -222,6 +408,8 @@ export const nodeParameterEditors: Record<string, React.FC<ParameterEditorProps>
     'twiddle.httpRequest': HttpRequestNodeEditor,
     'twiddle.if': IfNodeEditor,
     'twiddle.setData': SetDataNodeEditor,
+    'twiddle.respondToWebhook': RespondToWebhookNodeEditor,
+    'twiddle.webhook': WebhookNodeEditor,
 };
 
 /**
