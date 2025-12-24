@@ -2,15 +2,7 @@ import { useState } from 'react';
 import { X, Search, Code, Key, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isActivityNode, nodeIconMap as iconMap, nodeColorMap as colorMap } from '@/utils/nodeConfig';
-
-interface NodeTypeInfo {
-  type: string;
-  displayName: string;
-  description: string;
-  icon?: string;
-  iconColor?: string;
-  category: string;
-}
+import type { NodeTypeInfo } from '@/lib/api';
 
 interface NodePanelProps {
   nodes: NodeTypeInfo[];

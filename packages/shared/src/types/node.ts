@@ -64,7 +64,9 @@ export type NodeCategory =
   | 'marketing'
   | 'productivity'
   | 'sales'
-  | 'utility';
+  | 'utility'
+  | 'DEFINED CONNECTIONS'
+  | 'Existing Workflow';
 
 export interface NodeDefinition {
   type: string;

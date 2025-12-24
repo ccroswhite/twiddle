@@ -24,6 +24,7 @@ export type {
   GitHubRepo,
   GitHubStatus,
   SystemSettings,
+  NodeTypeInfo,
 } from '@twiddle/shared';
 
 import type {
@@ -51,6 +52,7 @@ import type {
   GitHubRepo,
   GitHubStatus,
   SystemSettings,
+  NodeTypeInfo,
 } from '@twiddle/shared';
 
 
@@ -303,16 +305,13 @@ export interface Workflow {
 }
 
 
-interface NodeTypeInfo {
+interface NodeDefinition {
   type: string;
   displayName: string;
   description: string;
   icon?: string;
   iconColor?: string;
   category: string;
-}
-
-interface NodeDefinition extends NodeTypeInfo {
   version: number;
   inputs: string[];
   outputs: string[];

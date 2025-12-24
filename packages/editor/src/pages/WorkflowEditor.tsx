@@ -18,7 +18,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Save, Plus, Download, Code, X, Github, ChevronRight, FolderOpen, User, Users, Clock, Trash2, Pencil, Check, Folder, FolderPlus, Shield, GripVertical, Undo2, Copy, Lock, Settings } from 'lucide-react';
-import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel } from '@/lib/api';
+import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel, type NodeTypeInfo } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
@@ -32,15 +32,6 @@ import { formatDate, generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
-
-interface NodeTypeInfo {
-  type: string;
-  displayName: string;
-  description: string;
-  icon?: string;
-  iconColor?: string;
-  category: string;
-}
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
