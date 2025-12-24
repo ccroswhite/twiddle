@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Code, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
+import { X, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { workflowsApi } from '@/lib/api';
 import { isActivityNode } from '@/utils/nodeConfig';
@@ -11,31 +11,7 @@ interface NodePropertiesPanelProps {
   onClose: () => void;
 }
 
-// Default Python code template
-const DEFAULT_PYTHON_CODE = `# Python code for this activity
-# Available variables:
-#   - input_data: dict containing input from previous nodes
-#   - context: workflow context with helper methods
-#
-# Return value will be passed to the next node
 
-def execute(input_data: dict, context) -> dict:
-    """
-    Execute the activity logic.
-    
-    Args:
-        input_data: Data from previous nodes
-        context: Workflow context
-        
-    Returns:
-        dict: Output data for next nodes
-    """
-    result = {}
-    
-    # Your code here
-    
-    return result
-`;
 
 
 function EmbeddedWorkflowProperties({ parameters, updateParameter }: { parameters: Record<string, unknown>, updateParameter: (key: string, value: unknown) => void }) {
