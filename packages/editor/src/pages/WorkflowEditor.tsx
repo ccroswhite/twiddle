@@ -29,7 +29,7 @@ import { EnvironmentBadge, getNextEnvironment, type Environment } from '@/compon
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
 import { formatDate, generatePropertyId } from '@/utils/workflowUtils';
-
+import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
 
 interface NodeTypeInfo {
   type: string;
@@ -1155,108 +1155,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
     setShowNodePanel(false);
   }
-
-  // Helper function to remap edges when collapsing a embedded workflow
-  function remapEdgesForCollapsedNode(edges: Edge[], nodeId: string, inputHandles: any[], outputHandles: any[]): Edge[] {
-    // Create mapping: embedded node ID -> parent handle ID
-    const inputMap = new Map<string, string>();  // embedded node ID -> parent input handle
-    const outputMap = new Map<string, string>(); // embedded node ID -> parent output handle
-
-    inputHandles.forEach((h: any) => {
-      inputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
-    });
-    outputHandles.forEach((h: any) => {
-      outputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
-    });
-
-    return edges.map((e: Edge) => {
-      // Check if edge connects to an embedded node
-      const isSourceEmbedded = e.source.startsWith(`${nodeId}_embedded_`);
-      const isTargetEmbedded = e.target.startsWith(`${nodeId}_embedded_`);
-      const isInternalEdge = e.id.startsWith(`${nodeId}_embedded_`);
-
-      // Remove internal edges
-      if (isInternalEdge) return null;
-
-      // Remap source if it's an embedded node (output from embedded)
-      let newSource = e.source;
-      let newSourceHandle = e.sourceHandle;
-      if (isSourceEmbedded && outputMap.has(e.source)) {
-        newSource = nodeId;
-        newSourceHandle = outputMap.get(e.source) || e.sourceHandle;
-      }
-
-      // Remap target if it's an embedded node (input to embedded)
-      let newTarget = e.target;
-      let newTargetHandle = e.targetHandle;
-      if (isTargetEmbedded && inputMap.has(e.target)) {
-        newTarget = nodeId;
-        newTargetHandle = inputMap.get(e.target) || e.targetHandle;
-      }
-
-      // Return remapped edge or original
-      if (isSourceEmbedded || isTargetEmbedded) {
-        return {
-          ...e,
-          source: newSource,
-          sourceHandle: newSourceHandle,
-          target: newTarget,
-          targetHandle: newTargetHandle,
-        };
-      }
-
-      return e;
-    }).filter((e): e is Edge => e !== null);
-  }
-
-  // Helper function to calculate edge handles from embedded workflow DAG
-  function calculateEdgeHandles(nodes: any[], connections: any[]) {
-    const inputHandles: any[] = [];
-    const outputHandles: any[] = [];
-
-    // Build a map of node IDs to their connections
-    const nodeInputs = new Map<string, Set<string>>();
-    const nodeOutputs = new Map<string, Set<string>>();
-
-    nodes.forEach(node => {
-      nodeInputs.set(node.id, new Set());
-      nodeOutputs.set(node.id, new Set());
-    });
-
-    connections.forEach(conn => {
-      nodeOutputs.get(conn.sourceNodeId)?.add(conn.sourceOutput || 'main');
-      nodeInputs.get(conn.targetNodeId)?.add(conn.targetInput || 'main');
-    });
-
-    // Find edge nodes (nodes with unconnected handles)
-    nodes.forEach(node => {
-      // Check for unconnected input handles (potential input edges)
-      // For simplicity, we'll expose the first input if it has no incoming connections
-      const hasIncomingConnections = connections.some(c => c.targetNodeId === node.id);
-      if (!hasIncomingConnections) {
-        inputHandles.push({
-          handle: `${node.id}_main`,
-          label: node.name || 'Input',
-          sourceNodeId: node.id,
-          sourceHandle: 'main',
-        });
-      }
-
-      // Check for unconnected output handles (potential output edges)
-      const hasOutgoingConnections = connections.some(c => c.sourceNodeId === node.id);
-      if (!hasOutgoingConnections) {
-        outputHandles.push({
-          handle: `${node.id}_main`,
-          label: node.name || 'Output',
-          sourceNodeId: node.id,
-          sourceHandle: 'main',
-        });
-      }
-    });
-
-    return { inputHandles, outputHandles };
-  }
-
   async function handleSave() {
     try {
       setSaving(true);
