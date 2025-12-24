@@ -1,26 +1,9 @@
 import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
+import type { WorkflowProperty, WorkflowSchedule } from '@/lib/api';
 
-export interface WorkflowProperty {
-    id: string;
-    key: string;
-    type: 'number' | 'boolean' | 'string' | 'array';
-    value: string;
-}
-
-export interface WorkflowSchedule {
-    enabled: boolean;
-    mode: 'simple' | 'cron';
-    simple?: {
-        frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
-        interval?: number;
-        time?: string;
-        daysOfWeek?: number[];
-        dayOfMonth?: number;
-        timezone?: string;
-    };
-    cron?: string;
-}
+// Re-export for convenience (used by WorkflowEditor)
+export type { WorkflowProperty, WorkflowSchedule };
 
 interface WorkflowPropertiesPanelProps {
     properties: WorkflowProperty[];

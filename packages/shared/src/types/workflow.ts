@@ -74,6 +74,31 @@ export interface WorkflowSettings {
   timezone?: string;
 }
 
+// ============================================================================
+// Sub-types for Workflow
+// ============================================================================
+
+export interface WorkflowProperty {
+  id: string;
+  key: string;
+  type: 'number' | 'boolean' | 'string' | 'array';
+  value: string;
+}
+
+export interface WorkflowSchedule {
+  enabled: boolean;
+  mode: 'simple' | 'cron';
+  simple?: {
+    frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
+    interval?: number;
+    time?: string;
+    daysOfWeek?: number[];
+    dayOfMonth?: number;
+    timezone?: string;
+  };
+  cron?: string;
+}
+
 export interface Workflow {
   id: string;
   name: string;
@@ -86,25 +111,8 @@ export interface Workflow {
   createdAt: Date;
   updatedAt: Date;
   createdBy?: string;
-  properties?: Array<{
-    id: string;
-    key: string;
-    type: 'number' | 'boolean' | 'string' | 'array';
-    value: string;
-  }>;
-  schedule?: {
-    enabled: boolean;
-    mode: 'simple' | 'cron';
-    simple?: {
-      frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
-      interval?: number;
-      time?: string;
-      daysOfWeek?: number[];
-      dayOfMonth?: number;
-      timezone?: string;
-    };
-    cron?: string;
-  };
+  properties?: WorkflowProperty[];
+  schedule?: WorkflowSchedule;
 }
 
 export interface WorkflowCreateInput {
@@ -115,25 +123,8 @@ export interface WorkflowCreateInput {
   settings?: WorkflowSettings;
   tags?: string[];
   folderId?: string;
-  properties?: Array<{
-    id: string;
-    key: string;
-    type: 'number' | 'boolean' | 'string' | 'array';
-    value: string;
-  }>;
-  schedule?: {
-    enabled: boolean;
-    mode: 'simple' | 'cron';
-    simple?: {
-      frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
-      interval?: number;
-      time?: string;
-      daysOfWeek?: number[];
-      dayOfMonth?: number;
-      timezone?: string;
-    };
-    cron?: string;
-  };
+  properties?: WorkflowProperty[];
+  schedule?: WorkflowSchedule;
 }
 
 export interface WorkflowUpdateInput {
@@ -144,23 +135,6 @@ export interface WorkflowUpdateInput {
   settings?: WorkflowSettings;
   active?: boolean;
   tags?: string[];
-  properties?: Array<{
-    id: string;
-    key: string;
-    type: 'number' | 'boolean' | 'string' | 'array';
-    value: string;
-  }>;
-  schedule?: {
-    enabled: boolean;
-    mode: 'simple' | 'cron';
-    simple?: {
-      frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
-      interval?: number;
-      time?: string;
-      daysOfWeek?: number[];
-      dayOfMonth?: number;
-      timezone?: string;
-    };
-    cron?: string;
-  };
+  properties?: WorkflowProperty[];
+  schedule?: WorkflowSchedule;
 }

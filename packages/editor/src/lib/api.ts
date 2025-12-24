@@ -25,6 +25,8 @@ export type {
   GitHubStatus,
   SystemSettings,
   NodeTypeInfo,
+  WorkflowProperty,
+  WorkflowSchedule,
 } from '@twiddle/shared';
 
 import type {
