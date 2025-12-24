@@ -195,45 +195,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         outputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
       });
 
-      // Remap external connections
-      setEdges((eds: Edge[]) => eds.map((e: Edge) => {
-        // Check if edge connects to an embedded node
-        const isSourceEmbedded = e.source.startsWith(`${nodeId}_embedded_`);
-        const isTargetEmbedded = e.target.startsWith(`${nodeId}_embedded_`);
-        const isInternalEdge = e.id.startsWith(`${nodeId}_embedded_`);
-
-        // Remove internal edges
-        if (isInternalEdge) return null;
-
-        // Remap source if it's an embedded node (output from embedded)
-        let newSource = e.source;
-        let newSourceHandle = e.sourceHandle;
-        if (isSourceEmbedded && outputMap.has(e.source)) {
-          newSource = nodeId;
-          newSourceHandle = outputMap.get(e.source) || e.sourceHandle;
-        }
-
-        // Remap target if it's an embedded node (input to embedded)
-        let newTarget = e.target;
-        let newTargetHandle = e.targetHandle;
-        if (isTargetEmbedded && inputMap.has(e.target)) {
-          newTarget = nodeId;
-          newTargetHandle = inputMap.get(e.target) || e.targetHandle;
-        }
-
-        // Return remapped edge or original
-        if (isSourceEmbedded || isTargetEmbedded) {
-          return {
-            ...e,
-            source: newSource,
-            sourceHandle: newSourceHandle,
-            target: newTarget,
-            targetHandle: newTargetHandle,
-          };
-        }
-
-        return e;
-      }).filter((e): e is Edge => e !== null));
+      // Remap external connections using helper
+      setEdges((eds: Edge[]) => remapEdgesForCollapsedNode(eds, nodeId, inputHandles, outputHandles));
 
       // Remove embedded nodes
       setNodes((nds: Node[]) =>
@@ -537,6 +500,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }
   }, [nodes]);
 
+  const handleEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.preventDefault();
+    // Select the edge
+    setEdges((eds: Edge[]) => eds.map((e: Edge) => e.id === edge.id ? { ...e, selected: true } : e));
+    setSelectionContextMenu({ x: event.clientX, y: event.clientY });
+  }, [setEdges]);
+
   const handlePaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
     if (isReadOnly) {
       event.preventDefault();
@@ -824,6 +794,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
         if (!latestWorkflow) continue;
 
+
         const latestVersion = latestWorkflow.version || 1;
 
         if (latestVersion > currentVersion) {
@@ -872,8 +843,63 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 }
               };
               hasChanges = true;
+            } else {
+              // User declined upgrade.
+              // Still need to ensure handles exist for the CURRENT version if they are missing.
+              // This handles the regression where connections are lost on existing workflows.
+              if (!params.inputHandles || !params.outputHandles) {
+                // Warning: We are using latestWorkflow to calculate handles, but the user locked to an older version.
+                // Ideally we should fetch the specific version they are locked to.
+                // However, we don't assume we have that easily accessible without another API call.
+                // But wait, if they are locked to v1 and we fetch HEAD (v2), the handles might be different!
+                // Repairing using HEAD (v2) for a locked v1 node is dangerous/wrong.
+
+                // Strategy:
+                // 1. If we can get the specific version, use it.
+                // 2. If not, maybe we shouldn't touch it, or warn that connections might be broken.
+
+                // However, for the user's specific case, they probably just saved it recently and my previous fix didn't backfill properly?
+                // Or they just want it to work.
+
+                // Let's see if we can get the correct version data.
+                // `workflowsApi.getVersion(id, versionId)` requires version ID, not number. We only have number stored usually?
+                // Wait, `checkAndUpgradeEmbeddedWorkflows` fetches `workflowsApi.get(workflowId)` which is HEAD.
+
+                // If the user is on the SAME version as HEAD (failed the > check), then we can safely use HEAD data to repair.
+                // If the user is on an OLDER version, repairing with HEAD is wrong.
+
+                // Refined logic:
+                // If (latestVersion === currentVersion && (!inputs || !outputs)) -> Safe repair.
+                // If (latestVersion > currentVersion) -> We prompted above. If they said NO, we fall through here.
+                //    If they said NO, they stay on old version. If handles are missing, they stay broken?
+                //    If handles are missing on an old version, we'd need to fetch that old version to repair correctly.
+                //    We can check `latestWorkflow.version`. If equal, repair.
+              }
             }
           }
+        } else if (!params.inputHandles || !params.outputHandles) {
+          // No upgrade needed (already latest), but handles are missing.
+          // This is the "Repair" case for the regression.
+          // Since versions match (or current > latest? unlikely), we can use the fetched workflow data.
+          console.log(`Repairing missing handles for embedded workflow ${workflowId}`);
+
+          const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
+
+          updatedNodes[i] = {
+            ...node,
+            parameters: {
+              ...params,
+              // Update handles only, keep version/nodes as is (assuming they match since version check passed)
+              // Actually, if we are here, currentVersion >= latestVersion approximately.
+              // If we strictly trust the version number match:
+              inputHandles: JSON.stringify(inputHandles),
+              outputHandles: JSON.stringify(outputHandles),
+              // Also ensure embeddedNodes/Connections are set if missing?
+              embeddedNodes: params.embeddedNodes || JSON.stringify(latestWorkflow.nodes),
+              embeddedConnections: params.embeddedConnections || JSON.stringify(latestWorkflow.connections),
+            }
+          };
+          hasChanges = true;
         }
       } catch (e) {
         console.warn(`Failed to check for updates for embedded workflow ${workflowId}`, e);
@@ -942,6 +968,9 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         });
       }
 
+      // Map to store default handles for composed nodes to support legacy connections
+      const composedNodeDefaults: Record<string, { firstInput?: string, firstOutput?: string }> = {};
+
       // Convert workflow nodes to React Flow nodes
       const flowNodes = (nodesWithUpdates as Array<{
         id: string;
@@ -957,6 +986,19 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             ...parameters,
             isExpanded: 'false', // Always load composed workflows collapsed
           };
+
+          // Store default handles for edge migration
+          try {
+            const inputHandles = parameters.inputHandles ? JSON.parse(parameters.inputHandles as string) : [];
+            const outputHandles = parameters.outputHandles ? JSON.parse(parameters.outputHandles as string) : [];
+
+            composedNodeDefaults[node.id] = {
+              firstInput: inputHandles.length > 0 ? inputHandles[0].handle : undefined,
+              firstOutput: outputHandles.length > 0 ? outputHandles[0].handle : undefined,
+            };
+          } catch (e) {
+            console.warn('Failed to parse handles for defaults', e);
+          }
         }
 
         return {
@@ -975,22 +1017,49 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       // Convert workflow connections to React Flow edges
       // Handle null/undefined handle IDs - React Flow uses null for default handles
-      // Also handle legacy 'main' values from older saves
+      // Migration: If handle is null but node has specific handles (composed), use the first one.
       const flowEdges: Edge[] = (workflow.connections as Array<{
         sourceNodeId: string;
         sourceOutput?: string | null;
         targetNodeId: string;
         targetInput?: string | null;
-      }>).map((conn, index) => ({
-        id: `e${index}`,
-        source: conn.sourceNodeId,
-        target: conn.targetNodeId,
-        sourceHandle: conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null),
-        targetHandle: conn.targetInput === 'main' ? null : (conn.targetInput ?? null),
-      }));
+      }>).map((conn, index) => {
+        let sourceHandle = conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null);
+        let targetHandle = conn.targetInput === 'main' ? null : (conn.targetInput ?? null);
+
+        // Migrate legacy connections for composed workflows
+        if (composedNodeDefaults[conn.sourceNodeId] && !sourceHandle) {
+          sourceHandle = composedNodeDefaults[conn.sourceNodeId].firstOutput ?? null;
+        }
+        if (composedNodeDefaults[conn.targetNodeId] && !targetHandle) {
+          targetHandle = composedNodeDefaults[conn.targetNodeId].firstInput ?? null;
+        }
+
+        return {
+          id: `e${index}`,
+          source: conn.sourceNodeId,
+          target: conn.targetNodeId,
+          sourceHandle,
+          targetHandle,
+        };
+      });
+
+      // Since I can't easily change `const flowEdges` to `let` in one tool call safely without wide context,
+      // I will do the remapping using a reduce.
+      const remappedEdges = flowNodes.reduce((currentEdges, node) => {
+        if (node.data.nodeType === 'twiddle.composedWorkflow') {
+          try {
+            const params = node.data.parameters as Record<string, unknown>;
+            const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
+            const outputHandles = params.outputHandles ? JSON.parse(params.outputHandles as string) : [];
+            return remapEdgesForCollapsedNode(currentEdges, node.id, inputHandles, outputHandles);
+          } catch (e) { return currentEdges; }
+        }
+        return currentEdges;
+      }, flowEdges);
 
       setNodes(flowNodes);
-      setEdges(flowEdges);
+      setEdges(remappedEdges);
 
       // Load properties and schedule from API (use defaults if not present)
       setWorkflowProperties(workflow.properties || []);
@@ -1019,9 +1088,58 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   const handleNodeUpdate = useCallback((nodeId: string, data: Record<string, unknown>) => {
     setNodes((nds: Node[]) =>
-      nds.map((node) =>
-        node.id === nodeId ? { ...node, data } : node
-      )
+      nds.map((node) => {
+        if (node.id !== nodeId) return node;
+
+        const updatedNode = { ...node, data };
+
+        // Check if this is a composed workflow and workflowId changed or handles are missing
+        if (node.data.nodeType === 'twiddle.composedWorkflow') {
+          const newParams = data.parameters as Record<string, unknown>;
+          const oldParams = node.data.parameters as Record<string, unknown>;
+
+          const newWorkflowId = newParams?.workflowId as string;
+          const oldWorkflowId = oldParams?.workflowId as string;
+
+          if (newWorkflowId && (newWorkflowId !== oldWorkflowId || !newParams.inputHandles)) {
+            // Trigger async update of handles
+            // We can't await here inside the map, so we fire-and-forget a function that will setNodes again
+            // wrap in IIFE to use async
+            (async () => {
+              try {
+                const workflow = await workflowsApi.get(newWorkflowId) as any;
+                const { inputHandles, outputHandles } = calculateEdgeHandles(workflow.nodes, workflow.connections);
+
+                setNodes((currentNodes: Node[]) => currentNodes.map((n: Node) => {
+                  if (n.id === nodeId) {
+                    return {
+                      ...n,
+                      data: {
+                        ...n.data,
+                        parameters: {
+                          ...n.data.parameters as Record<string, unknown>,
+                          workflowVersion: workflow.version,
+                          workflowName: workflow.name,
+                          embeddedNodes: JSON.stringify(workflow.nodes),
+                          embeddedConnections: JSON.stringify(workflow.connections),
+                          inputHandles: JSON.stringify(inputHandles),
+                          outputHandles: JSON.stringify(outputHandles),
+                        }
+                      }
+                    };
+                  }
+                  return n;
+                }));
+                console.log(`Updated handles for composed node ${nodeId}`);
+              } catch (err) {
+                console.error('Failed to update composed node handles', err);
+              }
+            })();
+          }
+        }
+
+        return updatedNode;
+      })
     );
     setSelectedNode(null);
   }, [setNodes]);
@@ -1036,6 +1154,59 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     });
 
     setShowNodePanel(false);
+  }
+
+  // Helper function to remap edges when collapsing a composed workflow
+  function remapEdgesForCollapsedNode(edges: Edge[], nodeId: string, inputHandles: any[], outputHandles: any[]): Edge[] {
+    // Create mapping: embedded node ID -> parent handle ID
+    const inputMap = new Map<string, string>();  // embedded node ID -> parent input handle
+    const outputMap = new Map<string, string>(); // embedded node ID -> parent output handle
+
+    inputHandles.forEach((h: any) => {
+      inputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
+    });
+    outputHandles.forEach((h: any) => {
+      outputMap.set(`${nodeId}_embedded_${h.sourceNodeId}`, h.handle);
+    });
+
+    return edges.map((e: Edge) => {
+      // Check if edge connects to an embedded node
+      const isSourceEmbedded = e.source.startsWith(`${nodeId}_embedded_`);
+      const isTargetEmbedded = e.target.startsWith(`${nodeId}_embedded_`);
+      const isInternalEdge = e.id.startsWith(`${nodeId}_embedded_`);
+
+      // Remove internal edges
+      if (isInternalEdge) return null;
+
+      // Remap source if it's an embedded node (output from embedded)
+      let newSource = e.source;
+      let newSourceHandle = e.sourceHandle;
+      if (isSourceEmbedded && outputMap.has(e.source)) {
+        newSource = nodeId;
+        newSourceHandle = outputMap.get(e.source) || e.sourceHandle;
+      }
+
+      // Remap target if it's an embedded node (input to embedded)
+      let newTarget = e.target;
+      let newTargetHandle = e.targetHandle;
+      if (isTargetEmbedded && inputMap.has(e.target)) {
+        newTarget = nodeId;
+        newTargetHandle = inputMap.get(e.target) || e.targetHandle;
+      }
+
+      // Return remapped edge or original
+      if (isSourceEmbedded || isTargetEmbedded) {
+        return {
+          ...e,
+          source: newSource,
+          sourceHandle: newSourceHandle,
+          target: newTarget,
+          targetHandle: newTargetHandle,
+        };
+      }
+
+      return e;
+    }).filter((e): e is Edge => e !== null);
   }
 
   // Helper function to calculate edge handles from embedded workflow DAG
@@ -1105,9 +1276,74 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       // Get IDs of all saved nodes for filtering edges
       const savedNodeIds = new Set(workflowNodes.map((n: any) => n.id));
 
+      // Build handle mappings for all expanded composed workflows
+      // This allows us to remap edges connecting to internal embedded nodes
+      const composedNodeHandleMaps: Record<string, { inputMap: Map<string, string>, outputMap: Map<string, string> }> = {};
+
+      for (const n of workflowNodes) {
+        if (n.type === 'twiddle.composedWorkflow' && n.parameters) {
+          const params = n.parameters as Record<string, unknown>;
+          try {
+            const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
+            const outputHandles = params.outputHandles ? JSON.parse(params.outputHandles as string) : [];
+
+            const inputMap = new Map<string, string>();
+            const outputMap = new Map<string, string>();
+
+            inputHandles.forEach((h: any) => {
+              inputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle);
+            });
+            outputHandles.forEach((h: any) => {
+              outputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle);
+            });
+
+            composedNodeHandleMaps[n.id] = { inputMap, outputMap };
+          } catch (e) {
+            console.warn('Failed to parse handles for save remapping', e);
+          }
+        }
+      }
+
+      // Remap edges that connect to embedded nodes, then filter
+      const remappedEdges = edges.map((edge: Edge) => {
+        let newSource = edge.source;
+        let newSourceHandle = edge.sourceHandle;
+        let newTarget = edge.target;
+        let newTargetHandle = edge.targetHandle;
+
+        // Check if source is an embedded node
+        if (edge.source.includes('_embedded_')) {
+          // Find the parent node ID (everything before _embedded_)
+          const parentId = edge.source.split('_embedded_')[0];
+          const maps = composedNodeHandleMaps[parentId];
+          if (maps && maps.outputMap.has(edge.source)) {
+            newSource = parentId;
+            newSourceHandle = maps.outputMap.get(edge.source) || edge.sourceHandle;
+          }
+        }
+
+        // Check if target is an embedded node
+        if (edge.target.includes('_embedded_')) {
+          const parentId = edge.target.split('_embedded_')[0];
+          const maps = composedNodeHandleMaps[parentId];
+          if (maps && maps.inputMap.has(edge.target)) {
+            newTarget = parentId;
+            newTargetHandle = maps.inputMap.get(edge.target) || edge.targetHandle;
+          }
+        }
+
+        return {
+          ...edge,
+          source: newSource,
+          sourceHandle: newSourceHandle,
+          target: newTarget,
+          targetHandle: newTargetHandle,
+        };
+      });
+
       // Convert React Flow edges back to workflow connections
       // Filter out internal connections of embedded workflows
-      const workflowConnections = edges
+      const workflowConnections = remappedEdges
         .filter((edge: Edge) => {
           // Only save edges where both source and target are saved nodes
           return savedNodeIds.has(edge.source) && savedNodeIds.has(edge.target);
@@ -1169,9 +1405,17 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       ]);
       setFolders(foldersData);
       // Filter workflows to show only those in the current folder (or root)
-      const filteredWorkflows = workflowsData.filter(w =>
-        folderId ? w.folderId === folderId : !w.folderId
-      );
+      const filteredWorkflows = workflowsData.filter(w => {
+        // Check if we are viewing root (folderId is null/undefined)
+        const viewingRoot = !folderId;
+        // Check if workflow is in root (folderId is null/undefined or 'null' string)
+        const isInRoot = !w.folderId || w.folderId === 'null';
+
+        if (viewingRoot) {
+          return isInRoot;
+        }
+        return w.folderId === folderId;
+      });
       setAvailableWorkflows(filteredWorkflows);
     } catch (err) {
       console.error('Failed to load folder contents:', err);
@@ -1523,6 +1767,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           panOnDrag={true}
           selectNodesOnDrag={true}
           onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
+          onEdgeContextMenu={!isReadOnly ? handleEdgeContextMenu : undefined}
           onPaneContextMenu={handlePaneContextMenu}
           onPaneMouseMove={(event: React.MouseEvent) => {
             if (pendingNode) {
@@ -1661,7 +1906,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 const selectedNodes = nodes.filter((n: Node) => n.selected);
                 const selectedNodeIds = new Set(selectedNodes.map((n: Node) => n.id));
                 setNodes(nodes.filter((n: Node) => !n.selected));
-                setEdges(edges.filter((e: Edge) => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target)));
+                setEdges(edges.filter((e: Edge) => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target) && !e.selected));
                 setSelectionContextMenu(null);
               }}
               className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"

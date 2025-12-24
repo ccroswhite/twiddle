@@ -220,18 +220,54 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
           </div>
 
           {/* Input/Output Handles on the container */}
-          <Handle
-            type="target"
-            position={Position.Left}
-            className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
-            style={{ top: '50%' }}
-          />
-          <Handle
-            type="source"
-            position={Position.Right}
-            className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
-            style={{ top: '50%' }}
-          />
+          {(() => {
+            const inputHandles = data.parameters?.inputHandles
+              ? JSON.parse(data.parameters.inputHandles as string)
+              : [];
+            const outputHandles = data.parameters?.outputHandles
+              ? JSON.parse(data.parameters.outputHandles as string)
+              : [];
+
+            return (
+              <>
+                {/* Input handles on the left */}
+                {inputHandles.map((handle: any, index: number) => {
+                  const position = inputHandles.length > 1
+                    ? (index / (inputHandles.length - 1)) * 100
+                    : 50;
+                  return (
+                    <Handle
+                      key={`input-${handle.handle}`}
+                      type="target"
+                      position={Position.Left}
+                      id={handle.handle}
+                      className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
+                      style={{ top: `${position}%` }}
+                      title={handle.label}
+                    />
+                  );
+                })}
+
+                {/* Output handles on the right */}
+                {outputHandles.map((handle: any, index: number) => {
+                  const position = outputHandles.length > 1
+                    ? (index / (outputHandles.length - 1)) * 100
+                    : 50;
+                  return (
+                    <Handle
+                      key={`output-${handle.handle}`}
+                      type="source"
+                      position={Position.Right}
+                      id={handle.handle}
+                      className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
+                      style={{ top: `${position}%` }}
+                      title={handle.label}
+                    />
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
 
         {/* Context Menu */}
