@@ -96,6 +96,7 @@ export function EditorToolbar({
                     <Undo2 className="w-4 h-4" />
                     Undo
                 </button>
+                <div className="w-px h-6 bg-slate-200" />
                 <button
                     onClick={onOpenBrowser}
                     className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
