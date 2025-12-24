@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef } from 'react';
+import { memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useReactFlow, Node as FlowNode } from '@xyflow/react';
 import { Settings, Copy, Trash2, Zap, Maximize2, Minimize2, Layers } from 'lucide-react';
@@ -7,6 +7,7 @@ import {
   getNodeColor,
   isActivityNode
 } from '@/utils/nodeConfig';
+import { useContextMenu } from '@/hooks/useContextMenu';
 
 interface WorkflowNodeProps {
   id: string;
@@ -23,8 +24,7 @@ interface WorkflowNodeProps {
 
 function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   const { deleteElements, setNodes, getNode } = useReactFlow();
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const { contextMenu, menuRef, handleContextMenu, closeMenu } = useContextMenu();
 
   // Check if this is a credential node
   const isCredential = data.nodeType.startsWith('credential.');
@@ -35,54 +35,13 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   const Icon = getNodeIcon(data.nodeType, isCredential);
   const bgColor = getNodeColor(data.nodeType, isCredential);
 
-  // Close context menu when clicking outside, pressing Escape, or scrolling
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setContextMenu(null);
-      }
-    };
-
-    const handleScroll = () => {
-      setContextMenu(null);
-    };
-
-    // Use capture phase to catch clicks before they're handled elsewhere
-    document.addEventListener('mousedown', handleClickOutside, true);
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('scroll', handleScroll, true);
-    // Also close on right-click elsewhere
-    document.addEventListener('contextmenu', handleClickOutside, true);
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside, true);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('scroll', handleScroll, true);
-      document.removeEventListener('contextmenu', handleClickOutside, true);
-    };
-  }, [contextMenu]);
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  };
-
   const handleDelete = () => {
-    setContextMenu(null);
+    closeMenu();
     deleteElements({ nodes: [{ id }] });
   };
 
   const handleCopy = () => {
-    setContextMenu(null);
+    closeMenu();
     const currentNode = getNode(id);
     if (!currentNode) return;
 
@@ -128,14 +87,14 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   };
 
   const handleOpenProperties = () => {
-    setContextMenu(null);
+    closeMenu();
     if (data.onOpenProperties) {
       data.onOpenProperties(id);
     }
   };
 
   const handleToggleExpand = () => {
-    setContextMenu(null);
+    closeMenu();
     if (data.onToggleExpand) {
       data.onToggleExpand(id);
     }
