@@ -128,25 +128,6 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
       // code, httpRequest, if, setData, respondToWebhook, webhook,
       // ssh, winrm, interval, htmlExtract, switch, postgresql, mysql, mssql
 
-      case 'twiddle.if':
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Condition (Python expression)
-              </label>
-              <textarea
-                value={(parameters.condition as string) || ''}
-                onChange={(e) => updateParameter('condition', e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-24 bg-slate-900 text-green-400"
-                placeholder="input_data.get('value') > 10"
-              />
-              <p className="text-xs text-slate-500 mt-1">
-                Python expression that evaluates to True or False
-              </p>
-            </div>
-          </div>
-        );
 
       case 'twiddle.respondToWebhook':
         return (
