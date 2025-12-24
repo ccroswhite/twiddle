@@ -1,40 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Database, X, Eye, EyeOff, Users, Share2, Pencil } from 'lucide-react';
-import { credentialsApi, groupsApi, type CredentialWithAccess, type Group } from '@/lib/api';
+import { credentialsApi, groupsApi, type CredentialWithAccess, type Group, type CredentialData } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-
-interface CredentialData {
-  // Basic Auth
-  username?: string;
-  password?: string;
-  // Bearer Token / API Key
-  token?: string;
-  apiKey?: string;
-  // Database
-  host?: string;
-  port?: number;
-  database?: string;
-  // SSH
-  privateKey?: string;
-  passphrase?: string;
-  // TLS/SSL
-  useTls?: boolean;
-  tlsCert?: string;
-  tlsKey?: string;
-  tlsCa?: string;
-  // OAuth2
-  clientId?: string;
-  clientSecret?: string;
-  accessToken?: string;
-  refreshToken?: string;
-  // Snowflake specific
-  account?: string;
-  warehouse?: string;
-  role?: string;
-  // WinRM
-  domain?: string;
-  useHttps?: boolean;
-}
 
 // Define which fields each credential type needs
 const credentialFields: Record<string, { label: string; field: keyof CredentialData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
@@ -612,8 +579,8 @@ export function Credentials() {
               {testResult && (
                 <div
                   className={`p-3 rounded-lg text-sm ${testResult.success
-                      ? 'bg-green-50 text-green-800 border border-green-200'
-                      : 'bg-red-50 text-red-800 border border-red-200'
+                    ? 'bg-green-50 text-green-800 border border-green-200'
+                    : 'bg-red-50 text-red-800 border border-red-200'
                     }`}
                 >
                   <div className="flex items-center gap-2">

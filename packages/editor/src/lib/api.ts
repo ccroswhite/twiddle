@@ -12,6 +12,7 @@ export type {
   CredentialWithAccess,
   CredentialCreateInput,
   CredentialUpdateInput,
+  CredentialData,
   Group,
   GroupMember,
   GroupCreateInput,

@@ -2,11 +2,51 @@
  * Credential types for Twiddle
  */
 
+/**
+ * Type-safe definition of all possible credential data fields.
+ * Different credential types use different subsets of these fields.
+ */
+export interface CredentialData {
+  // Authentication
+  username?: string;
+  password?: string;
+  token?: string;
+  apiKey?: string;
+
+  // Database connection
+  host?: string;
+  port?: number;
+  database?: string;
+
+  // SSH/TLS
+  privateKey?: string;
+  passphrase?: string;
+  useTls?: boolean;
+  tlsCert?: string;
+  tlsKey?: string;
+  tlsCa?: string;
+
+  // OAuth2
+  clientId?: string;
+  clientSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+
+  // Snowflake specific
+  account?: string;
+  warehouse?: string;
+  role?: string;
+
+  // WinRM
+  domain?: string;
+  useHttps?: boolean;
+}
+
 export interface Credential {
   id: string;
   name: string;
   type: string;
-  data: Record<string, unknown>;
+  data: CredentialData;
   createdAt: Date;
   updatedAt: Date;
   createdBy?: string;
