@@ -1,16 +1,7 @@
 import { useState } from 'react';
-import { X, Search, Globe, Code, GitBranch, Terminal, Database, Server, Key, Send, Webhook, FileCode, Zap, Layers } from 'lucide-react';
+import { X, Search, Code, Key, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-// Trigger nodes are not activities - they start workflows
-const TRIGGER_NODE_TYPES = new Set([
-  'twiddle.webhook',
-]);
-
-// Check if a node type is an activity (not a trigger)
-const isActivityNode = (nodeType: string): boolean => {
-  return !TRIGGER_NODE_TYPES.has(nodeType);
-};
+import { isActivityNode, nodeIconMap as iconMap, nodeColorMap as colorMap } from '@/utils/nodeConfig';
 
 interface NodeTypeInfo {
   type: string;
@@ -26,52 +17,6 @@ interface NodePanelProps {
   onSelect: (node: NodeTypeInfo) => void;
   onClose: () => void;
 }
-
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'twiddle.httpRequest': Globe,
-  'twiddle.code': Code,
-  'twiddle.if': GitBranch,
-  'twiddle.respondToWebhook': Send,
-  'twiddle.webhook': Webhook,
-  'twiddle.htmlExtract': FileCode,
-  'twiddle.winrm': Terminal,
-  'twiddle.ssh': Server,
-  'twiddle.composedWorkflow': Layers,
-  // Database nodes
-  'twiddle.mssql': Database,
-  'twiddle.postgresql': Database,
-  'twiddle.mysql': Database,
-  'twiddle.cassandra': Database,
-  'twiddle.redis': Database,
-  'twiddle.valkey': Database,
-  'twiddle.opensearch': Search,
-  'twiddle.elasticsearch': Search,
-  'twiddle.snowflake': Database,
-  'twiddle.prestodb': Database,
-};
-
-const colorMap: Record<string, string> = {
-  'twiddle.httpRequest': 'bg-blue-500',
-  'twiddle.code': 'bg-orange-500',
-  'twiddle.if': 'bg-yellow-500',
-  'twiddle.respondToWebhook': 'bg-emerald-500',
-  'twiddle.webhook': 'bg-indigo-500',
-  'twiddle.htmlExtract': 'bg-pink-500',
-  'twiddle.winrm': 'bg-sky-600',
-  'twiddle.ssh': 'bg-green-600',
-  'twiddle.composedWorkflow': 'bg-violet-600',
-  // Database nodes
-  'twiddle.mssql': 'bg-red-600',
-  'twiddle.postgresql': 'bg-blue-700',
-  'twiddle.mysql': 'bg-blue-500',
-  'twiddle.cassandra': 'bg-cyan-600',
-  'twiddle.redis': 'bg-red-500',
-  'twiddle.valkey': 'bg-indigo-500',
-  'twiddle.opensearch': 'bg-blue-600',
-  'twiddle.elasticsearch': 'bg-yellow-500',
-  'twiddle.snowflake': 'bg-cyan-400',
-  'twiddle.prestodb': 'bg-blue-400',
-};
 
 export function NodePanel({ nodes, onSelect, onClose }: NodePanelProps) {
   const [search, setSearch] = useState('');
