@@ -21,8 +21,10 @@ import {
     Shield,
     GripVertical,
     Plus,
+    History,
 } from 'lucide-react';
 import { RightPanel } from '@/components/RightPanel';
+import { EnvironmentBadge } from '@/components/EnvironmentBadge';
 import { formatDate } from '@/utils/workflowUtils';
 import type { Workflow, Folder as FolderType } from '@/lib/api';
 
@@ -81,6 +83,9 @@ export interface WorkflowBrowserPanelProps {
     onDeleteWorkflow: (workflow: Workflow) => void;
     onOpenPermissions: (folder: FolderType) => void;
     onCreateNewWorkflow: (folderId: string | null) => void;
+
+    // Optional: Version history
+    onVersionHistory?: (workflow: Workflow) => void;
 }
 
 // =============================================================================
@@ -121,6 +126,7 @@ export function WorkflowBrowserPanel({
     onDeleteWorkflow,
     onOpenPermissions,
     onCreateNewWorkflow,
+    onVersionHistory,
 }: WorkflowBrowserPanelProps) {
     // Internal state for workflow editing (inline rename)
     const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
@@ -399,7 +405,20 @@ export function WorkflowBrowserPanel({
                                                 </>
                                             )}
                                         </div>
-                                        <div className="hidden group-hover:flex items-center gap-1">
+                                        <div className="flex items-center gap-1">
+                                            <EnvironmentBadge environment={workflow.environment} />
+                                            {onVersionHistory && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onVersionHistory(workflow);
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
+                                                    title="Version History"
+                                                >
+                                                    <History className="w-4 h-4" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
