@@ -7,6 +7,7 @@
  */
 
 import type { Edge } from '@xyflow/react';
+import type { WorkflowNode as SharedWorkflowNode, WorkflowConnection as SharedWorkflowConnection } from '@twiddle/shared';
 
 // =============================================================================
 // Types
@@ -19,18 +20,23 @@ export interface HandleInfo {
     sourceHandle: string;
 }
 
-export interface WorkflowNode {
-    id: string;
+/**
+ * Minimal workflow node type for edge calculations.
+ * Uses only the fields needed from the full WorkflowNode type.
+ */
+export type WorkflowNode = Pick<SharedWorkflowNode, 'id'> & {
     name?: string;
     [key: string]: unknown;
-}
+};
 
-export interface WorkflowConnection {
-    sourceNodeId: string;
-    targetNodeId: string;
+/**
+ * Workflow connection with optional output/input handles.
+ * More flexible than shared type for edge processing.
+ */
+export type WorkflowConnection = Pick<SharedWorkflowConnection, 'sourceNodeId' | 'targetNodeId'> & {
     sourceOutput?: string;
     targetInput?: string;
-}
+};
 
 // =============================================================================
 // Edge Remapping

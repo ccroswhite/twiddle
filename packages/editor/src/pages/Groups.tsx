@@ -1,54 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, X, Workflow, UserPlus, UserMinus, Edit2, Save, ChevronLeft, ShieldCheck } from 'lucide-react';
-import { groupsApi, usersApi } from '@/lib/api';
+import { groupsApi, usersApi, type Group, type GroupMember, type User } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-
-interface Group {
-  id: string;
-  name: string;
-  description?: string;
-  isDefault: boolean;
-  memberCount?: number;
-  workflowCount?: number;
-  role?: string;
-}
-
-interface GroupMember {
-  id: string;
-  role: string;
-  createdAt: string;
-  user: {
-    id: string;
-    email: string;
-    name?: string;
-  };
-}
-
-interface User {
-  id: string;
-  email: string;
-  name?: string;
-  isAdmin?: boolean;
-}
 
 export function Groups() {
   const { user: currentUser } = useAuth();
   const isSystemAdmin = currentUser?.isAdmin ?? false;
-  
+
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newGroup, setNewGroup] = useState({ name: '', description: '', isDefault: false });
-  
+
   // Selected group for detail view
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
   const [members, setMembers] = useState<GroupMember[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
-  
+
   // Edit group state
   const [editingGroup, setEditingGroup] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', description: '', isDefault: false });
-  
+
   // Add member state
   const [showAddMember, setShowAddMember] = useState(false);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -354,7 +326,7 @@ export function Groups() {
                 const canChangeRole = canManageMembers(selectedGroup?.role);
                 // Only system admin can assign/remove admin role
                 const canSetAdmin = canAssignAdminRole;
-                
+
                 return (
                   <div key={member.id} className="flex items-center justify-between p-4">
                     <div className="flex items-center gap-3">
@@ -426,7 +398,7 @@ export function Groups() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              
+
               {availableUsers.length === 0 ? (
                 <p className="text-slate-500 text-center py-4">
                   All users are already members of this group.
@@ -520,7 +492,7 @@ export function Groups() {
             <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-slate-900 mb-2">No groups yet</h3>
             <p className="text-slate-500 mb-4">
-              {canCreateGroups 
+              {canCreateGroups
                 ? 'Create a group to organize your workflows and team members'
                 : 'Contact an administrator to create groups'}
             </p>
@@ -554,9 +526,8 @@ export function Groups() {
                         </span>
                       )}
                       {group.role && group.role !== 'member' && (
-                        <span className={`px-2 py-0.5 text-xs rounded-full ${
-                          group.role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
-                        } capitalize`}>
+                        <span className={`px-2 py-0.5 text-xs rounded-full ${group.role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'
+                          } capitalize`}>
                           {group.role === 'admin' ? 'Group Admin' : group.role}
                         </span>
                       )}

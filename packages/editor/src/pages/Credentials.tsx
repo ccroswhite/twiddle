@@ -1,13 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Database, X, Eye, EyeOff, Users, Share2, Pencil } from 'lucide-react';
-import { credentialsApi, groupsApi, type CredentialWithAccess } from '@/lib/api';
+import { credentialsApi, groupsApi, type CredentialWithAccess, type Group } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
-
-interface Group {
-  id: string;
-  name: string;
-  role?: string;
-}
 
 interface CredentialData {
   // Basic Auth
@@ -166,10 +160,10 @@ export function Credentials() {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
-  
+
   // Groups the user belongs to (for sharing)
   const [userGroups, setUserGroups] = useState<Group[]>([]);
-  
+
   // For editing credential
   const [editingCredential, setEditingCredential] = useState<CredentialWithAccess | null>(null);
   const [editGroupId, setEditGroupId] = useState<string>('');
@@ -242,7 +236,7 @@ export function Credentials() {
     try {
       // Only include data if there are actual changes (non-empty values)
       const hasDataChanges = Object.values(editData).some(v => v !== '' && v !== undefined && v !== null);
-      
+
       await credentialsApi.update(editingCredential.id, {
         name: editName,
         ...(hasDataChanges && { data: editData as Record<string, unknown> }),
@@ -297,10 +291,10 @@ export function Credentials() {
 
   async function handleTestConnectivity() {
     if (!newCredential.type) return;
-    
+
     setTesting(true);
     setTestResult(null);
-    
+
     try {
       console.log('Testing credentials:', newCredential.type, newCredential.data);
       const result = await credentialsApi.testUnsaved(
@@ -455,7 +449,7 @@ export function Credentials() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
           onClick={(e) => {
             // Close modal when clicking backdrop
@@ -617,11 +611,10 @@ export function Credentials() {
               {/* Test Result */}
               {testResult && (
                 <div
-                  className={`p-3 rounded-lg text-sm ${
-                    testResult.success
+                  className={`p-3 rounded-lg text-sm ${testResult.success
                       ? 'bg-green-50 text-green-800 border border-green-200'
                       : 'bg-red-50 text-red-800 border border-red-200'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     {testResult.success ? (
@@ -685,7 +678,7 @@ export function Credentials() {
 
       {/* Edit Credential Modal */}
       {editingCredential && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
@@ -707,7 +700,7 @@ export function Credentials() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
               {/* Name */}
               <div>
