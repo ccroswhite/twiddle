@@ -31,6 +31,7 @@ import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
 import { formatDate, generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
+import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
 
 interface NodeTypeInfo {
   type: string;
@@ -72,9 +73,43 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [environment, setEnvironment] = useState<Environment>('DV');
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [showWorkflowBrowser, setShowWorkflowBrowser] = useState(false);
-  const [availableWorkflows, setAvailableWorkflows] = useState<Workflow[]>([]);
-  const [loadingWorkflows, setLoadingWorkflows] = useState(false);
+
+  // Workflow browser hook - manages folder navigation, workflows list, drag-drop
+  const workflowBrowser = useWorkflowBrowser();
+  // Destructure commonly used values for easier access
+  const {
+    isOpen: showWorkflowBrowser,
+    open: openWorkflowBrowser,
+    close: closeWorkflowBrowser,
+    loading: loadingWorkflows,
+    folders,
+    currentFolderId,
+    folderPath,
+    workflows: availableWorkflows,
+    navigateToFolder: handleNavigateToFolder,
+    navigateToBreadcrumb: handleNavigateToBreadcrumb,
+    loadContents: loadFolderContents,
+    createFolder,
+    renameFolder: handleRenameFolder,
+    deleteFolder: handleDeleteFolder,
+    showNewFolderInput,
+    setShowNewFolderInput,
+    newFolderName,
+    setNewFolderName,
+    editingFolderId,
+    setEditingFolderId,
+    editingFolderName,
+    setEditingFolderName,
+    draggingWorkflowId,
+    dragOverFolderId,
+    handleDragStart,
+    handleDragEnd,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+  } = workflowBrowser;
+
+  // Additional workflow browser state not in hook
   const [editingWorkflowId, setEditingWorkflowId] = useState<string | null>(null);
   const [editingWorkflowName, setEditingWorkflowName] = useState('');
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
@@ -85,19 +120,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [lockedBy, setLockedBy] = useState<{ id: string; name: string; email: string; isMe: boolean } | null>(null);
   const [takeoverRequest, setTakeoverRequest] = useState<{ userId: string; name: string; email: string; requestedAt: string } | null>(null);
   const [requestingLock, setRequestingLock] = useState(false);
-
-  // Folder state
-  const [folders, setFolders] = useState<FolderType[]>([]);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [folderPath, setFolderPath] = useState<FolderType[]>([]);
-  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
-  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
-  const [editingFolderName, setEditingFolderName] = useState('');
-
-  // Drag and drop state
-  const [draggingWorkflowId, setDraggingWorkflowId] = useState<string | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
 
   // Folder permissions state
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
@@ -697,7 +719,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         // Subsequent clicks - toggle the panel
         if (showWorkflowBrowser) {
           // Closing - use animated close
-          setShowWorkflowBrowser(false);
+          closeWorkflowBrowser();
         } else {
           // Opening
           handleOpenWorkflowBrowser();
@@ -1261,142 +1283,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
 
-
   function handleOpenWorkflowBrowser() {
-
-    setShowWorkflowBrowser(true);
-    setCurrentFolderId(null);
-    setFolderPath([]);
-    loadFolderContents(null);
-  }
-
-  async function loadFolderContents(folderId: string | null) {
-    try {
-      setLoadingWorkflows(true);
-      const [foldersData, workflowsData] = await Promise.all([
-        foldersApi.list(folderId || undefined),
-        workflowsApi.list(),
-      ]);
-      setFolders(foldersData);
-      // Filter workflows to show only those in the current folder (or root)
-      const filteredWorkflows = workflowsData.filter(w => {
-        // Check if we are viewing root (folderId is null/undefined)
-        const viewingRoot = !folderId;
-        // Check if workflow is in root (folderId is null/undefined or 'null' string)
-        const isInRoot = !w.folderId || w.folderId === 'null';
-
-        if (viewingRoot) {
-          return isInRoot;
-        }
-        return w.folderId === folderId;
-      });
-      setAvailableWorkflows(filteredWorkflows);
-    } catch (err) {
-      console.error('Failed to load folder contents:', err);
-    } finally {
-      setLoadingWorkflows(false);
-    }
-  }
-
-  async function handleNavigateToFolder(folder: FolderType) {
-    setCurrentFolderId(folder.id);
-    setFolderPath(prev => [...prev, folder]);
-    await loadFolderContents(folder.id);
-  }
-
-  async function handleNavigateToBreadcrumb(index: number) {
-    if (index === -1) {
-      // Navigate to root
-      setFolderPath([]);
-      setCurrentFolderId(null);
-      await loadFolderContents(null);
-    } else {
-      const newPath = folderPath.slice(0, index + 1);
-      const folder = newPath[newPath.length - 1];
-      setFolderPath(newPath);
-      setCurrentFolderId(folder?.id || null);
-      await loadFolderContents(folder?.id || null);
-    }
+    openWorkflowBrowser();
   }
 
   async function handleCreateFolder() {
     if (!newFolderName.trim()) return;
-    try {
-      const folder = await foldersApi.create({
-        name: newFolderName.trim(),
-        parentId: currentFolderId || undefined,
-      });
-      setFolders(prev => [...prev, folder]);
-      setNewFolderName('');
-      setShowNewFolderInput(false);
-    } catch (err) {
-      alert(`Failed to create folder: ${(err as Error).message}`);
-    }
-  }
-
-  async function handleRenameFolder(folderId: string, newName: string) {
-    if (!newName.trim()) return;
-    try {
-      await foldersApi.update(folderId, { name: newName.trim() });
-      setFolders(prev => prev.map(f => f.id === folderId ? { ...f, name: newName.trim() } : f));
-      setEditingFolderId(null);
-      setEditingFolderName('');
-    } catch (err) {
-      alert(`Failed to rename folder: ${(err as Error).message}`);
-    }
-  }
-
-  async function handleDeleteFolder(folderId: string) {
-    if (!confirm('Are you sure you want to delete this folder? It must be empty.')) return;
-    try {
-      await foldersApi.delete(folderId);
-      setFolders(prev => prev.filter(f => f.id !== folderId));
-    } catch (err) {
-      alert(`Failed to delete folder: ${(err as Error).message}`);
-    }
-  }
-
-  // Drag and drop handlers
-  function handleDragStart(e: React.DragEvent, workflowId: string) {
-    e.dataTransfer.setData('workflowId', workflowId);
-    setDraggingWorkflowId(workflowId);
-  }
-
-  function handleDragEnd() {
-    setDraggingWorkflowId(null);
-    setDragOverFolderId(null);
-  }
-
-  function handleDragOver(e: React.DragEvent, folderId: string | null) {
-    e.preventDefault();
-    setDragOverFolderId(folderId);
-  }
-
-  function handleDragLeave() {
-    setDragOverFolderId(null);
-  }
-
-  async function handleDrop(e: React.DragEvent, targetFolderId: string | null) {
-    e.preventDefault();
-    const workflowId = e.dataTransfer.getData('workflowId');
-    if (!workflowId) return;
-
-    try {
-      if (targetFolderId) {
-        // Move to folder
-        await foldersApi.addWorkflow(targetFolderId, workflowId);
-      } else if (currentFolderId) {
-        // Move to root (remove from current folder)
-        await foldersApi.removeWorkflow(currentFolderId, workflowId);
-      }
-      // Refresh the folder contents
-      await loadFolderContents(currentFolderId);
-    } catch (err) {
-      alert(`Failed to move workflow: ${(err as Error).message}`);
-    } finally {
-      setDraggingWorkflowId(null);
-      setDragOverFolderId(null);
-    }
+    await createFolder(newFolderName);
   }
 
   // Folder permissions handlers
@@ -1463,9 +1356,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     if (!newName.trim()) return;
     try {
       await workflowsApi.update(workflowId, { name: newName.trim() });
-      setAvailableWorkflows(workflows =>
-        workflows.map(w => w.id === workflowId ? { ...w, name: newName.trim() } : w)
-      );
+      // Refresh the workflows list
+      await loadFolderContents(currentFolderId);
       setEditingWorkflowId(null);
       setEditingWorkflowName('');
     } catch (err) {
@@ -1476,7 +1368,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   async function handleDeleteWorkflow(workflow: Workflow) {
     try {
       await workflowsApi.delete(workflow.id);
-      setAvailableWorkflows(workflows => workflows.filter(w => w.id !== workflow.id));
+      // Refresh the workflows list
+      await loadFolderContents(currentFolderId);
       setDeletingWorkflow(null);
       // If we're currently editing the deleted workflow, navigate away
       if (id === workflow.id) {
@@ -1486,7 +1379,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       alert(`Failed to delete workflow: ${(err as Error).message}`);
     }
   }
-
 
 
   async function handleExportPython() {
@@ -1833,7 +1725,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             // We load this version into the editor as Read-Only
                             // 1. Close modal
                             setShowVersionHistory(false);
-                            setShowWorkflowBrowser(false);
+                            closeWorkflowBrowser();
 
                             // 2. Fetch full version data
                             const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, ver.id);
@@ -2095,7 +1987,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       {/* Workflow Browser Panel */}
       <RightPanel
         isOpen={showWorkflowBrowser}
-        onClose={() => setShowWorkflowBrowser(false)}
+        onClose={() => closeWorkflowBrowser()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-200">
@@ -2109,7 +2001,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               <FolderPlus className="w-5 h-5" />
             </button>
             <button
-              onClick={() => setShowWorkflowBrowser(false)}
+              onClick={() => closeWorkflowBrowser()}
               className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
             >
               <X className="w-5 h-5" />
@@ -2316,7 +2208,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                   onDragStart={(e) => handleDragStart(e, workflow.id)}
                   onDragEnd={handleDragEnd}
                   onClick={() => {
-                    setShowWorkflowBrowser(false);
+                    closeWorkflowBrowser();
                     navigate(`/workflows/${workflow.id}`);
                   }}
                   onContextMenu={(e) => {
@@ -2472,7 +2364,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             onClick={() => {
               // Store the current folder ID so the new workflow is created in this folder
               setNewWorkflowFolderId(currentFolderId);
-              setShowWorkflowBrowser(false);
+              closeWorkflowBrowser();
               navigate('/workflows/new');
             }}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
