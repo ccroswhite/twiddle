@@ -3,6 +3,7 @@ import { X, Code, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { workflowsApi } from '@/lib/api';
 import { isActivityNode } from '@/utils/nodeConfig';
+import { nodeParameterEditors } from '@/components/nodeParameterEditors';
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -139,6 +140,13 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
 
   // Render different editors based on node type
   const renderParameterEditor = () => {
+    // Check if there's a registered editor for this node type
+    const RegisteredEditor = nodeParameterEditors[nodeType];
+    if (RegisteredEditor) {
+      return <RegisteredEditor parameters={parameters} updateParameter={updateParameter} />;
+    }
+
+    // Fall back to switch statement for node types not yet migrated
     switch (nodeType) {
       case 'twiddle.code':
         return (
