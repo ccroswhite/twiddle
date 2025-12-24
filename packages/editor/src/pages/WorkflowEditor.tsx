@@ -30,6 +30,7 @@ import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
 import { formatDate, generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
+import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 
 interface NodeTypeInfo {
   type: string;
@@ -745,31 +746,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       console.error('Failed to load node types:', err);
     }
   }
-
-  // Helper to get friendly credential type labels
-  function getCredentialTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      httpBasicAuth: 'HTTP Basic Auth',
-      httpBearerToken: 'HTTP Bearer Token',
-      apiKey: 'API Key',
-      oauth2: 'OAuth2',
-      githubCredentials: 'GitHub',
-      sshCredentials: 'SSH',
-      winrmCredentials: 'WinRM',
-      postgresqlCredentials: 'PostgreSQL',
-      mysqlCredentials: 'MySQL',
-      mssqlCredentials: 'SQL Server',
-      redisCredentials: 'Redis',
-      valkeyCredentials: 'Valkey',
-      cassandraCredentials: 'Cassandra',
-      opensearchCredentials: 'OpenSearch',
-      elasticsearchCredentials: 'Elasticsearch',
-      snowflakeCredentials: 'Snowflake',
-      prestodbCredentials: 'PrestoDB',
-    };
-    return labels[type] || type;
-  }
-
   // Check for updates to embedded workflows based on version policy
   async function checkAndUpgradeEmbeddedWorkflows(nodes: any[]) {
     const updatedNodes = [...nodes];

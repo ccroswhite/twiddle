@@ -146,3 +146,38 @@ export function getNodeColor(nodeType: string, isCredential: boolean = false): s
     if (isCredential) return CREDENTIAL_NODE_COLOR;
     return nodeColorMap[nodeType] || DEFAULT_NODE_COLOR;
 }
+
+// =============================================================================
+// Credential Type Labels
+// =============================================================================
+
+/**
+ * Maps credential type identifiers to human-readable labels.
+ */
+export const credentialTypeLabels: Record<string, string> = {
+    httpBasicAuth: 'HTTP Basic Auth',
+    httpBearerToken: 'HTTP Bearer Token',
+    apiKey: 'API Key',
+    oauth2: 'OAuth2',
+    githubCredentials: 'GitHub',
+    sshCredentials: 'SSH',
+    winrmCredentials: 'WinRM',
+    postgresqlCredentials: 'PostgreSQL',
+    mysqlCredentials: 'MySQL',
+    mssqlCredentials: 'SQL Server',
+    redisCredentials: 'Redis',
+    valkeyCredentials: 'Valkey',
+    cassandraCredentials: 'Cassandra',
+    opensearchCredentials: 'OpenSearch',
+    elasticsearchCredentials: 'Elasticsearch',
+    snowflakeCredentials: 'Snowflake',
+    prestodbCredentials: 'PrestoDB',
+};
+
+/**
+ * Get a human-readable label for a credential type.
+ * Falls back to the type identifier if no label is defined.
+ */
+export function getCredentialTypeLabel(type: string): string {
+    return credentialTypeLabels[type] || type;
+}
