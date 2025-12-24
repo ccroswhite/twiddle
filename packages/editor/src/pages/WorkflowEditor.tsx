@@ -164,11 +164,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     handleOpenPropertiesRef.current?.(nodeId);
   }, []);
 
-  // Callback for toggling expand state of composed workflow nodes
+  // Callback for toggling expand state of embedded workflow nodes
   const handleToggleExpandRef = useRef<(nodeId: string) => void>(undefined);
   handleToggleExpandRef.current = (nodeId: string) => {
     const node = nodes.find((n: Node) => n.id === nodeId);
-    if (!node || node.data.nodeType !== 'twiddle.composedWorkflow') return;
+    if (!node || node.data.nodeType !== 'twiddle.embeddedWorkflow') return;
 
     const parameters = (node.data.parameters || {}) as Record<string, any>;
     const isExpanded = parameters.isExpanded === 'true';
@@ -777,7 +777,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
     for (let i = 0; i < updatedNodes.length; i++) {
       const node = updatedNodes[i];
-      if (node.type !== 'twiddle.composedWorkflow') continue;
+      if (node.type !== 'twiddle.embeddedWorkflow') continue;
 
       const params = node.parameters || {};
       const workflowId = params.workflowId;
@@ -969,7 +969,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }
 
       // Map to store default handles for composed nodes to support legacy connections
-      const composedNodeDefaults: Record<string, { firstInput?: string, firstOutput?: string }> = {};
+      const embeddedNodeDefaults: Record<string, { firstInput?: string, firstOutput?: string }> = {};
 
       // Convert workflow nodes to React Flow nodes
       const flowNodes = (nodesWithUpdates as Array<{
@@ -979,12 +979,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         position: { x: number; y: number };
         parameters: Record<string, unknown>;
       }>).map((node) => {
-        // For composed workflows, ensure they load collapsed
+        // For embedded workflows, ensure they load collapsed
         let parameters = node.parameters;
-        if (node.type === 'twiddle.composedWorkflow' && parameters) {
+        if (node.type === 'twiddle.embeddedWorkflow' && parameters) {
           parameters = {
             ...parameters,
-            isExpanded: 'false', // Always load composed workflows collapsed
+            isExpanded: 'false', // Always load embedded workflows collapsed
           };
 
           // Store default handles for edge migration
@@ -992,7 +992,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             const inputHandles = parameters.inputHandles ? JSON.parse(parameters.inputHandles as string) : [];
             const outputHandles = parameters.outputHandles ? JSON.parse(parameters.outputHandles as string) : [];
 
-            composedNodeDefaults[node.id] = {
+            embeddedNodeDefaults[node.id] = {
               firstInput: inputHandles.length > 0 ? inputHandles[0].handle : undefined,
               firstOutput: outputHandles.length > 0 ? outputHandles[0].handle : undefined,
             };
@@ -1027,12 +1027,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         let sourceHandle = conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null);
         let targetHandle = conn.targetInput === 'main' ? null : (conn.targetInput ?? null);
 
-        // Migrate legacy connections for composed workflows
-        if (composedNodeDefaults[conn.sourceNodeId] && !sourceHandle) {
-          sourceHandle = composedNodeDefaults[conn.sourceNodeId].firstOutput ?? null;
+        // Migrate legacy connections for embedded workflows
+        if (embeddedNodeDefaults[conn.sourceNodeId] && !sourceHandle) {
+          sourceHandle = embeddedNodeDefaults[conn.sourceNodeId].firstOutput ?? null;
         }
-        if (composedNodeDefaults[conn.targetNodeId] && !targetHandle) {
-          targetHandle = composedNodeDefaults[conn.targetNodeId].firstInput ?? null;
+        if (embeddedNodeDefaults[conn.targetNodeId] && !targetHandle) {
+          targetHandle = embeddedNodeDefaults[conn.targetNodeId].firstInput ?? null;
         }
 
         return {
@@ -1047,7 +1047,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       // Since I can't easily change `const flowEdges` to `let` in one tool call safely without wide context,
       // I will do the remapping using a reduce.
       const remappedEdges = flowNodes.reduce((currentEdges, node) => {
-        if (node.data.nodeType === 'twiddle.composedWorkflow') {
+        if (node.data.nodeType === 'twiddle.embeddedWorkflow') {
           try {
             const params = node.data.parameters as Record<string, unknown>;
             const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
@@ -1093,8 +1093,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
         const updatedNode = { ...node, data };
 
-        // Check if this is a composed workflow and workflowId changed or handles are missing
-        if (node.data.nodeType === 'twiddle.composedWorkflow') {
+        // Check if this is a embedded workflow and workflowId changed or handles are missing
+        if (node.data.nodeType === 'twiddle.embeddedWorkflow') {
           const newParams = data.parameters as Record<string, unknown>;
           const oldParams = node.data.parameters as Record<string, unknown>;
 
@@ -1156,7 +1156,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     setShowNodePanel(false);
   }
 
-  // Helper function to remap edges when collapsing a composed workflow
+  // Helper function to remap edges when collapsing a embedded workflow
   function remapEdgesForCollapsedNode(edges: Edge[], nodeId: string, inputHandles: any[], outputHandles: any[]): Edge[] {
     // Create mapping: embedded node ID -> parent handle ID
     const inputMap = new Map<string, string>();  // embedded node ID -> parent input handle
@@ -1264,7 +1264,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       // Convert React Flow nodes back to workflow format
       // Filter out embedded child nodes - they should not be saved as they're derived from parent parameters
       const workflowNodes = nodes
-        .filter((node: Node) => !(node as any).parentId) // Exclude child nodes of composed workflows
+        .filter((node: Node) => !(node as any).parentId) // Exclude child nodes of embedded workflows
         .map((node: Node) => ({
           id: node.id,
           name: node.data.label,
@@ -1276,12 +1276,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       // Get IDs of all saved nodes for filtering edges
       const savedNodeIds = new Set(workflowNodes.map((n: any) => n.id));
 
-      // Build handle mappings for all expanded composed workflows
+      // Build handle mappings for all expanded embedded workflows
       // This allows us to remap edges connecting to internal embedded nodes
-      const composedNodeHandleMaps: Record<string, { inputMap: Map<string, string>, outputMap: Map<string, string> }> = {};
+      const embeddedNodeHandleMaps: Record<string, { inputMap: Map<string, string>, outputMap: Map<string, string> }> = {};
 
       for (const n of workflowNodes) {
-        if (n.type === 'twiddle.composedWorkflow' && n.parameters) {
+        if (n.type === 'twiddle.embeddedWorkflow' && n.parameters) {
           const params = n.parameters as Record<string, unknown>;
           try {
             const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
@@ -1297,7 +1297,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               outputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle);
             });
 
-            composedNodeHandleMaps[n.id] = { inputMap, outputMap };
+            embeddedNodeHandleMaps[n.id] = { inputMap, outputMap };
           } catch (e) {
             console.warn('Failed to parse handles for save remapping', e);
           }
@@ -1315,7 +1315,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         if (edge.source.includes('_embedded_')) {
           // Find the parent node ID (everything before _embedded_)
           const parentId = edge.source.split('_embedded_')[0];
-          const maps = composedNodeHandleMaps[parentId];
+          const maps = embeddedNodeHandleMaps[parentId];
           if (maps && maps.outputMap.has(edge.source)) {
             newSource = parentId;
             newSourceHandle = maps.outputMap.get(edge.source) || edge.sourceHandle;
@@ -1325,7 +1325,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         // Check if target is an embedded node
         if (edge.target.includes('_embedded_')) {
           const parentId = edge.target.split('_embedded_')[0];
-          const maps = composedNodeHandleMaps[parentId];
+          const maps = embeddedNodeHandleMaps[parentId];
           if (maps && maps.inputMap.has(edge.target)) {
             newTarget = parentId;
             newTargetHandle = maps.inputMap.get(edge.target) || edge.targetHandle;
@@ -1787,11 +1787,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
               position.x = Math.round(position.x / 20) * 20;
               position.y = Math.round(position.y / 20) * 20;
 
-              // Check if this is a workflow type (for composed workflows)
+              // Check if this is a workflow type (for embedded workflows)
               const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
 
               if (isWorkflowType) {
-                // Fetch workflow data and create composed workflow node
+                // Fetch workflow data and create embedded workflow node
                 const workflowId = pendingNode.type.type.replace('workflow.', '');
                 try {
                   const workflow = await workflowsApi.get(workflowId) as {
@@ -1815,7 +1815,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                     zIndex: 100,
                     data: {
                       label: workflow.name,
-                      nodeType: 'twiddle.composedWorkflow',
+                      nodeType: 'twiddle.embeddedWorkflow',
                       parameters: {
                         workflowId: workflow.id,
                         workflowName: workflow.name,
@@ -1834,7 +1834,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                   setNodes((nds: Node[]) => [...nds, newNode]);
                   setPendingNode(null);
                 } catch (err) {
-                  console.error('Failed to create composed workflow node:', err);
+                  console.error('Failed to create embedded workflow node:', err);
                   alert('Failed to load workflow for embedding');
                   setPendingNode(null);
                 }

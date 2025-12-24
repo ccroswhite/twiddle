@@ -1,67 +1,12 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
-import { Globe, Code, GitBranch, Terminal, Database, Search, Server, Key, Send, Webhook, FileCode, Settings, Copy, Trash2, Mail, MessageSquare, Zap, Layers, Maximize2, Minimize2 } from 'lucide-react';
-
-// Trigger nodes are not activities - they start workflows
-const TRIGGER_NODE_TYPES = new Set([
-  'twiddle.webhook',
-]);
-
-// Check if a node type is an activity (not a trigger)
-const isActivityNode = (nodeType: string): boolean => {
-  return !TRIGGER_NODE_TYPES.has(nodeType);
-};
-
-const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-  'twiddle.httpRequest': Globe,
-  'twiddle.code': Code,
-  'twiddle.if': GitBranch,
-  'twiddle.respondToWebhook': Send,
-  'twiddle.report': Mail,
-  'twiddle.slack': MessageSquare,
-  'twiddle.webhook': Webhook,
-  'twiddle.htmlExtract': FileCode,
-  'twiddle.winrm': Terminal,
-  'twiddle.ssh': Server,
-  'twiddle.composedWorkflow': Layers,
-  // Database nodes
-  'twiddle.mssql': Database,
-  'twiddle.postgresql': Database,
-  'twiddle.mysql': Database,
-  'twiddle.cassandra': Database,
-  'twiddle.redis': Database,
-  'twiddle.valkey': Database,
-  'twiddle.opensearch': Search,
-  'twiddle.elasticsearch': Search,
-  'twiddle.snowflake': Database,
-  'twiddle.prestodb': Database,
-};
-
-const colorMap: Record<string, string> = {
-  'twiddle.httpRequest': 'bg-blue-500',
-  'twiddle.code': 'bg-orange-500',
-  'twiddle.if': 'bg-yellow-500',
-  'twiddle.respondToWebhook': 'bg-emerald-500',
-  'twiddle.report': 'bg-emerald-500',
-  'twiddle.slack': 'bg-purple-700',
-  'twiddle.webhook': 'bg-indigo-500',
-  'twiddle.htmlExtract': 'bg-pink-500',
-  'twiddle.winrm': 'bg-sky-600',
-  'twiddle.ssh': 'bg-green-600',
-  'twiddle.composedWorkflow': 'bg-violet-600',
-  // Database nodes
-  'twiddle.mssql': 'bg-red-600',
-  'twiddle.postgresql': 'bg-blue-700',
-  'twiddle.mysql': 'bg-blue-500',
-  'twiddle.cassandra': 'bg-cyan-600',
-  'twiddle.redis': 'bg-red-500',
-  'twiddle.valkey': 'bg-indigo-500',
-  'twiddle.opensearch': 'bg-blue-600',
-  'twiddle.elasticsearch': 'bg-yellow-500',
-  'twiddle.snowflake': 'bg-cyan-400',
-  'twiddle.prestodb': 'bg-blue-400',
-};
+import { Handle, Position, useReactFlow, Node as FlowNode } from '@xyflow/react';
+import { Settings, Copy, Trash2, Zap, Maximize2, Minimize2, Layers } from 'lucide-react';
+import {
+  getNodeIcon,
+  getNodeColor,
+  isActivityNode
+} from '@/utils/nodeConfig';
 
 interface WorkflowNodeProps {
   id: string;
@@ -83,12 +28,12 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
 
   // Check if this is a credential node
   const isCredential = data.nodeType.startsWith('credential.');
-  const isComposedWorkflow = data.nodeType === 'twiddle.composedWorkflow';
-  const isExpanded = isComposedWorkflow && data.parameters?.isExpanded === 'true';
+  const isEmbeddedWorkflowNode = data.nodeType === 'twiddle.embeddedWorkflow';
+  const isExpanded = isEmbeddedWorkflowNode && data.parameters?.isExpanded === 'true';
   const isEmbedded = data.isEmbedded === true;
 
-  const Icon = isCredential ? Key : (iconMap[data.nodeType] || Code);
-  const bgColor = isCredential ? 'bg-amber-500' : (colorMap[data.nodeType] || 'bg-slate-500');
+  const Icon = getNodeIcon(data.nodeType, isCredential);
+  const bgColor = getNodeColor(data.nodeType, isCredential);
 
   // Close context menu when clicking outside, pressing Escape, or scrolling
   useEffect(() => {
@@ -141,7 +86,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
     const currentNode = getNode(id);
     if (!currentNode) return;
 
-    setNodes((nodes) => {
+    setNodes((nodes: FlowNode[]) => {
       // Find the furthest position of nodes that overlap with where we'd place the copy
       // This ensures each subsequent copy is offset from the last one
       const baseX = currentNode.position.x;
@@ -149,7 +94,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
 
       // Find nodes that are in the "copy zone" (offset from original)
       let maxOffset = 0;
-      nodes.forEach((node) => {
+      nodes.forEach((node: FlowNode) => {
         const dx = node.position.x - baseX;
         const dy = node.position.y - baseY;
         // Check if this node is along the diagonal offset path (within tolerance)
@@ -196,8 +141,8 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
     }
   };
 
-  // Render as container for expanded composed workflows
-  if (isComposedWorkflow && isExpanded) {
+  // Render as container for expanded embedded workflows
+  if (isEmbeddedWorkflowNode && isExpanded) {
     return (
       <>
         <div
@@ -215,7 +160,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
             </div>
             <div className="font-medium text-xs text-slate-900">{data.label}</div>
             <span className="text-[9px] font-medium text-violet-600 bg-violet-50 px-1.5 rounded">
-              Composed
+              Embedded
             </span>
           </div>
 
@@ -315,30 +260,57 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
     );
   }
 
-  // Normal node rendering (collapsed or non-composed workflow)
+  // Normal node rendering (collapsed or non-embedded workflow)
+  // Calculate dynamic height for collapsed embedded workflows
+  const getEmbeddedNodeDimensions = () => {
+    if (!isEmbeddedWorkflowNode || isExpanded) return null;
+
+    try {
+      const inputHandles = data.parameters?.inputHandles
+        ? JSON.parse(data.parameters.inputHandles as string)
+        : [];
+      const outputHandles = data.parameters?.outputHandles
+        ? JSON.parse(data.parameters.outputHandles as string)
+        : [];
+
+      const maxHandles = Math.max(inputHandles.length, outputHandles.length, 1);
+      const handleSpacing = 20; // Minimum 20px between handles
+      const paddingTop = 12; // Padding from top edge
+      const paddingBottom = 12; // Padding from bottom edge
+      const minHeight = 48; // Minimum node height (normal node size)
+
+      const calculatedHeight = (maxHandles * handleSpacing) + paddingTop + paddingBottom;
+      const nodeHeight = Math.max(calculatedHeight, minHeight);
+
+      return { inputHandles, outputHandles, nodeHeight, handleSpacing, paddingTop };
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const embeddedDimensions = getEmbeddedNodeDimensions();
+
   return (
     <>
       <div
         className={`bg-white rounded shadow-sm border min-w-[80px] relative ${selected ? 'border-primary-500' : 'border-slate-200'
           } ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
+        style={embeddedDimensions ? { minHeight: embeddedDimensions.nodeHeight } : undefined}
         onContextMenu={handleContextMenu}
       >
-        {/* Dynamic handles for collapsed composed workflows */}
-        {isComposedWorkflow && !isExpanded ? (() => {
-          const inputHandles = data.parameters?.inputHandles
-            ? JSON.parse(data.parameters.inputHandles as string)
-            : [];
-          const outputHandles = data.parameters?.outputHandles
-            ? JSON.parse(data.parameters.outputHandles as string)
-            : [];
+        {/* Dynamic handles for collapsed embedded workflows */}
+        {isEmbeddedWorkflowNode && !isExpanded && embeddedDimensions ? (() => {
+          const { inputHandles, outputHandles, paddingTop, nodeHeight } = embeddedDimensions;
 
           return (
             <>
               {/* Input handles on the left */}
               {inputHandles.length > 0 && inputHandles.map((handle: any, index: number) => {
-                const position = inputHandles.length > 1
-                  ? (index / (inputHandles.length - 1)) * 100
-                  : 50;
+                // Calculate pixel position with even distribution
+                const totalInputSpace = nodeHeight - paddingTop * 2;
+                const inputOffset = inputHandles.length > 1
+                  ? paddingTop + (index * totalInputSpace / (inputHandles.length - 1))
+                  : nodeHeight / 2;
                 return (
                   <Handle
                     key={`input-${handle.handle}`}
@@ -346,16 +318,18 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                     position={Position.Left}
                     id={handle.handle}
                     className="!bg-violet-500 !w-2.5 !h-2.5"
-                    style={{ top: `${position}%` }}
+                    style={{ top: inputOffset }}
+                    title={handle.label || handle.handle}
                   />
                 );
               })}
 
               {/* Output handles on the right */}
               {outputHandles.length > 0 && outputHandles.map((handle: any, index: number) => {
-                const position = outputHandles.length > 1
-                  ? (index / (outputHandles.length - 1)) * 100
-                  : 50;
+                const totalOutputSpace = nodeHeight - paddingTop * 2;
+                const outputOffset = outputHandles.length > 1
+                  ? paddingTop + (index * totalOutputSpace / (outputHandles.length - 1))
+                  : nodeHeight / 2;
                 return (
                   <Handle
                     key={`output-${handle.handle}`}
@@ -363,7 +337,8 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                     position={Position.Right}
                     id={handle.handle}
                     className="!bg-violet-500 !w-2.5 !h-2.5"
-                    style={{ top: `${position}%` }}
+                    style={{ top: outputOffset }}
+                    title={handle.label || handle.handle}
                   />
                 );
               })}
@@ -416,7 +391,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
           </div>
           <div className="min-w-0">
             <div className="font-medium text-xs text-slate-900">{data.label}</div>
-            {!isCredential && !isComposedWorkflow && (
+            {!isCredential && !isEmbeddedWorkflowNode && (
               <div className="flex items-center gap-1">
                 {isActivityNode(data.nodeType) ? (
                   <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1 rounded">
@@ -430,9 +405,9 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                 )}
               </div>
             )}
-            {isComposedWorkflow && !isExpanded && (
+            {isEmbeddedWorkflowNode && !isExpanded && (
               <span className="text-[9px] font-medium text-violet-600 bg-violet-50 px-1 rounded">
-                Composed
+                Embedded Workflow
               </span>
             )}
           </div>
@@ -453,7 +428,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
             <Settings className="w-3.5 h-3.5" />
             Properties
           </button>
-          {isComposedWorkflow && !isEmbedded && (
+          {isEmbeddedWorkflowNode && !isEmbedded && (
             <button
               onClick={handleToggleExpand}
               className="w-full px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"

@@ -2,18 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Code, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import { workflowsApi } from '@/lib/api';
-
-// Trigger nodes are not activities - they start workflows
-const TRIGGER_NODE_TYPES = new Set([
-  'twiddle.manualTrigger',
-  'twiddle.webhook',
-  'twiddle.interval',
-]);
-
-// Check if a node type is an activity (not a trigger)
-const isActivityNode = (nodeType: string): boolean => {
-  return !TRIGGER_NODE_TYPES.has(nodeType);
-};
+import { isActivityNode } from '@/utils/nodeConfig';
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -48,7 +37,7 @@ def execute(input_data: dict, context) -> dict:
 `;
 
 
-function ComposedWorkflowProperties({ parameters, updateParameter }: { parameters: Record<string, unknown>, updateParameter: (key: string, value: unknown) => void }) {
+function EmbeddedWorkflowProperties({ parameters, updateParameter }: { parameters: Record<string, unknown>, updateParameter: (key: string, value: unknown) => void }) {
   const [availableVersions, setAvailableVersions] = useState<any[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
@@ -863,9 +852,9 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
           </div>
         );
 
-      case 'twiddle.composedWorkflow':
+      case 'twiddle.embeddedWorkflow':
         return (
-          <ComposedWorkflowProperties
+          <EmbeddedWorkflowProperties
             parameters={parameters}
             updateParameter={updateParameter}
           />

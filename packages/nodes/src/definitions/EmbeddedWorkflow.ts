@@ -1,8 +1,8 @@
 import type { NodeDefinition } from '@twiddle/shared';
 
-export const ComposedWorkflowNode: NodeDefinition = {
-    type: 'twiddle.composedWorkflow',
-    displayName: 'Composed Workflow',
+export const EmbeddedWorkflowNode: NodeDefinition = {
+    type: 'twiddle.embeddedWorkflow',
+    displayName: 'Embedded Workflow',
     description: 'Embed an existing workflow as a reusable component',
     icon: 'layers',
     iconColor: '#8b5cf6', // Purple/violet
@@ -115,5 +115,5 @@ export const ComposedWorkflowNode: NodeDefinition = {
         },
     ],
     subtitle: '={{$parameter["workflowName"]}}',
-    documentationUrl: 'https://docs.twiddle.io/nodes/composed-workflow',
+    documentationUrl: 'https://docs.twiddle.io/nodes/embedded-workflow',
 };
