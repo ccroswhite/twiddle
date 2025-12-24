@@ -56,6 +56,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [workflowName, setWorkflowName] = useState('New Workflow');
+  const [workflowVersion, setWorkflowVersion] = useState<number>(1);
   const [workflowDescription, setWorkflowDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [showNodePanel, setShowNodePanel] = useState(false);
@@ -799,6 +800,89 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     return labels[type] || type;
   }
 
+  // Check for updates to embedded workflows based on version policy
+  async function checkAndUpgradeEmbeddedWorkflows(nodes: any[]) {
+    const updatedNodes = [...nodes];
+    let hasChanges = false;
+
+    for (let i = 0; i < updatedNodes.length; i++) {
+      const node = updatedNodes[i];
+      if (node.type !== 'twiddle.composedWorkflow') continue;
+
+      const params = node.parameters || {};
+      const workflowId = params.workflowId;
+      const currentVersion = params.workflowVersion || 0;
+
+      // Default to 'locked' for existing nodes without policy
+      const effectivePolicy = params.versionPolicy || 'locked';
+
+      if (!workflowId) continue;
+
+      try {
+        // Fetch workflow details (always gets latest)
+        const latestWorkflow = await workflowsApi.get(workflowId) as any;
+
+        if (!latestWorkflow) continue;
+
+        const latestVersion = latestWorkflow.version || 1;
+
+        if (latestVersion > currentVersion) {
+          if (effectivePolicy === 'latest') {
+            // Auto-upgrade
+            console.log(`Auto-upgrading embedded workflow ${workflowId} from v${currentVersion} to v${latestVersion}`);
+
+            // Calculate handles for the new version
+            const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
+
+            updatedNodes[i] = {
+              ...node,
+              parameters: {
+                ...params,
+                workflowVersion: latestVersion,
+                workflowName: latestWorkflow.name, // Update name in case it changed
+                embeddedNodes: JSON.stringify(latestWorkflow.nodes),
+                embeddedConnections: JSON.stringify(latestWorkflow.connections),
+                inputHandles: JSON.stringify(inputHandles),
+                outputHandles: JSON.stringify(outputHandles),
+                versionPolicy: 'latest',
+              }
+            };
+            hasChanges = true;
+          } else {
+            // Policy is locked (or specific version), but a newer version exists.
+            // Check if we already asked (avoid nagging if they said no? - Hard to track "no" across reloads without local storage)
+            // For now, simple confirm.
+            if (window.confirm(`Embedded workflow "${params.workflowName}" has a newer version (v${latestVersion}). Current is v${currentVersion}.\n\nDo you want to upgrade to the latest version?`)) {
+              // Calculate handles for the new version
+              const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
+
+              updatedNodes[i] = {
+                ...node,
+                parameters: {
+                  ...params,
+                  workflowVersion: latestVersion,
+                  workflowName: latestWorkflow.name,
+                  embeddedNodes: JSON.stringify(latestWorkflow.nodes),
+                  embeddedConnections: JSON.stringify(latestWorkflow.connections),
+                  inputHandles: JSON.stringify(inputHandles),
+                  outputHandles: JSON.stringify(outputHandles),
+                  // Keep policy as locked? Or switch to latest? 
+                  // Usually if they upgrade manualy, it stays locked to that new version unless they explicitly change policy.
+                  versionPolicy: 'locked',
+                }
+              };
+              hasChanges = true;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to check for updates for embedded workflow ${workflowId}`, e);
+      }
+    }
+
+    return hasChanges ? updatedNodes : nodes;
+  }
+
   async function loadWorkflow(workflowId: string) {
     try {
       // Reset properties/schedule state first to prevent stale data from previous workflow
@@ -820,10 +904,26 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         lockedBy?: { id: string; name: string; email: string; isMe: boolean };
         properties?: WorkflowProperty[];
         schedule?: WorkflowSchedule;
+        version?: number;
       };
       setWorkflowName(workflow.name);
+      setWorkflowVersion(workflow.version || 1);
       setWorkflowDescription(workflow.description || '');
       setEnvironment(workflow.environment || 'DV');
+
+      // Check for embedded workflow updates
+      const nodesWithUpdates = await checkAndUpgradeEmbeddedWorkflows(workflow.nodes);
+
+      // If updates occurred, mark as dirty? 
+      // For now, we update the local state. User will need to save to persist upgrades.
+      // Ideally we might want to auto-save or at least indicate unsaved changes.
+      // Since 'nodes' state update triggers 'save' button enabled state usually?
+      // Wait, 'isDirty' tracking logic? 
+      // The editor usually tracks changes via onNodesChange. Setting initial nodes doesn't trigger dirty usually.
+      // But if we pass modified nodes to setNodes, they are just the initial state.
+      // React Flow doesn't know they are "dirty" vs the DB state unless we track initial vs current.
+      // Use case: User opens workflow -> Auto-upgrades happen -> They see new version -> They must Save to keep it.
+      // That seems correct.
 
       // Handle locking
       if (workflow.lockedBy) {
@@ -843,7 +943,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }
 
       // Convert workflow nodes to React Flow nodes
-      const flowNodes = (workflow.nodes as Array<{
+      const flowNodes = (nodesWithUpdates as Array<{
         id: string;
         name: string;
         type: string;
@@ -1033,7 +1133,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         setNewWorkflowFolderId(null);
         navigate(`/workflows/${created.id}`, { replace: true });
       } else {
-        await workflowsApi.update(id!, {
+        const updated = await workflowsApi.update(id!, {
           name: workflowName,
           description: workflowDescription,
           nodes: workflowNodes as any,
@@ -1041,6 +1141,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           properties: workflowProperties,
           schedule: workflowSchedule,
         });
+        setWorkflowVersion(updated.version);
       }
     } catch (err) {
       alert((err as Error).message);
@@ -1049,17 +1150,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }
   }
 
-  async function handlePromote() {
-    if (isNew || !id) return;
 
-    const nextEnv = getNextEnvironment(environment);
-    if (!nextEnv) {
-      alert('Workflow is already at Production (PD)');
-      return;
-    }
-
-    setShowPromotionModal(true);
-  }
 
   function handleOpenWorkflowBrowser() {
 
@@ -1298,27 +1389,19 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       {/* Toolbar */}
       <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between relative z-50">
         <div className="flex items-center gap-4">
-          <input
-            type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-primary-500 rounded px-2 py-1"
-          />
-          {!isNew && (
-            <div className="flex items-center gap-2 ml-2">
-              <EnvironmentBadge environment={environment} />
-              {getNextEnvironment(environment) && (
-                <button
-                  onClick={handlePromote}
-                  className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 rounded transition-colors disabled:opacity-50"
-                  title={`Request promotion to ${getNextEnvironment(environment)}`}
-                >
-                  <ChevronRight className="w-3 h-3" />
-                  {`Request ${getNextEnvironment(environment)}`}
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-baseline gap-2">
+            <input
+              type="text"
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              className="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-primary-500 rounded px-2 py-1"
+            />
+            {!isNew && (
+              <span className="text-sm font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                v{workflowVersion}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button

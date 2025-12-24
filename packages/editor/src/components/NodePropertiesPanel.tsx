@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Code, Zap, Clock, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { Node } from '@xyflow/react';
+import { workflowsApi } from '@/lib/api';
 
 // Trigger nodes are not activities - they start workflows
 const TRIGGER_NODE_TYPES = new Set([
@@ -98,7 +99,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                 </div>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                Write Python code that will be executed as a Temporal activity. 
+                Write Python code that will be executed as a Temporal activity.
                 The function should accept input_data and context parameters.
               </p>
             </div>
@@ -297,11 +298,10 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                           : [...methods, method];
                         updateParameter('methods', newMethods.length > 0 ? newMethods : ['POST']);
                       }}
-                      className={`px-3 py-1 text-sm rounded-lg border transition-colors ${
-                        isSelected
-                          ? 'bg-primary-100 border-primary-300 text-primary-700'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+                      className={`px-3 py-1 text-sm rounded-lg border transition-colors ${isSelected
+                        ? 'bg-primary-100 border-primary-300 text-primary-700'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
                     >
                       {method}
                     </button>
@@ -327,16 +327,16 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
             {(parameters.authentication as string) && (parameters.authentication as string) !== 'none' && (
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {(parameters.authentication as string) === 'header' ? 'Header Name' : 
-                   (parameters.authentication as string) === 'query' ? 'Query Parameter Name' : 'Credential'}
+                  {(parameters.authentication as string) === 'header' ? 'Header Name' :
+                    (parameters.authentication as string) === 'query' ? 'Query Parameter Name' : 'Credential'}
                 </label>
                 <input
                   type="text"
                   value={(parameters.authKey as string) || ''}
                   onChange={(e) => updateParameter('authKey', e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder={(parameters.authentication as string) === 'header' ? 'X-API-Key' : 
-                               (parameters.authentication as string) === 'query' ? 'api_key' : 'credential-id'}
+                  placeholder={(parameters.authentication as string) === 'header' ? 'X-API-Key' :
+                    (parameters.authentication as string) === 'query' ? 'api_key' : 'credential-id'}
                 />
               </div>
             )}
@@ -416,7 +416,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 {parameters.extractionMethod === 'xpath' ? 'XPath Expression' :
-                 parameters.extractionMethod === 'regex' ? 'Regular Expression' : 'CSS Selector'}
+                  parameters.extractionMethod === 'regex' ? 'Regular Expression' : 'CSS Selector'}
               </label>
               <textarea
                 value={(parameters.selector as string) || ''}
@@ -424,7 +424,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-20"
                 placeholder={
                   parameters.extractionMethod === 'xpath' ? '//div[@class="content"]/p' :
-                  parameters.extractionMethod === 'regex' ? '<title>(.*?)</title>' : 'div.content > p'
+                    parameters.extractionMethod === 'regex' ? '<title>(.*?)</title>' : 'div.content > p'
                 }
               />
             </div>
@@ -507,7 +507,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                 Python expression whose result will be matched against cases
               </p>
             </div>
-            
+
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-slate-700">
@@ -524,7 +524,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                   + Add Case
                 </button>
               </div>
-              
+
               <div className="space-y-2">
                 {cases.map((caseItem, index) => (
                   <div key={index} className="flex gap-2 items-center">
@@ -562,7 +562,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                     </button>
                   </div>
                 ))}
-                
+
                 {cases.length === 0 && (
                   <p className="text-sm text-slate-400 py-2">
                     No cases defined. Add cases to create output branches.
@@ -790,13 +790,87 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
           </div>
         );
 
+      case 'twiddle.composedWorkflow':
+        const [availableVersions, setAvailableVersions] = useState<any[]>([]);
+        const [loadingVersions, setLoadingVersions] = useState(false);
+
+        useEffect(() => {
+          const workflowId = parameters.workflowId as string;
+          if (workflowId) {
+            setLoadingVersions(true);
+            workflowsApi.getVersions(workflowId)
+              .then(versions => setAvailableVersions(versions))
+              .catch(err => console.error('Failed to load versions', err))
+              .finally(() => setLoadingVersions(false));
+          }
+        }, [parameters.workflowId]);
+
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Embedded Workflow
+              </label>
+              <div className="text-sm font-medium text-slate-900 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                {parameters.workflowName as string || 'Unknown Workflow'}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Embedded Workflow Policy
+              </label>
+              <select
+                value={(parameters.versionPolicy as string) || 'locked'}
+                onChange={(e) => {
+                  const policy = e.target.value;
+                  updateParameter('versionPolicy', policy);
+                  // If switching to specific version (locked), default to current version if not set? 
+                  // Actually, 'locked' is just a policy mode. The specific version is stored in 'workflowVersion'.
+                  // Users might select a specific version directly.
+
+                  if (policy !== 'latest' && policy !== 'locked') {
+                    // User selected a specific version ID/number from the list
+                    // In our UI, we want "Latest" or "vX - Locked".
+                    // So let's model the dropdown values as: 'latest' OR 'version_number'
+                    updateParameter('versionPolicy', 'locked');
+                    updateParameter('workflowVersion', parseInt(policy));
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="latest">Latest (Always use newest)</option>
+                <option disabled>──────────────</option>
+                {availableVersions.map(v => (
+                  <option key={v.version} value={v.version}>
+                    v{v.version} - {v.version === parameters.workflowVersion ? '(Current) ' : ''} {new Date(v.createdAt).toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                "Latest" will auto-update when opening the parent workflow. Selecting a version locks it.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Current Loaded Version
+              </label>
+              <div className="text-sm text-slate-600 px-3 py-2">
+                v{parameters.workflowVersion as number}
+              </div>
+            </div>
+
+          </div>
+        );
+
       default:
         // Check if this is a credential node
         if (nodeType.startsWith('credential.')) {
           const parts = nodeType.split('.');
           const credType = parts[1];
           const credId = parts.slice(2).join('.');
-          
+
           // Determine what operations are available based on credential type
           const getOperations = (type: string) => {
             if (type.includes('postgresql') || type.includes('mysql') || type.includes('mssql')) {
@@ -872,20 +946,20 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
               </div>
 
               {/* Show relevant fields based on operation */}
-              {(parameters.operation === 'query' || parameters.operation === 'execute' || !parameters.operation) && 
-               (credType.includes('postgresql') || credType.includes('mysql') || credType.includes('mssql')) && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    SQL Query
-                  </label>
-                  <textarea
-                    value={(parameters.query as string) || ''}
-                    onChange={(e) => updateParameter('query', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-32 bg-slate-900 text-cyan-400"
-                    placeholder="SELECT * FROM users WHERE active = true"
-                  />
-                </div>
-              )}
+              {(parameters.operation === 'query' || parameters.operation === 'execute' || !parameters.operation) &&
+                (credType.includes('postgresql') || credType.includes('mysql') || credType.includes('mssql')) && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      SQL Query
+                    </label>
+                    <textarea
+                      value={(parameters.query as string) || ''}
+                      onChange={(e) => updateParameter('query', e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm h-32 bg-slate-900 text-cyan-400"
+                      placeholder="SELECT * FROM users WHERE active = true"
+                    />
+                  </div>
+                )}
 
               {(credType.includes('ssh') || credType.includes('winrm')) && (
                 <div>
@@ -1033,7 +1107,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
             <p className="text-xs text-slate-500 mb-4">
               Configure Temporal activity execution behavior. Activities are the smallest unit of durable execution.
             </p>
-            
+
             {/* Timeout Settings */}
             <div className="space-y-4">
               <div className="bg-slate-50 rounded-lg p-3 space-y-3">
@@ -1041,7 +1115,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
                   <Clock className="w-4 h-4 text-slate-500" />
                   Timeouts
                 </div>
-                
+
                 <div>
                   <label className="block text-xs font-medium text-slate-600 mb-1">
                     Start-to-Close Timeout (seconds)

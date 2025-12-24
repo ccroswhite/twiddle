@@ -43,6 +43,25 @@ export const ComposedWorkflowNode: NodeDefinition = {
             },
         },
         {
+            name: 'versionPolicy',
+            displayName: 'Version Policy',
+            type: 'options',
+            default: 'latest',
+            options: [
+                {
+                    name: 'Latest Version',
+                    value: 'latest',
+                    description: 'Always use the latest version',
+                },
+                {
+                    name: 'Specific Version',
+                    value: 'locked',
+                    description: 'Lock to a specific version',
+                },
+            ],
+            description: 'Control how creating/loading handles versions',
+        },
+        {
             name: 'embeddedNodes',
             displayName: 'Embedded Nodes',
             type: 'json',
