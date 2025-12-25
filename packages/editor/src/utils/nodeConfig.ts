@@ -181,3 +181,70 @@ export const credentialTypeLabels: Record<string, string> = {
 export function getCredentialTypeLabel(type: string): string {
     return credentialTypeLabels[type] || type;
 }
+
+// =============================================================================
+// Node Display Names
+// =============================================================================
+
+/**
+ * Maps node types to human-readable display names for the UI.
+ */
+export const nodeDisplayNameMap: Record<string, string> = {
+    // Triggers
+    'twiddle.manualTrigger': 'Manual Trigger',
+    'twiddle.webhook': 'Webhook Trigger',
+    'twiddle.interval': 'Interval Trigger',
+
+    // Core nodes
+    'twiddle.httpRequest': 'HTTP Request',
+    'twiddle.code': 'Code Node',
+    'twiddle.if': 'If-Else Node',
+    'twiddle.switch': 'Switch Node',
+    'twiddle.setData': 'Set Data',
+    'twiddle.respondToWebhook': 'Respond to Webhook',
+    'twiddle.report': 'Report',
+    'twiddle.slack': 'Slack',
+    'twiddle.htmlExtract': 'HTML Extract',
+    'twiddle.winrm': 'WinRM',
+    'twiddle.ssh': 'SSH',
+    'twiddle.embeddedWorkflow': 'Embedded Workflow',
+
+    // Database nodes
+    'twiddle.mssql': 'SQL Server',
+    'twiddle.postgresql': 'PostgreSQL',
+    'twiddle.mysql': 'MySQL',
+    'twiddle.cassandra': 'Cassandra',
+    'twiddle.redis': 'Redis',
+    'twiddle.valkey': 'Valkey',
+    'twiddle.opensearch': 'OpenSearch',
+    'twiddle.elasticsearch': 'Elasticsearch',
+    'twiddle.snowflake': 'Snowflake',
+    'twiddle.prestodb': 'PrestoDB',
+};
+
+/**
+ * Get a human-readable display name for a node type.
+ * Falls back to a formatted version of the type if no name is defined.
+ */
+export function getNodeDisplayName(nodeType: string): string {
+    // Check for direct mapping
+    if (nodeDisplayNameMap[nodeType]) {
+        return nodeDisplayNameMap[nodeType];
+    }
+
+    // Handle credential nodes
+    if (nodeType.startsWith('credential.')) {
+        const parts = nodeType.split('.');
+        const credType = parts[1];
+        const credLabel = getCredentialTypeLabel(credType);
+        return `${credLabel} Connection`;
+    }
+
+    // Fallback: convert nodeType to readable format
+    // e.g., "twiddle.customNode" -> "Custom Node"
+    const baseName = nodeType.replace('twiddle.', '');
+    return baseName
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, str => str.toUpperCase())
+        .trim();
+}

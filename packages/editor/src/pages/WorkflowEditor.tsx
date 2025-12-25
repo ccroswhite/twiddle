@@ -29,6 +29,7 @@ import { WorkflowBrowserPanel } from '@/components/WorkflowBrowserPanel';
 import { EditorToolbar } from '@/components/EditorToolbar';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
+import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
@@ -1046,6 +1047,12 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setNodes(flowNodes);
       setEdges(remappedEdges);
 
+      // Center the workflow on the canvas after loading
+      // Use requestAnimationFrame to ensure React Flow has processed the new nodes
+      requestAnimationFrame(() => {
+        reactFlowInstance.current?.fitView({ padding: 0.2 });
+      });
+
       // Load properties and schedule from API (use defaults if not present)
       setWorkflowProperties(workflow.properties || []);
       setWorkflowSchedule(workflow.schedule || {
@@ -2004,56 +2011,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }
 
       {/* Delete Confirmation Modal */}
-      {
-        deletingWorkflow && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => setDeletingWorkflow(null)}
-            />
-
-            {/* Modal */}
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-red-600" />
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Delete Workflow
-                  </h3>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Are you sure you want to delete <strong>"{deletingWorkflow.name}"</strong>?
-                    This action cannot be undone.
-                  </p>
-                  {deletingWorkflow.environment !== 'DV' && (
-                    <p className="mt-2 text-sm text-amber-600 bg-amber-50 p-2 rounded">
-                      ⚠️ This workflow is in <strong>{deletingWorkflow.environment}</strong> environment.
-                      Deleting it may affect production systems.
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => setDeletingWorkflow(null)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => handleDeleteWorkflow(deletingWorkflow)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-                >
-                  Delete Workflow
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      }
+      {deletingWorkflow && (
+        <DeleteConfirmationModal
+          workflow={deletingWorkflow}
+          onConfirm={() => handleDeleteWorkflow(deletingWorkflow)}
+          onCancel={() => setDeletingWorkflow(null)}
+        />
+      )}
 
       {/* Folder Permissions Modal */}
       {
