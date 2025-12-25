@@ -1,0 +1,3 @@
+Awesome visualizer for memory used in package:
+
+    cd packages/editor && npx vite-bundle-visualizer
