@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { WorkflowEditor } from './pages/WorkflowEditor';
+import { WorkflowBrowser } from './pages/WorkflowBrowser';
 import { Credentials } from './pages/Credentials';
 import { Groups } from './pages/Groups';
 import { Settings } from './pages/Settings';
@@ -22,7 +23,7 @@ export default function App() {
           }
         >
           <Route index element={<Navigate to="/workflows" replace />} />
-          <Route path="workflows" element={<WorkflowEditor openBrowser />} />
+          <Route path="workflows" element={<WorkflowBrowser />} />
           <Route path="workflows/:id" element={<WorkflowEditor />} />
           <Route path="workflows/new" element={<WorkflowEditor />} />
           <Route path="datasources" element={<Credentials />} />
@@ -33,3 +34,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+

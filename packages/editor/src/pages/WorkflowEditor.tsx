@@ -18,14 +18,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Code, X, User, Users, Clock, Trash2, Folder, Shield, Copy, Lock } from 'lucide-react';
-import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, groupsApi, usersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel, type NodeTypeInfo } from '@/lib/api';
+import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel, type NodeTypeInfo } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
 import { WorkflowPropertiesPanel, WorkflowProperty, WorkflowSchedule } from '@/components/WorkflowPropertiesPanel';
 import { GitHubSettings } from '@/components/GitHubSettings';
 import { RightPanel } from '@/components/RightPanel';
-import { WorkflowBrowserPanel } from '@/components/WorkflowBrowserPanel';
 import { EditorToolbar } from '@/components/EditorToolbar';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
@@ -68,36 +67,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-  // Workflow browser hook - manages folder navigation, workflows list, drag-drop
+  // Workflow browser hook - still used for some context menu operations
   const workflowBrowser = useWorkflowBrowser();
-  // Destructure commonly used values for easier access
   const {
     isOpen: showWorkflowBrowser,
-    open: openWorkflowBrowser,
     close: closeWorkflowBrowser,
-    loading: loadingWorkflows,
-    folders,
     currentFolderId,
-    folderPath,
-    workflows: availableWorkflows,
-    navigateToFolder: handleNavigateToFolder,
-    navigateToBreadcrumb: handleNavigateToBreadcrumb,
     loadContents: loadFolderContents,
-    showNewFolderInput,
-    setShowNewFolderInput,
-    newFolderName,
-    setNewFolderName,
-    editingFolderId,
-    setEditingFolderId,
-    editingFolderName,
-    setEditingFolderName,
-    draggingWorkflowId,
-    dragOverFolderId,
-    handleDragStart,
-    handleDragEnd,
-    handleDragOver,
-    handleDragLeave,
-    handleDrop,
   } = workflowBrowser;
 
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
@@ -114,9 +90,9 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showPromotionModal, setShowPromotionModal] = useState(false);
   const [permissionsFolder, setPermissionsFolder] = useState<FolderType | null>(null);
   const [folderPermissions, setFolderPermissions] = useState<FolderPermission[]>([]);
-  const [loadingPermissions, setLoadingPermissions] = useState(false);
-  const [availableUsers, setAvailableUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
-  const [availableGroups, setAvailableGroups] = useState<{ id: string; name: string }[]>([]);
+  const [loadingPermissions] = useState(false);
+  const [availableUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
+  const [availableGroups] = useState<{ id: string; name: string }[]>([]);
   const [newPermissionType, setNewPermissionType] = useState<'user' | 'group'>('user');
   const [newPermissionTargetId, setNewPermissionTargetId] = useState('');
   const [newPermissionLevel, setNewPermissionLevel] = useState<FolderPermissionLevel>('READ');
@@ -1278,30 +1254,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
 
   function handleOpenWorkflowBrowser() {
-    openWorkflowBrowser();
+    navigate('/workflows');
   }
 
   // Folder permissions handlers
-  async function handleOpenPermissions(folder: FolderType) {
-    setPermissionsFolder(folder);
-    setShowPermissionsModal(true);
-    setLoadingPermissions(true);
-    try {
-      const [permissions, users, groups] = await Promise.all([
-        foldersApi.getPermissions(folder.id),
-        usersApi.list(),
-        groupsApi.list(),
-      ]);
-      setFolderPermissions(permissions);
-      setAvailableUsers(users);
-      setAvailableGroups(groups);
-    } catch (err) {
-      console.error('Failed to load permissions:', err);
-    } finally {
-      setLoadingPermissions(false);
-    }
-  }
-
   async function handleAddPermission() {
     if (!permissionsFolder || !newPermissionTargetId) return;
     try {
@@ -1338,17 +1294,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setFolderPermissions(prev => prev.filter(p => p.id !== permissionId));
     } catch (err) {
       alert(`Failed to delete permission: ${(err as Error).message}`);
-    }
-  }
-
-  async function handleRenameWorkflow(workflowId: string, newName: string) {
-    if (!newName.trim()) return;
-    try {
-      await workflowsApi.update(workflowId, { name: newName.trim() });
-      // Refresh the workflows list
-      await loadFolderContents(currentFolderId);
-    } catch (err) {
-      alert(`Failed to rename workflow: ${(err as Error).message}`);
     }
   }
 
@@ -1898,74 +1843,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           onClose={() => setSelectedNode(null)}
         />
       )}
-
-      {/* Workflow Browser Panel */}
-      <WorkflowBrowserPanel
-        isOpen={showWorkflowBrowser}
-        onClose={closeWorkflowBrowser}
-        currentWorkflowId={id}
-        loading={loadingWorkflows}
-        folders={folders}
-        currentFolderId={currentFolderId}
-        folderPath={folderPath}
-        workflows={availableWorkflows}
-        onNavigateToFolder={handleNavigateToFolder}
-        onNavigateToBreadcrumb={handleNavigateToBreadcrumb}
-        onCreateFolder={async (name) => {
-          if (!name.trim()) return;
-          await foldersApi.create({ name: name.trim(), parentId: currentFolderId || undefined });
-          await loadFolderContents(currentFolderId);
-          setShowNewFolderInput(false);
-          setNewFolderName('');
-        }}
-        onRenameFolder={async (folderId, newName) => {
-          if (!newName.trim()) return;
-          await foldersApi.update(folderId, { name: newName.trim() });
-          await loadFolderContents(currentFolderId);
-          setEditingFolderId(null);
-          setEditingFolderName('');
-        }}
-        onDeleteFolder={async (folderId) => {
-          if (!confirm('Delete this folder and all its contents?')) return;
-          await foldersApi.delete(folderId);
-          await loadFolderContents(currentFolderId);
-        }}
-        showNewFolderInput={showNewFolderInput}
-        setShowNewFolderInput={setShowNewFolderInput}
-        newFolderName={newFolderName}
-        setNewFolderName={setNewFolderName}
-        editingFolderId={editingFolderId}
-        setEditingFolderId={setEditingFolderId}
-        editingFolderName={editingFolderName}
-        setEditingFolderName={setEditingFolderName}
-        draggingWorkflowId={draggingWorkflowId}
-        dragOverFolderId={dragOverFolderId}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onOpenWorkflow={(workflowId) => navigate(`/workflows/${workflowId}`)}
-        onRenameWorkflow={handleRenameWorkflow}
-        onDeleteWorkflow={(workflow) => setDeletingWorkflow(workflow)}
-        onOpenPermissions={handleOpenPermissions}
-        onCreateNewWorkflow={(folderId) => {
-          setNewWorkflowFolderId(folderId);
-          closeWorkflowBrowser();
-          navigate('/workflows/new');
-        }}
-        onVersionHistory={async (workflow) => {
-          setLoadingVersions(true);
-          setShowVersionHistory(true);
-          setVersionHistoryWorkflow(workflow);
-          try {
-            const list = await workflowsApi.getVersions(workflow.id);
-            setVersions(list);
-          } finally {
-            setLoadingVersions(false);
-          }
-        }}
-      />
 
       {/* Workflow Browser Context Menu */}
       {
