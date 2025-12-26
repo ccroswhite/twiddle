@@ -15,6 +15,7 @@ import {
     FolderOpen,
     Undo2,
     Settings,
+    Play,
 } from 'lucide-react';
 
 // =============================================================================
@@ -43,6 +44,7 @@ export interface EditorToolbarProps {
     onViewCode: () => void;
     onGitHubSettings: () => void;
     onProperties: () => void;
+    onExecutions: () => void;
     onSave: () => void;
 }
 
@@ -67,6 +69,7 @@ export function EditorToolbar({
     onViewCode,
     onGitHubSettings,
     onProperties,
+    onExecutions,
     onSave,
 }: EditorToolbarProps) {
     return (
@@ -151,6 +154,15 @@ export function EditorToolbar({
                 >
                     <Settings className="w-4 h-4" />
                     Properties
+                </button>
+                <button
+                    onClick={onExecutions}
+                    disabled={isNew}
+                    className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+                    title="View workflow executions"
+                >
+                    <Play className="w-4 h-4" />
+                    Executions
                 </button>
                 <button
                     onClick={onSave}

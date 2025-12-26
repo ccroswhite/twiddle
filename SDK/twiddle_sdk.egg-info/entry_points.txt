@@ -1,0 +1,2 @@
+[console_scripts]
+twiddle = twiddle_sdk.cli.main:cli

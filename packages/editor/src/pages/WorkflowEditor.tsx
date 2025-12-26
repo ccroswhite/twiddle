@@ -1346,6 +1346,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         onViewCode={() => setShowPythonCode(true)}
         onGitHubSettings={() => setShowGitHubSettings(true)}
         onProperties={() => setShowPropertiesPanel(true)}
+        onExecutions={() => navigate(`/executions?workflow=${id}`)}
         onSave={handleSave}
       />
 

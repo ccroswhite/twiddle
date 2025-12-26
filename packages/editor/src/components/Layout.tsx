@@ -1,10 +1,11 @@
 import { Outlet, NavLink } from 'react-router-dom';
-import { Workflow, Database, Settings, LogOut, User, Users } from 'lucide-react';
+import { Workflow, Database, Settings, LogOut, User, Users, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { to: '/workflows', icon: Workflow, label: 'Workflows' },
+  { to: '/executions', icon: Play, label: 'Executions' },
   { to: '/datasources', icon: Database, label: 'Data Sources' },
   { to: '/groups', icon: Users, label: 'Groups' },
 ];

@@ -497,6 +497,7 @@ function generateActivityExecution(node: WorkflowNode, index: number): string {
                 ActivityInput(
                     node_id="${node.id}",
                     node_name="${nodeName}",
+                    node_type="${node.type}",
                     parameters=${parametersDict},
                     input_data=result,
                 ),${timeoutCode}${retryPolicyCode}
@@ -553,9 +554,11 @@ from typing import Any, Dict, Optional
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
+# Import Twiddle DSL types
+from twiddle_dsl import ActivityInput
+
 with workflow.unsafe.imports_passed_through():
     from activities import (
-        ActivityInput,
 ${activityNodes.map(n => `        ${nodeTypeToFunctionName(n.type)},`).join('\n')}
     )
 
@@ -592,7 +595,7 @@ ${nodeExecutions || '        # No activities to execute\n        pass'}
 }
 
 /**
- * Generate the activities file
+ * Generate the activities file with enhanced execution logging
  */
 function generateActivitiesFile(workflow: WorkflowData): string {
   const nodes = workflow.nodes as WorkflowNode[];
@@ -603,8 +606,10 @@ function generateActivitiesFile(workflow: WorkflowData): string {
       const activityCode = generateActivityCode(nodeType);
       const funcName = nodeTypeToFunctionName(nodeType);
 
+      // Stack decorators: activity.defn for Temporal, with_execution_logging for structured events
       return `
 @activity.defn(name="${funcName}")
+@with_execution_logging
 ${activityCode}`;
     })
     .join('\n');
@@ -616,33 +621,19 @@ Each activity is:
 - Idempotent: Safe to retry without side effects
 - Durable: State is persisted by Temporal
 - Configurable: Retry policies and timeouts are set by the workflow
+
+Execution Logging:
+- All activities emit structured JSON execution events
+- Events: ACTIVITY_STARTED, ACTIVITY_COMPLETED, ACTIVITY_FAILED, ACTIVITY_RETRY
+- Use these events to build waterfall visualizations
 """
 import os
-import logging
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from temporalio import activity
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ActivityInput:
-    """
-    Standard input for all activities.
-    
-    Attributes:
-        node_id: Unique identifier for this node in the workflow
-        node_name: Human-readable name for the activity
-        parameters: Node-specific configuration parameters
-        input_data: Data passed from the previous activity
-    """
-    node_id: str
-    node_name: str
-    parameters: Dict[str, Any]
-    input_data: Dict[str, Any]
+# Import Twiddle DSL components for consistent execution logging
+from twiddle_dsl import ActivityInput, ExecutionLogger, with_execution_logging
 
 
 def get_env(key: str, default: str = "") -> str:
@@ -927,6 +918,9 @@ function generateRequirements(workflow: WorkflowData): string {
   const nodeTypes = new Set(nodes.map(n => n.type));
 
   const requirements: string[] = [
+    '# Twiddle DSL',
+    'twiddle-dsl>=1.0.0',
+    '',
     '# Temporal SDK',
     'temporalio>=1.4.0',
     '',

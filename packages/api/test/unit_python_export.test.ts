@@ -65,6 +65,7 @@ describe('Python Export Generation', () => {
         // Verify simple existence of logical flow or comments if applicable
         expect(result.pythonWorkflow).toContain('class Connected_workflowWorkflow:');
     });
+
     it('should generate worker with logging configuration', () => {
         const workflow = {
             id: 'wf-3',
@@ -79,9 +80,7 @@ describe('Python Export Generation', () => {
             connections: []
         };
 
-        // const { generatePythonExport } = require('../src/lib/python-export');
         const files = generatePythonExport(workflow);
-
 
         expect(files['worker.py']).toBeDefined();
 
@@ -91,3 +90,84 @@ describe('Python Export Generation', () => {
         expect(workerContent).toContain('logger.info');
     });
 });
+
+describe('Python Export DSL Alignment', () => {
+    const sampleWorkflow = {
+        id: 'wf-dsl',
+        name: 'DSL Test Workflow',
+        nodes: [{
+            id: 'n1',
+            type: 'twiddle.httpRequest',
+            name: 'HTTP Request',
+            parameters: { url: 'https://example.com' },
+            position: { x: 0, y: 0 }
+        }],
+        connections: []
+    };
+
+    it('should include twiddle-dsl in requirements.txt', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        expect(files['requirements.txt']).toBeDefined();
+        expect(files['requirements.txt']).toContain('twiddle-dsl>=1.0.0');
+    });
+
+    it('should import ActivityInput from twiddle_dsl in activities.py', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        expect(files['activities.py']).toBeDefined();
+        const activities = files['activities.py'];
+        expect(activities).toContain('from twiddle_dsl import');
+        expect(activities).toContain('ActivityInput');
+        expect(activities).toContain('with_execution_logging');
+    });
+
+    it('should import ActivityInput from twiddle_dsl in workflow.py', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        expect(files['workflow.py']).toBeDefined();
+        const workflow = files['workflow.py'];
+        expect(workflow).toContain('from twiddle_dsl import ActivityInput');
+    });
+
+    it('should generate all expected files', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        const expectedFiles = [
+            'workflow.py',
+            'activities.py',
+            'worker.py',
+            'starter.py',
+            'requirements.txt',
+            'Dockerfile',
+            'docker-compose.yml',
+            '.env.example',
+            'README.md',
+        ];
+
+        for (const file of expectedFiles) {
+            expect(files[file]).toBeDefined();
+            expect(files[file].length).toBeGreaterThan(0);
+        }
+    });
+
+    it('should apply @with_execution_logging decorator to activities', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        const activities = files['activities.py'];
+        expect(activities).toContain('@activity.defn');
+        expect(activities).toContain('@with_execution_logging');
+    });
+
+    it('should not embed ExecutionLogger class (import from twiddle_dsl instead)', () => {
+        const files = generatePythonExport(sampleWorkflow);
+
+        const activities = files['activities.py'];
+        // Should import, not define
+        expect(activities).toContain('from twiddle_dsl import');
+        expect(activities).toContain('ExecutionLogger');
+        // Should NOT have the class definition embedded
+        expect(activities).not.toContain('class ExecutionLogger:');
+    });
+});
+

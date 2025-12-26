@@ -7,6 +7,7 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
 import { workflowRoutes } from './routes/workflows.js';
+import { executionRoutes } from './routes/executions.js';
 import { promotionRoutes } from './routes/promotions.js';
 import { nodeRoutes } from './routes/nodes.js';
 import { credentialRoutes } from './routes/credentials.js';
@@ -74,6 +75,7 @@ async function main() {
   await app.register(localAuthRoutes, { prefix: '/api/auth/local' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(workflowRoutes, { prefix: '/api/workflows' });
+  await app.register(executionRoutes, { prefix: '/api/executions' });
   await app.register(promotionRoutes, { prefix: '/api/promotions' });
   await app.register(nodeRoutes, { prefix: '/api/nodes' });
   await app.register(credentialRoutes, { prefix: '/api/credentials' });
