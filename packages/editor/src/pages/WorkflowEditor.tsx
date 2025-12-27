@@ -29,11 +29,12 @@ import { EditorToolbar } from '@/components/EditorToolbar';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
-import { MAX_HISTORY, DEFAULT_SCHEDULE } from '@/utils/constants';
+import { DEFAULT_SCHEDULE } from '@/utils/constants';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
+import { useUndoHistory } from '@/hooks/useUndoHistory';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -101,12 +102,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versions, setVersions] = useState<{ id: string; version: number; createdAt: string; createdBy: { name: string; email: string } | null }[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
-
-
-  // Undo history - stores snapshots of nodes and edges
-  const [history, setHistory] = useState<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const isUndoing = useRef(false);
 
   // Pending node being dragged to place
   const [pendingNode, setPendingNode] = useState<{
@@ -390,58 +385,21 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     handleToggleExpandRef.current?.(nodeId);
   }, []);
 
-  // Save current state to history
-  const saveToHistory = useCallback(() => {
-    if (isUndoing.current) return;
-
-    setHistory(prev => {
-      // Create a deep copy of current state
-      const snapshot = {
-        nodes: JSON.parse(JSON.stringify(nodes)),
-        edges: JSON.parse(JSON.stringify(edges)),
-      };
-
-      // If we're not at the end of history, truncate forward history
-      const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push(snapshot);
-
-      // Keep only the last MAX_HISTORY items
-      if (newHistory.length > MAX_HISTORY) {
-        newHistory.shift();
-      }
-
-      return newHistory;
-    });
-    setHistoryIndex(prev => Math.min(prev + 1, MAX_HISTORY - 1));
-  }, [nodes, edges, historyIndex]);
-
-  // Undo last action
-  const handleUndo = useCallback(() => {
-    if (historyIndex <= 0 || history.length === 0) return;
-
-    isUndoing.current = true;
-    const prevIndex = historyIndex - 1;
-    const prevState = history[prevIndex];
-
-    if (prevState) {
-      // Restore onOpenProperties callback to nodes
-      const restoredNodes = prevState.nodes.map(node => ({
-        ...node,
-        data: {
-          ...node.data,
-          onOpenProperties: handleOpenProperties,
-        },
-      }));
-      setNodes(restoredNodes);
-      setEdges(prevState.edges);
-      setHistoryIndex(prevIndex);
-    }
-
-    // Reset flag after state update
-    setTimeout(() => {
-      isUndoing.current = false;
-    }, 0);
-  }, [history, historyIndex, setNodes, setEdges, handleOpenProperties]);
+  // Undo history hook
+  const { saveToHistory, handleUndo, canUndo, isUndoing } = useUndoHistory(
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    // Restore onOpenProperties callback to nodes
+    (node) => ({
+      ...node,
+      data: {
+        ...node.data,
+        onOpenProperties: handleOpenProperties,
+      },
+    })
+  );
 
   // Keyboard shortcut for undo
   useEffect(() => {
@@ -1335,7 +1293,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         isNew={isNew}
         isReadOnly={isReadOnly}
         saving={saving}
-        historyIndex={historyIndex}
+        canUndo={canUndo}
         githubConnected={githubConnected}
         pythonCode={pythonCode}
         onNameChange={setWorkflowName}

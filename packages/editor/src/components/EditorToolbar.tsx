@@ -31,7 +31,7 @@ export interface EditorToolbarProps {
     saving: boolean;
 
     // State for conditional button states
-    historyIndex: number;
+    canUndo: boolean;
     githubConnected: boolean;
     pythonCode: { workflow: string; activities: string } | null;
 
@@ -58,7 +58,7 @@ export function EditorToolbar({
     isNew,
     isReadOnly,
     saving,
-    historyIndex,
+    canUndo,
     githubConnected,
     pythonCode,
     onNameChange,
@@ -92,7 +92,7 @@ export function EditorToolbar({
             <div className="flex items-center gap-2">
                 <button
                     onClick={onUndo}
-                    disabled={historyIndex <= 0 || isReadOnly}
+                    disabled={!canUndo || isReadOnly}
                     className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Undo last change"
                 >
