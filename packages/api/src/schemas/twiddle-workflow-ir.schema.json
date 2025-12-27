@@ -1,0 +1,252 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://twiddle.dev/schemas/workflow-ir-v1.json",
+    "title": "Twiddle Workflow IR",
+    "description": "Intermediate Representation for Twiddle workflows - orchestration-agnostic format",
+    "type": "object",
+    "required": [
+        "version",
+        "workflow",
+        "nodes",
+        "connections"
+    ],
+    "properties": {
+        "version": {
+            "type": "string",
+            "description": "IR schema version",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$",
+            "examples": [
+                "1.0.0"
+            ]
+        },
+        "workflow": {
+            "$ref": "#/definitions/WorkflowMetadata"
+        },
+        "nodes": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Node"
+            },
+            "description": "All nodes in the workflow"
+        },
+        "connections": {
+            "type": "array",
+            "items": {
+                "$ref": "#/definitions/Connection"
+            },
+            "description": "Connections between nodes"
+        },
+        "input": {
+            "$ref": "#/definitions/WorkflowInput",
+            "description": "Expected workflow input schema"
+        }
+    },
+    "definitions": {
+        "WorkflowMetadata": {
+            "type": "object",
+            "required": [
+                "id",
+                "name"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique workflow identifier"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Human-readable workflow name"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Workflow description"
+                },
+                "taskQueue": {
+                    "type": "string",
+                    "description": "Task queue name (Temporal) or DAG ID prefix (Airflow)"
+                },
+                "timeout": {
+                    "type": "string",
+                    "description": "Workflow timeout in ISO 8601 duration format",
+                    "pattern": "^P(?:\\d+Y)?(?:\\d+M)?(?:\\d+D)?(?:T(?:\\d+H)?(?:\\d+M)?(?:\\d+S)?)?$",
+                    "examples": [
+                        "PT1H",
+                        "P1D",
+                        "PT30M"
+                    ]
+                },
+                "retryPolicy": {
+                    "$ref": "#/definitions/RetryPolicy"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Tags for categorization"
+                }
+            }
+        },
+        "Node": {
+            "type": "object",
+            "required": [
+                "id",
+                "type",
+                "name"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "description": "Unique node identifier"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Node type (e.g., 'twiddle.httpRequest', 'twiddle.runScript')"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Human-readable node name"
+                },
+                "position": {
+                    "$ref": "#/definitions/Position"
+                },
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Node-specific parameters"
+                },
+                "credentials": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "Credential references"
+                },
+                "activityOptions": {
+                    "$ref": "#/definitions/ActivityOptions"
+                },
+                "hints": {
+                    "$ref": "#/definitions/NodeHints"
+                }
+            }
+        },
+        "Connection": {
+            "type": "object",
+            "required": [
+                "source",
+                "target"
+            ],
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Source node ID"
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Target node ID"
+                },
+                "sourceHandle": {
+                    "type": "string",
+                    "description": "Output handle on source node"
+                },
+                "targetHandle": {
+                    "type": "string",
+                    "description": "Input handle on target node"
+                },
+                "condition": {
+                    "type": "string",
+                    "description": "Conditional expression (for branching)"
+                }
+            }
+        },
+        "Position": {
+            "type": "object",
+            "required": [
+                "x",
+                "y"
+            ],
+            "properties": {
+                "x": {
+                    "type": "number"
+                },
+                "y": {
+                    "type": "number"
+                }
+            }
+        },
+        "RetryPolicy": {
+            "type": "object",
+            "properties": {
+                "maxAttempts": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Maximum retry attempts"
+                },
+                "initialInterval": {
+                    "type": "string",
+                    "description": "Initial retry interval (ISO 8601)",
+                    "examples": [
+                        "PT1S"
+                    ]
+                },
+                "backoffCoefficient": {
+                    "type": "number",
+                    "minimum": 1,
+                    "description": "Backoff multiplier"
+                },
+                "maxInterval": {
+                    "type": "string",
+                    "description": "Maximum retry interval (ISO 8601)"
+                }
+            }
+        },
+        "ActivityOptions": {
+            "type": "object",
+            "properties": {
+                "startToCloseTimeout": {
+                    "type": "integer",
+                    "description": "Activity timeout in seconds"
+                },
+                "scheduleToCloseTimeout": {
+                    "type": "integer",
+                    "description": "Total time from scheduling to completion"
+                },
+                "heartbeatTimeout": {
+                    "type": "integer",
+                    "description": "Heartbeat timeout in seconds"
+                },
+                "retryPolicy": {
+                    "$ref": "#/definitions/RetryPolicy"
+                },
+                "continueOnFail": {
+                    "type": "boolean",
+                    "description": "Continue workflow on activity failure"
+                }
+            }
+        },
+        "NodeHints": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string",
+                    "description": "Icon name for UI display"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category for grouping"
+                },
+                "color": {
+                    "type": "string",
+                    "description": "Display color"
+                }
+            }
+        },
+        "WorkflowInput": {
+            "type": "object",
+            "properties": {
+                "schema": {
+                    "type": "object",
+                    "description": "JSON Schema for workflow input validation"
+                }
+            }
+        }
+    }
+}

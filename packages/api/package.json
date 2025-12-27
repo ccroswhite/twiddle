@@ -24,6 +24,7 @@
     "@temporalio/client": "^1.11.0",
     "@twiddle/nodes": "workspace:*",
     "@twiddle/shared": "workspace:*",
+    "ajv": "^8.17.1",
     "fastify": "^5.1.0",
     "nanoid": "^5.0.0",
     "pg": "^8.16.3",

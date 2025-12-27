@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { generatePythonExport, generatePythonCode } from '../lib/python-export.js';
+import { generateAirflowExport } from '../lib/airflow-export.js';
+import { workflowToIR } from '../lib/ir/index.js';
 import { writeWorkflowFiles, commitAndPush } from '../lib/github.js';
 import { create as createTar } from 'tar';
 import * as fs from 'fs';
@@ -758,6 +760,166 @@ export const workflowRoutes: FastifyPluginAsync = async (app) => {
       },
       files,
     };
+  });
+
+  // Export workflow as Airflow DAG
+  app.get<{
+    Params: { id: string };
+    Querystring: { format?: 'json' | 'tar' };
+  }>('/:id/export/airflow', async (request, reply) => {
+    const { id } = request.params;
+    const { format = 'tar' } = request.query;
+
+    const workflow = await prisma.workflow.findUnique({
+      where: { id },
+    });
+
+    if (!workflow) {
+      return reply.status(404).send({ error: 'Workflow not found' });
+    }
+
+    // Generate Airflow files
+    const files = generateAirflowExport({
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description || undefined,
+      nodes: workflow.nodes as unknown[],
+      connections: workflow.connections as unknown[],
+    });
+
+    // Create directory name from workflow name, environment, and version
+    const safeName = workflow.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'workflow';
+    const dirName = `${safeName}-airflow-${workflow.environment.toLowerCase()}-v${workflow.version}`;
+
+    if (format === 'tar') {
+      // Create a temporary directory with the workflow files
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'twiddle-airflow-export-'));
+      const workflowDir = path.join(tempDir, dirName);
+
+      try {
+        // Create the workflow directory
+        fs.mkdirSync(workflowDir, { recursive: true });
+
+        // Write all files to the directory
+        for (const [filename, content] of Object.entries(files)) {
+          fs.writeFileSync(path.join(workflowDir, filename), content, 'utf-8');
+        }
+
+        // Also write the workflow definition for re-import
+        const definition = {
+          workflowId: workflow.id,
+          workflowName: workflow.name,
+          workflowDescription: workflow.description,
+          version: workflow.version,
+          environment: workflow.environment,
+          exportedAt: new Date().toISOString(),
+          exportFormat: 'airflow',
+          definition: {
+            nodes: workflow.nodes,
+            connections: workflow.connections,
+            settings: workflow.settings,
+            tags: workflow.tags,
+          },
+        };
+        fs.writeFileSync(
+          path.join(workflowDir, 'twiddle-workflow.json'),
+          JSON.stringify(definition, null, 2),
+          'utf-8'
+        );
+
+        // Create the tarball
+        const tarballPath = path.join(tempDir, `${dirName}.tar.gz`);
+        await createTar(
+          {
+            gzip: true,
+            file: tarballPath,
+            cwd: tempDir,
+          },
+          [dirName]
+        );
+
+        // Read the tarball and send it
+        const tarballBuffer = fs.readFileSync(tarballPath);
+
+        // Clean up temp directory
+        fs.rmSync(tempDir, { recursive: true, force: true });
+
+        // Send the tarball
+        return reply
+          .header('Content-Type', 'application/gzip')
+          .header('Content-Disposition', `attachment; filename="${dirName}.tar.gz"`)
+          .send(tarballBuffer);
+
+      } catch (err) {
+        // Clean up on error
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {
+          // Ignore cleanup errors
+        }
+        throw err;
+      }
+    }
+
+    // Return as JSON with file contents and workflow definition
+    return {
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      workflowDescription: workflow.description,
+      version: workflow.version,
+      environment: workflow.environment,
+      exportedAt: new Date().toISOString(),
+      exportFormat: 'airflow',
+      directoryName: dirName,
+      definition: {
+        nodes: workflow.nodes,
+        connections: workflow.connections,
+        settings: workflow.settings,
+        tags: workflow.tags,
+      },
+      files,
+    };
+  });
+
+  // Export workflow as Twiddle IR (JSON)
+  app.get<{
+    Params: { id: string };
+  }>('/:id/export/ir', async (request, reply) => {
+    const { id } = request.params;
+
+    const workflow = await prisma.workflow.findUnique({
+      where: { id },
+    });
+
+    if (!workflow) {
+      return reply.status(404).send({ error: 'Workflow not found' });
+    }
+
+    // Convert to IR format
+    const ir = workflowToIR({
+      id: workflow.id,
+      name: workflow.name,
+      description: workflow.description,
+      nodes: workflow.nodes,
+      connections: workflow.connections,
+      settings: workflow.settings,
+      tags: workflow.tags as string[],
+    });
+
+    // Create filename
+    const safeName = workflow.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'workflow';
+    const filename = `${safeName}-v${workflow.version}.twiddle.json`;
+
+    return reply
+      .header('Content-Type', 'application/json')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .send(ir);
   });
 
   // Get all versions for a workflow
