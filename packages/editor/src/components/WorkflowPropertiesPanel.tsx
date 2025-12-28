@@ -232,7 +232,7 @@ export function WorkflowPropertiesPanel({
                                                         onClick={() => {
                                                             const current = schedule.simple?.daysOfWeek || [];
                                                             const updated = isSelected
-                                                                ? current.filter((d) => d !== index)
+                                                                ? current.filter((d: number) => d !== index)
                                                                 : [...current, index].sort();
                                                             onUpdateSchedule({
                                                                 simple: {

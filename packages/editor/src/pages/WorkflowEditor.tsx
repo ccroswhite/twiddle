@@ -389,7 +389,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }, []);
 
   const handleUpdateSchedule = useCallback((updates: Partial<WorkflowSchedule>) => {
-    setWorkflowSchedule((prev) => ({ ...prev, ...updates }));
+    setWorkflowSchedule((prev: WorkflowSchedule) => ({ ...prev, ...updates }));
   }, []);
 
   const handleToggleExpand = useCallback((nodeId: string) => {

@@ -4,7 +4,7 @@ import { credentialsApi, groupsApi, type CredentialWithAccess, type Group, type 
 import { useAuth } from '@/contexts/AuthContext';
 
 // Define which fields each credential type needs
-const credentialFields: Record<string, { label: string; field: keyof CredentialData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
+const credentialFields: Record<string, { label: string; field: string & keyof CredentialData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
   httpBasicAuth: [
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
@@ -228,7 +228,7 @@ export function Credentials() {
   }
 
   function updateEditData(field: keyof CredentialData, value: string | number | boolean) {
-    setEditData(prev => ({ ...prev, [field]: value }));
+    setEditData((prev: CredentialData) => ({ ...prev, [field]: value }));
   }
 
   function toggleEditPasswordVisibility(field: string) {
