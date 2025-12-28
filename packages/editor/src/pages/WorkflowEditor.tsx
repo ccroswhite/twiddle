@@ -5,8 +5,6 @@ import {
   Controls,
   MiniMap,
   Background,
-  useNodesState,
-  useEdgesState,
   useReactFlow,
   addEdge,
   type Node,
@@ -30,7 +28,6 @@ import { getNextEnvironment, type Environment } from '@/components/EnvironmentBa
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { ReadOnlyBanner, TakeoverRequestModal, RequestingAccessBanner } from '@/components/editor';
-import { DEFAULT_SCHEDULE } from '@/utils/constants';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
@@ -38,6 +35,7 @@ import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useWorkflowLocking } from '@/hooks/useWorkflowLocking';
 import { useContextMenus } from '@/hooks/useContextMenus';
+import { useWorkflowState } from '@/hooks/useWorkflowState';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -49,25 +47,37 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const location = useLocation();
   const isNew = !id || id === 'new';
 
-  // Track the folder ID for new workflows (set when clicking Create New Workflow from a folder)
-  const [newWorkflowFolderId, setNewWorkflowFolderId] = useState<string | null>(null);
+  // Workflow state hook - manages nodes, edges, metadata, and save
+  const {
+    nodes,
+    setNodes,
+    onNodesChange,
+    edges,
+    setEdges,
+    onEdgesChange,
+    workflowName,
+    setWorkflowName,
+    workflowVersion,
+    setWorkflowVersion,
+    setWorkflowDescription,
+    workflowProperties,
+    setWorkflowProperties,
+    workflowSchedule,
+    setWorkflowSchedule,
+    environment,
+    setEnvironment,
+    saving,
+    handleSave,
+  } = useWorkflowState(id, isNew);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [workflowName, setWorkflowName] = useState('New Workflow');
-  const [workflowVersion, setWorkflowVersion] = useState<number>(1);
-  const [workflowDescription, setWorkflowDescription] = useState('');
-  const [saving, setSaving] = useState(false);
+  // UI state that stays in the component
   const [showNodePanel, setShowNodePanel] = useState(false);
   const [showPythonCode, setShowPythonCode] = useState(false);
   const [showGitHubSettings, setShowGitHubSettings] = useState(false);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
-  const [workflowProperties, setWorkflowProperties] = useState<WorkflowProperty[]>([]);
-  const [workflowSchedule, setWorkflowSchedule] = useState<WorkflowSchedule>(DEFAULT_SCHEDULE);
   const [githubConnected, setGithubConnected] = useState(false);
   const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
-  const [environment, setEnvironment] = useState<Environment>('DV');
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
@@ -981,134 +991,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
     setShowNodePanel(false);
   }
-  async function handleSave() {
-    try {
-      setSaving(true);
-
-      // Convert React Flow nodes back to workflow format
-      // Filter out embedded child nodes - they should not be saved as they're derived from parent parameters
-      const workflowNodes = nodes
-        .filter((node: Node) => !(node as any).parentId) // Exclude child nodes of embedded workflows
-        .map((node: Node) => ({
-          id: node.id,
-          name: node.data.label,
-          type: node.data.nodeType,
-          position: node.position,
-          parameters: node.data.parameters || {},
-        }));
-
-      // Get IDs of all saved nodes for filtering edges
-      const savedNodeIds = new Set(workflowNodes.map((n: any) => n.id));
-
-      // Build handle mappings for all expanded embedded workflows
-      // This allows us to remap edges connecting to internal embedded nodes
-      const embeddedNodeHandleMaps: Record<string, { inputMap: Map<string, string>, outputMap: Map<string, string> }> = {};
-
-      for (const n of workflowNodes) {
-        if (n.type === 'twiddle.embeddedWorkflow' && n.parameters) {
-          const params = n.parameters as Record<string, unknown>;
-          try {
-            const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
-            const outputHandles = params.outputHandles ? JSON.parse(params.outputHandles as string) : [];
-
-            const inputMap = new Map<string, string>();
-            const outputMap = new Map<string, string>();
-
-            inputHandles.forEach((h: any) => {
-              inputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle);
-            });
-            outputHandles.forEach((h: any) => {
-              outputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle);
-            });
-
-            embeddedNodeHandleMaps[n.id] = { inputMap, outputMap };
-          } catch (e) {
-            console.warn('Failed to parse handles for save remapping', e);
-          }
-        }
-      }
-
-      // Remap edges that connect to embedded nodes, then filter
-      const remappedEdges = edges.map((edge: Edge) => {
-        let newSource = edge.source;
-        let newSourceHandle = edge.sourceHandle;
-        let newTarget = edge.target;
-        let newTargetHandle = edge.targetHandle;
-
-        // Check if source is an embedded node
-        if (edge.source.includes('_embedded_')) {
-          // Find the parent node ID (everything before _embedded_)
-          const parentId = edge.source.split('_embedded_')[0];
-          const maps = embeddedNodeHandleMaps[parentId];
-          if (maps && maps.outputMap.has(edge.source)) {
-            newSource = parentId;
-            newSourceHandle = maps.outputMap.get(edge.source) || edge.sourceHandle;
-          }
-        }
-
-        // Check if target is an embedded node
-        if (edge.target.includes('_embedded_')) {
-          const parentId = edge.target.split('_embedded_')[0];
-          const maps = embeddedNodeHandleMaps[parentId];
-          if (maps && maps.inputMap.has(edge.target)) {
-            newTarget = parentId;
-            newTargetHandle = maps.inputMap.get(edge.target) || edge.targetHandle;
-          }
-        }
-
-        return {
-          ...edge,
-          source: newSource,
-          sourceHandle: newSourceHandle,
-          target: newTarget,
-          targetHandle: newTargetHandle,
-        };
-      });
-
-      // Convert React Flow edges back to workflow connections
-      // Filter out internal connections of embedded workflows
-      const workflowConnections = remappedEdges
-        .filter((edge: Edge) => {
-          // Only save edges where both source and target are saved nodes
-          return savedNodeIds.has(edge.source) && savedNodeIds.has(edge.target);
-        })
-        .map((edge: Edge) => ({
-          sourceNodeId: edge.source,
-          sourceOutput: edge.sourceHandle,
-          targetNodeId: edge.target,
-          targetInput: edge.targetHandle,
-        }));
-
-      if (isNew) {
-        const created = await workflowsApi.create({
-          name: workflowName,
-          description: workflowDescription,
-          nodes: workflowNodes as any,
-          connections: workflowConnections as any,
-          properties: workflowProperties,
-          schedule: workflowSchedule,
-          folderId: newWorkflowFolderId || undefined,
-        });
-        // Clear the folder ID after creating
-        setNewWorkflowFolderId(null);
-        navigate(`/workflows/${created.id}`, { replace: true });
-      } else {
-        const updated = await workflowsApi.update(id!, {
-          name: workflowName,
-          description: workflowDescription,
-          nodes: workflowNodes as any,
-          connections: workflowConnections as any,
-          properties: workflowProperties,
-          schedule: workflowSchedule,
-        });
-        setWorkflowVersion(updated.version);
-      }
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
+  // handleSave is now provided by useWorkflowState hook
 
 
   function handleOpenWorkflowBrowser() {
