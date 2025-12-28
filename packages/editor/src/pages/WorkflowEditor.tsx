@@ -35,6 +35,7 @@ import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embedd
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
+import { useWorkflowLocking } from '@/hooks/useWorkflowLocking';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -80,11 +81,16 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
   const [versionHistoryWorkflow, setVersionHistoryWorkflow] = useState<Workflow | null>(null);
 
-  // Locking state
-  const [isReadOnly, setIsReadOnly] = useState(false);
-  const [lockedBy, setLockedBy] = useState<{ id: string; name: string; email: string; isMe: boolean } | null>(null);
-  const [takeoverRequest, setTakeoverRequest] = useState<{ userId: string; name: string; email: string; requestedAt: string } | null>(null);
-  const [requestingLock, setRequestingLock] = useState(false);
+  // Locking hook - manages heartbeat, takeover requests, unlock on unmount
+  const {
+    isReadOnly,
+    lockedBy,
+    takeoverRequest,
+    requestingLock,
+    handleRequestLock,
+    handleResolveLock,
+    updateLockState,
+  } = useWorkflowLocking(id, isNew, (wfId) => loadWorkflow(wfId));
 
   // Folder permissions state
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
@@ -530,90 +536,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }
   }, [nodes, edges, saveToHistory]);
 
-  // Heartbeat loop
-  useEffect(() => {
-    if (!id || isNew || isReadOnly) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const response = await workflowsApi.heartbeat(id);
-        if (response.request) {
-          setTakeoverRequest(response.request);
-        } else {
-          setTakeoverRequest(null);
-        }
-      } catch (err) {
-        console.error('Heartbeat failed:', err);
-        loadWorkflow(id);
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [id, isNew, isReadOnly]);
-
-  // Takeover Request Polling (Viewer)
-  useEffect(() => {
-    if (!id || !requestingLock || !isReadOnly) return;
-
-    const interval = setInterval(async () => {
-      try {
-        // We can use heartbeat or get to check status, but really we wait for the lock to be acquired
-        // In fact, if we are requesting, we likely want to just try to loadWorkflow periodically
-        // If we get the lock, loadWorkflow will set isReadOnly=false
-        await loadWorkflow(id);
-        // If loadWorkflow set isReadOnly=false, this effect will stop and requestingLock should be reset
-      } catch (e) {
-        // ignore
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [id, requestingLock, isReadOnly]);
-
-  // Reset requestingLock when we get write access
-  useEffect(() => {
-    if (!isReadOnly) {
-      setRequestingLock(false);
-    }
-  }, [isReadOnly]);
-
-  async function handleRequestLock() {
-    if (!id || !isReadOnly) return;
-    try {
-      const res = await workflowsApi.requestLock(id);
-      if (res.status === 'acquired') {
-        // We got it immediately (unlocked)
-        loadWorkflow(id);
-      } else if (res.status === 'requested') {
-        setRequestingLock(true);
-      }
-    } catch (e) {
-      alert('Failed to request lock');
-    }
-  }
-
-  async function handleResolveLock(action: 'ACCEPT' | 'DENY') {
-    if (!id || !takeoverRequest) return;
-    try {
-      await workflowsApi.resolveLock(id, action);
-      setTakeoverRequest(null);
-      if (action === 'ACCEPT') {
-        // We yielded, so reload to become ReadOnly
-        loadWorkflow(id);
-      }
-    } catch (e) {
-      alert('Failed to resolve lock');
-    }
-  }
-
-  // Unlock on unmount
-  useEffect(() => {
-    return () => {
-      if (id && !isNew && !isReadOnly && lockedBy?.isMe) {
-        workflowsApi.unlock(id).catch(console.error);
-      }
-    };
-  }, [id, isNew, isReadOnly, lockedBy]);
+  // Note: Locking effects (heartbeat, takeover polling, unlock on unmount)
+  // are now handled by useWorkflowLocking hook
 
   useEffect(() => {
     loadAvailableNodes();
@@ -871,14 +795,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       // Use case: User opens workflow -> Auto-upgrades happen -> They see new version -> They must Save to keep it.
       // That seems correct.
 
-      // Handle locking
-      if (workflow.lockedBy) {
-        setLockedBy(workflow.lockedBy);
-        setIsReadOnly(!workflow.lockedBy.isMe);
-      } else {
-        setLockedBy(null);
-        setIsReadOnly(false);
-      }
+      // Handle locking - update via hook
+      updateLockState({
+        isReadOnly: workflow.lockedBy ? !workflow.lockedBy.isMe : false,
+        lockedBy: workflow.lockedBy || null,
+      });
 
       // Load Python code if available
       if (workflow.pythonWorkflow) {
@@ -1592,7 +1513,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                             setEdges(flowEdges);
                             setWorkflowName(`${versionHistoryWorkflow.name} (v${ver.version})`);
                             setWorkflowDescription(versionHistoryWorkflow.description || '');
-                            setIsReadOnly(true); // Force read only
+                            updateLockState({ isReadOnly: true, lockedBy: null }); // Force read only for old version
                           }}
                           className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded"
                         >
