@@ -29,6 +29,7 @@ import { EditorToolbar } from '@/components/EditorToolbar';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
+import { ReadOnlyBanner, TakeoverRequestModal, RequestingAccessBanner } from '@/components/editor';
 import { DEFAULT_SCHEDULE } from '@/utils/constants';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
@@ -1209,12 +1210,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       {/* Read Only Banner */}
       {isReadOnly && lockedBy && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-center gap-2 text-sm text-amber-800">
-          <Lock className="w-4 h-4" />
-          <span className="font-medium">Read Only Mode</span>
-          <span className="text-amber-700">•</span>
-          <span>This workflow is currently being edited by <strong>{lockedBy.name}</strong> ({lockedBy.email}). You cannot make changes.</span>
-        </div>
+        <ReadOnlyBanner lockedBy={lockedBy} />
       )}
 
       {/* Canvas */}
@@ -1578,47 +1574,18 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       {/* Takeover Request Modal (For Editor) */}
       {takeoverRequest && !isReadOnly && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-slate-900">Edit Access Requested</h3>
-                <p className="mt-2 text-sm text-slate-600">
-                  <strong>{takeoverRequest.name}</strong> ({takeoverRequest.email}) is requesting to edit this workflow.
-                </p>
-                <p className="mt-2 text-sm text-slate-500">
-                  If you do not respond within 1 minute, access will be automatically transferred.
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => handleResolveLock('DENY')}
-                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
-              >
-                Deny
-              </button>
-              <button
-                onClick={() => handleResolveLock('ACCEPT')}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                Allow Access
-              </button>
-            </div>
-          </div>
-        </div>
+        <TakeoverRequestModal
+          request={takeoverRequest}
+          onAccept={() => handleResolveLock('ACCEPT')}
+          onDeny={() => handleResolveLock('DENY')}
+        />
       )}
 
       {/* Requesting Access Banner (For Viewer) */}
       {requestingLock && isReadOnly && (
-        <div className="absolute top-[120px] left-1/2 transform -translate-x-1/2 z-50 bg-white border border-slate-200 shadow-lg px-6 py-3 rounded-full flex items-center gap-3 animate-pulse">
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-bounce" />
-          <span className="font-medium text-slate-700">Requesting edit access...</span>
-        </div>
+        <RequestingAccessBanner />
       )}
+
 
       {/* Node Panel */}
       {showNodePanel && (
