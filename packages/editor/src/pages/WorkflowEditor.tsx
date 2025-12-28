@@ -30,6 +30,7 @@ import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { ReadOnlyBanner, TakeoverRequestModal, RequestingAccessBanner } from '@/components/editor';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
+import { checkAndUpgradeEmbeddedWorkflows } from '@/utils/embeddedWorkflowManager';
 import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
@@ -603,144 +604,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       console.error('Failed to load node types:', err);
     }
   }
-  // Check for updates to embedded workflows based on version policy
-  async function checkAndUpgradeEmbeddedWorkflows(nodes: any[]) {
-    const updatedNodes = [...nodes];
-    let hasChanges = false;
-
-    for (let i = 0; i < updatedNodes.length; i++) {
-      const node = updatedNodes[i];
-      if (node.type !== 'twiddle.embeddedWorkflow') continue;
-
-      const params = node.parameters || {};
-      const workflowId = params.workflowId;
-      const currentVersion = params.workflowVersion || 0;
-
-      // Default to 'locked' for existing nodes without policy
-      const effectivePolicy = params.versionPolicy || 'locked';
-
-      if (!workflowId) continue;
-
-      try {
-        // Fetch workflow details (always gets latest)
-        const latestWorkflow = await workflowsApi.get(workflowId) as any;
-
-        if (!latestWorkflow) continue;
-
-
-        const latestVersion = latestWorkflow.version || 1;
-
-        if (latestVersion > currentVersion) {
-          if (effectivePolicy === 'latest') {
-            // Auto-upgrade
-            console.log(`Auto-upgrading embedded workflow ${workflowId} from v${currentVersion} to v${latestVersion}`);
-
-            // Calculate handles for the new version
-            const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
-
-            updatedNodes[i] = {
-              ...node,
-              parameters: {
-                ...params,
-                workflowVersion: latestVersion,
-                workflowName: latestWorkflow.name, // Update name in case it changed
-                embeddedNodes: JSON.stringify(latestWorkflow.nodes),
-                embeddedConnections: JSON.stringify(latestWorkflow.connections),
-                inputHandles: JSON.stringify(inputHandles),
-                outputHandles: JSON.stringify(outputHandles),
-                versionPolicy: 'latest',
-              }
-            };
-            hasChanges = true;
-          } else {
-            // Policy is locked (or specific version), but a newer version exists.
-            // Check if we already asked (avoid nagging if they said no? - Hard to track "no" across reloads without local storage)
-            // For now, simple confirm.
-            if (window.confirm(`Embedded workflow "${params.workflowName}" has a newer version (v${latestVersion}). Current is v${currentVersion}.\n\nDo you want to upgrade to the latest version?`)) {
-              // Calculate handles for the new version
-              const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
-
-              updatedNodes[i] = {
-                ...node,
-                parameters: {
-                  ...params,
-                  workflowVersion: latestVersion,
-                  workflowName: latestWorkflow.name,
-                  embeddedNodes: JSON.stringify(latestWorkflow.nodes),
-                  embeddedConnections: JSON.stringify(latestWorkflow.connections),
-                  inputHandles: JSON.stringify(inputHandles),
-                  outputHandles: JSON.stringify(outputHandles),
-                  // Keep policy as locked? Or switch to latest? 
-                  // Usually if they upgrade manualy, it stays locked to that new version unless they explicitly change policy.
-                  versionPolicy: 'locked',
-                }
-              };
-              hasChanges = true;
-            } else {
-              // User declined upgrade.
-              // Still need to ensure handles exist for the CURRENT version if they are missing.
-              // This handles the regression where connections are lost on existing workflows.
-              if (!params.inputHandles || !params.outputHandles) {
-                // Warning: We are using latestWorkflow to calculate handles, but the user locked to an older version.
-                // Ideally we should fetch the specific version they are locked to.
-                // However, we don't assume we have that easily accessible without another API call.
-                // But wait, if they are locked to v1 and we fetch HEAD (v2), the handles might be different!
-                // Repairing using HEAD (v2) for a locked v1 node is dangerous/wrong.
-
-                // Strategy:
-                // 1. If we can get the specific version, use it.
-                // 2. If not, maybe we shouldn't touch it, or warn that connections might be broken.
-
-                // However, for the user's specific case, they probably just saved it recently and my previous fix didn't backfill properly?
-                // Or they just want it to work.
-
-                // Let's see if we can get the correct version data.
-                // `workflowsApi.getVersion(id, versionId)` requires version ID, not number. We only have number stored usually?
-                // Wait, `checkAndUpgradeEmbeddedWorkflows` fetches `workflowsApi.get(workflowId)` which is HEAD.
-
-                // If the user is on the SAME version as HEAD (failed the > check), then we can safely use HEAD data to repair.
-                // If the user is on an OLDER version, repairing with HEAD is wrong.
-
-                // Refined logic:
-                // If (latestVersion === currentVersion && (!inputs || !outputs)) -> Safe repair.
-                // If (latestVersion > currentVersion) -> We prompted above. If they said NO, we fall through here.
-                //    If they said NO, they stay on old version. If handles are missing, they stay broken?
-                //    If handles are missing on an old version, we'd need to fetch that old version to repair correctly.
-                //    We can check `latestWorkflow.version`. If equal, repair.
-              }
-            }
-          }
-        } else if (!params.inputHandles || !params.outputHandles) {
-          // No upgrade needed (already latest), but handles are missing.
-          // This is the "Repair" case for the regression.
-          // Since versions match (or current > latest? unlikely), we can use the fetched workflow data.
-          console.log(`Repairing missing handles for embedded workflow ${workflowId}`);
-
-          const { inputHandles, outputHandles } = calculateEdgeHandles(latestWorkflow.nodes, latestWorkflow.connections);
-
-          updatedNodes[i] = {
-            ...node,
-            parameters: {
-              ...params,
-              // Update handles only, keep version/nodes as is (assuming they match since version check passed)
-              // Actually, if we are here, currentVersion >= latestVersion approximately.
-              // If we strictly trust the version number match:
-              inputHandles: JSON.stringify(inputHandles),
-              outputHandles: JSON.stringify(outputHandles),
-              // Also ensure embeddedNodes/Connections are set if missing?
-              embeddedNodes: params.embeddedNodes || JSON.stringify(latestWorkflow.nodes),
-              embeddedConnections: params.embeddedConnections || JSON.stringify(latestWorkflow.connections),
-            }
-          };
-          hasChanges = true;
-        }
-      } catch (e) {
-        console.warn(`Failed to check for updates for embedded workflow ${workflowId}`, e);
-      }
-    }
-
-    return hasChanges ? updatedNodes : nodes;
-  }
+  // checkAndUpgradeEmbeddedWorkflows is now imported from @/utils/embeddedWorkflowManager
 
   async function loadWorkflow(workflowId: string) {
     try {
@@ -771,7 +635,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setEnvironment(workflow.environment || 'DV');
 
       // Check for embedded workflow updates
-      const nodesWithUpdates = await checkAndUpgradeEmbeddedWorkflows(workflow.nodes);
+      const { nodes: nodesWithUpdates } = await checkAndUpgradeEmbeddedWorkflows(workflow.nodes);
 
       // If updates occurred, mark as dirty? 
       // For now, we update the local state. User will need to save to persist upgrades.
