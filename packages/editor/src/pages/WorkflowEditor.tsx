@@ -36,6 +36,7 @@ import { getCredentialTypeLabel } from '@/utils/nodeConfig';
 import { useWorkflowBrowser } from '@/hooks/useWorkflowBrowser';
 import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useWorkflowLocking } from '@/hooks/useWorkflowLocking';
+import { useContextMenus } from '@/hooks/useContextMenus';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -115,17 +116,21 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     screenPos: { x: number; y: number };
   } | null>(null);
 
-  // Selection context menu
-  const [selectionContextMenu, setSelectionContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const selectionContextMenuRef = useRef<HTMLDivElement>(null);
-
-  // Workflow Browser context menu
-  const [workflowContextMenu, setWorkflowContextMenu] = useState<{ x: number; y: number; workflow: Workflow } | null>(null);
-  const workflowContextMenuRef = useRef<HTMLDivElement>(null);
-
-  // Pane context menu (for Read Only mode)
-  const [paneContextMenu, setPaneContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const paneContextMenuRef = useRef<HTMLDivElement>(null);
+  // Context menus hook - manages selection, pane, and workflow context menus
+  const {
+    selectionContextMenu,
+    setSelectionContextMenu,
+    selectionContextMenuRef,
+    handleSelectionContextMenu: contextMenuHandleSelection,
+    handleEdgeContextMenu: contextMenuHandleEdge,
+    paneContextMenu,
+    setPaneContextMenu,
+    paneContextMenuRef,
+    handlePaneContextMenu: contextMenuHandlePane,
+    workflowContextMenu,
+    setWorkflowContextMenu,
+    workflowContextMenuRef,
+  } = useContextMenus();
 
   const nodeTypes: NodeTypes = useMemo(() => ({
     workflowNode: WorkflowNode as any,
@@ -425,45 +430,18 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo]);
 
-  // Close selection context menu when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (selectionContextMenuRef.current && !selectionContextMenuRef.current.contains(event.target as HTMLElement)) {
-        setSelectionContextMenu(null);
-      }
-      if (paneContextMenuRef.current && !paneContextMenuRef.current.contains(event.target as HTMLElement)) {
-        setPaneContextMenu(null);
-      }
-      if (workflowContextMenuRef.current && !workflowContextMenuRef.current.contains(event.target as HTMLElement)) {
-        setWorkflowContextMenu(null);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Handle right-click on canvas to show selection context menu
+  // Wrapper handlers for context menus that need local state
   const handleSelectionContextMenu = useCallback((event: React.MouseEvent) => {
-    const selectedNodes = nodes.filter((node: Node) => node.selected);
-    if (selectedNodes.length > 0) {
-      event.preventDefault();
-      setSelectionContextMenu({ x: event.clientX, y: event.clientY });
-    }
-  }, [nodes]);
+    contextMenuHandleSelection(event, nodes);
+  }, [nodes, contextMenuHandleSelection]);
 
   const handleEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
-    event.preventDefault();
-    // Select the edge
-    setEdges((eds: Edge[]) => eds.map((e: Edge) => e.id === edge.id ? { ...e, selected: true } : e));
-    setSelectionContextMenu({ x: event.clientX, y: event.clientY });
-  }, [setEdges]);
+    contextMenuHandleEdge(event, edge, setEdges);
+  }, [setEdges, contextMenuHandleEdge]);
 
   const handlePaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
-    if (isReadOnly) {
-      event.preventDefault();
-      setPaneContextMenu({ x: event.clientX, y: event.clientY });
-    }
-  }, [isReadOnly]);
+    contextMenuHandlePane(event, isReadOnly);
+  }, [isReadOnly, contextMenuHandlePane]);
 
   // Copy and paste selected nodes with offset
   const handleCopyAndPaste = useCallback(() => {
