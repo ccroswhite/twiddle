@@ -1,0 +1,10 @@
+# Docker-specific files
+.env
+
+# Log files
+airflow/logs/*
+!airflow/logs/.gitkeep
+
+# Temporary files
+*.pyc
+__pycache__/

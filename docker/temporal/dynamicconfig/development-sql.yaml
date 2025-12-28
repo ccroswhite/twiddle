@@ -1,0 +1,31 @@
+# Temporal Dynamic Configuration for Development
+# This file configures Temporal server behavior
+
+# Enable all namespaces auto-creation
+frontend.enableNamespaceNotActiveAutoForwarding:
+  - value: true
+
+# Reduce history retention for development (default is 7 days)
+history.defaultVisibilityRetentionPeriod:
+  - value: 3d
+
+# Enable advanced visibility features
+system.enableAdvancedVisibility:
+  - value: true
+
+# Increase concurrent task processing for development
+matching.numTaskqueueReadPartitions:
+  - value: 4
+    constraints: {}
+
+matching.numTaskqueueWritePartitions:
+  - value: 4
+    constraints: {}
+
+# Faster timeouts for development
+history.timerProcessorScheduleToStartTimeout:
+  - value: 1s
+
+# Enable search attributes
+system.enableParentClosePolicy:
+  - value: true
