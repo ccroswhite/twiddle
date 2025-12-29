@@ -23,16 +23,21 @@ A workflow automation platform similar to n8n, powered by [Temporal](https://tem
 ┌─────────────────────────▼───────────────────────────────────┐
 │                      API Server                              │
 │                  (Fastify + Prisma)                          │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          │               │               │
-          ▼               ▼               ▼
-┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│  PostgreSQL │   │   Temporal  │   │   Airflow   │
-│  (Storage)  │   │   (Engine)  │   │   (Engine)  │
-└─────────────┘   └─────────────┘   └─────────────┘
+└───────────┬─────────────────────────────────┬───────────────┘
+            │                                 │
+            ▼                                 ▼
+┌─────────────────────┐           ┌─────────────────────────┐
+│     PostgreSQL      │           │     Export Targets      │
+│     (Storage)       │           │  ┌─────────┬─────────┐  │
+│  ┌───────┬───────┐  │           │  │Temporal │ Airflow │  │
+│  │twiddle│temporal│  │           │  │  .py    │  DAG    │  │
+│  │  db   │airflow │  │           │  │ files   │ files   │  │
+│  └───────┴───────┘  │           │  └─────────┴─────────┘  │
+└─────────────────────┘           └─────────────────────────┘
 ```
+
+> **Note:** The API server generates Python files for Temporal and Airflow DAG files.
+> It does not directly integrate with these orchestration engines at runtime.
 
 ## Project Structure
 
@@ -88,9 +93,9 @@ cd ..
 ```
 
 This starts:
-- **Temporal Server** - Port 7233 (gRPC), Port 8080 (UI)
-- **Airflow** - Port 8081 (UI), credentials: `airflow` / `airflow`
-- **PostgreSQL** - Ports 5432 (Temporal), 5433 (Airflow)
+- **PostgreSQL** - Port 5432 (databases: `twiddle`, `temporal`, `airflow`)
+- **Temporal Server** - Port 7233 (gRPC), Port 8443 (UI)
+- **Airflow** - Port 8080 (UI), credentials: `airflow` / `airflow`
 
 Wait ~30 seconds for services to initialize. Verify with `docker ps`.
 
@@ -123,8 +128,8 @@ pnpm dev:editor  # Frontend (port 5173)
 | Twiddle Editor | http://localhost:5173 |
 | API Server | http://localhost:3000 |
 | API Documentation | http://localhost:3000/docs |
-| Temporal UI | http://localhost:8080 |
-| Airflow UI | http://localhost:8081 |
+| Temporal UI | http://localhost:8443 |
+| Airflow UI | http://localhost:8080 |
 
 ## Python DSL & SDK
 
@@ -234,11 +239,10 @@ docker compose up -d          # Fresh start
 ```bash
 lsof -i :3000   # API
 lsof -i :5173   # Editor
-lsof -i :5432   # PostgreSQL (Temporal)
-lsof -i :5433   # PostgreSQL (Airflow)
+lsof -i :5432   # PostgreSQL
 lsof -i :7233   # Temporal gRPC
-lsof -i :8080   # Temporal UI
-lsof -i :8081   # Airflow UI
+lsof -i :8080   # Airflow UI
+lsof -i :8443   # Temporal UI
 ```
 
 ## API Endpoints

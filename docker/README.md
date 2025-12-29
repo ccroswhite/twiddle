@@ -25,31 +25,36 @@ docker compose down -v
 
 ## Services
 
-### Temporal (http://localhost:8080)
+### Temporal (http://localhost:8443)
 
-Temporal is used for durable workflow execution. The UI is available at http://localhost:8080.
+Temporal is used for durable workflow execution. The UI is available at http://localhost:8443.
 
 Components:
-- **temporal**: Temporal server (ports 7233, 8080)
-- **temporal-postgresql**: PostgreSQL database for Temporal
+- **temporal**: Temporal server (ports 7233, 8443)
 - **temporal-admin-tools**: CLI tools for Temporal administration
 
 Default namespace: `default`
 
-### Airflow (http://localhost:8081)
+### Airflow (http://localhost:8080)
 
-Apache Airflow is used for DAG-based workflow scheduling. The UI is available at http://localhost:8081.
+Apache Airflow is used for DAG-based workflow scheduling. The UI is available at http://localhost:8080.
 
 Default credentials:
 - Username: `airflow`
 - Password: `airflow`
 
 Components:
-- **airflow-webserver**: Airflow web UI (port 8081)
+- **airflow-webserver**: Airflow web UI (port 8080)
 - **airflow-scheduler**: DAG scheduler
 - **airflow-worker**: Celery worker for task execution
-- **airflow-postgres**: PostgreSQL database for Airflow
 - **airflow-redis**: Redis for Celery message broker
+
+### PostgreSQL
+
+Shared PostgreSQL instance with multiple databases:
+- **twiddle**: Twiddle application data
+- **temporal**: Temporal server data
+- **airflow**: Airflow metadata
 
 ## Configuration
 
@@ -83,10 +88,9 @@ DAGs are automatically loaded from `./airflow/dags`. Place your exported Airflow
 
 | Volume | Purpose |
 |--------|---------|
-| `temporal-postgresql-data` | Temporal database persistence |
-| `airflow-postgres-data` | Airflow database persistence |
+| `postgres-data` | Shared PostgreSQL database persistence |
 | `airflow-redis-data` | Airflow Redis persistence |
-| `airflow-logs` | Airflow task logs |
+| `./airflow/logs` | Airflow task logs |
 
 ## Troubleshooting
 
@@ -122,9 +126,8 @@ Minimum recommended resources:
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Temporal UI | 8080 | Web interface |
+| PostgreSQL | 5432 | Shared database |
 | Temporal gRPC | 7233 | Client connections |
-| Airflow UI | 8081 | Web interface |
-| PostgreSQL (Temporal) | 5432 | Database |
-| PostgreSQL (Airflow) | 5433 | Database |
-| Redis | 6379 | Message broker |
+| Temporal UI | 8443 | Web interface |
+| Airflow UI | 8080 | Web interface |
+| Redis | 6379 | Message broker (internal) |

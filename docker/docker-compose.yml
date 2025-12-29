@@ -7,8 +7,8 @@ x-airflow-common: &airflow-common
   image: apache/airflow:${AIRFLOW_VERSION:-2.8.1}
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
@@ -25,47 +25,54 @@ x-airflow-common: &airflow-common
   depends_on: &airflow-common-depends-on
     airflow-redis:
       condition: service_healthy
-    airflow-postgres:
+    postgres:
       condition: service_healthy
 
 services:
   # ============================================
-  # TEMPORAL SERVICES
+  # SHARED POSTGRESQL (all databases)
   # ============================================
   
-  temporal-postgresql:
+  postgres:
     image: postgres:15-alpine
-    container_name: temporal-postgresql
+    container_name: twiddle-postgres
     environment:
-      POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: temporal
-      POSTGRES_DB: temporal
+      POSTGRES_USER: twiddle
+      POSTGRES_PASSWORD: twiddle
+      POSTGRES_DB: twiddle
     volumes:
-      - temporal-postgresql-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      test: ["CMD-SHELL", "pg_isready -U twiddle"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - twiddle-network
 
+  # ============================================
+  # TEMPORAL SERVICES
+  # ============================================
+
   temporal:
     image: temporalio/auto-setup:${TEMPORAL_VERSION:-1.24.2}
     container_name: temporal
     depends_on:
-      temporal-postgresql:
+      postgres:
         condition: service_healthy
     environment:
       - DB=postgresql
       - DB_PORT=5432
       - POSTGRES_USER=temporal
       - POSTGRES_PWD=temporal
-      - POSTGRES_SEEDS=temporal-postgresql
+      - POSTGRES_SEEDS=postgres
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
     ports:
       - "7233:7233"   # gRPC frontend
-      - "8080:8080"   # Web UI
+      - "8443:8443"   # Web UI
     volumes:
       - ./temporal/dynamicconfig:/etc/temporal/config/dynamicconfig
     healthcheck:
@@ -95,25 +102,6 @@ services:
   # AIRFLOW SERVICES
   # ============================================
 
-  airflow-postgres:
-    image: postgres:15-alpine
-    container_name: airflow-postgres
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    volumes:
-      - airflow-postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U airflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - twiddle-network
-
   airflow-redis:
     image: redis:7-alpine
     container_name: airflow-redis
@@ -134,7 +122,7 @@ services:
     container_name: airflow-webserver
     command: webserver
     ports:
-      - "8081:8080"
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -302,8 +290,7 @@ services:
       - twiddle-network
 
 volumes:
-  temporal-postgresql-data:
-  airflow-postgres-data:
+  postgres-data:
   airflow-redis-data:
 
 networks:
