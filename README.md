@@ -1,21 +1,23 @@
 # Twiddle
 
-A workflow automation platform similar to n8n, powered by [Temporal](https://temporal.io) for reliable workflow execution.
+A workflow automation platform similar to n8n, powered by [Temporal](https://temporal.io) and [Apache Airflow](https://airflow.apache.org) for reliable workflow execution.
 
 ## Features
 
 - **Visual Workflow Editor** - Drag-and-drop interface for building workflows
-- **Temporal-Powered Execution** - Reliable, durable workflow execution with automatic retries
-- **Extensible Node System** - Easy to add new integrations and nodes
-- **Real-time Monitoring** - Track workflow executions in real-time
+- **Multi-Target Export** - Export workflows to Temporal or Airflow
+- **Python DSL** - Define activities and workflows using Python decorators
+- **Real-time Monitoring** - Track workflow executions with waterfall visualization
 - **Credential Management** - Secure storage for API keys and credentials
+- **Folder Organization** - Organize workflows with nested folders and permissions
+- **Version History** - Track and restore previous workflow versions
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend                              │
-│                   (React + TailwindCSS)                      │
+│                   (React + Vite + TailwindCSS)               │
 └─────────────────────────┬───────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────┐
@@ -27,111 +29,217 @@ A workflow automation platform similar to n8n, powered by [Temporal](https://tem
           │               │               │
           ▼               ▼               ▼
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│  PostgreSQL │   │   Temporal  │   │    Redis    │
-│  (Storage)  │   │   (Engine)  │   │   (Cache)   │
-└─────────────┘   └──────┬──────┘   └─────────────┘
-                         │
-              ┌──────────▼──────────┐
-              │   Temporal Worker   │
-              │   (Activities)      │
-              └─────────────────────┘
+│  PostgreSQL │   │   Temporal  │   │   Airflow   │
+│  (Storage)  │   │   (Engine)  │   │   (Engine)  │
+└─────────────┘   └─────────────┘   └─────────────┘
 ```
 
-## Packages
+## Project Structure
 
-| Package | Description |
-|---------|-------------|
-| `@twiddle/api` | Backend API server |
-| `@twiddle/worker` | Temporal worker for workflow execution |
-| `@twiddle/workflows` | Temporal workflow definitions |
-| `@twiddle/nodes` | Node definitions (HTTP, Code, etc.) |
-| `@twiddle/shared` | Shared types and utilities |
-| `@twiddle/editor` | React frontend (coming soon) |
+```
+twiddle/
+├── packages/             # TypeScript packages (pnpm monorepo)
+│   ├── api/              # Fastify API server
+│   ├── editor/           # React frontend (Vite)
+│   ├── nodes/            # Node type definitions
+│   ├── shared/           # Shared types and utilities
+│   └── workflows/        # Workflow definitions
+├── DSL/                  # Python package: twiddle-dsl
+├── SDK/                  # Python package: twiddle-sdk (CLI tools)
+├── docker/               # Docker Compose for Temporal + Airflow
+├── utilities/            # Admin scripts (password reset, etc.)
+└── temporal-config/      # Temporal dynamic configuration
+```
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
+| Requirement | Minimum Version |
+|-------------|-----------------|
+| Node.js     | 20.0.0          |
+| pnpm        | 9.0.0           |
+| Docker      | Latest          |
+| Python      | 3.10+ (for DSL/SDK) |
 
-- Node.js 20+
-- pnpm 9+
-- Docker and Docker Compose
+## Quick Start
 
-### Setup
+### 1. Clone and Configure
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/twiddle.git
+git clone <repository-url>
 cd twiddle
-```
-
-2. Install dependencies:
-```bash
-pnpm install
-```
-
-3. Copy environment file:
-```bash
 cp .env.example .env
 ```
 
-4. Start infrastructure services:
+Edit `.env` and update values as needed:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://twiddle:twiddle@localhost:5432/twiddle` |
+| `TEMPORAL_ADDRESS` | Temporal server address | `localhost:7233` |
+| `ENCRYPTION_KEY` | 32-char key for credentials | Generate with `openssl rand -hex 16` |
+| `AUTH_ENABLED` | Enable/disable authentication | `false` |
+
+### 2. Start Docker Services
+
 ```bash
-docker-compose up -d
+cd docker
+docker compose up -d
+cd ..
 ```
 
-5. Generate Prisma client and run database migrations:
+This starts:
+- **Temporal Server** - Port 7233 (gRPC), Port 8080 (UI)
+- **Airflow** - Port 8081 (UI), credentials: `airflow` / `airflow`
+- **PostgreSQL** - Ports 5432 (Temporal), 5433 (Airflow)
+
+Wait ~30 seconds for services to initialize. Verify with `docker ps`.
+
+### 3. Install Dependencies & Setup Database
+
 ```bash
-# Generate Prisma client (required before building)
-cd packages/api && npx prisma generate && cd ../..
-
-# Set the database so that you can connect
-export DATABASE_URL="postgresql://twiddle:twiddle@localhost:5432/twiddle?schema=public"
-
-# Run database migrations
+pnpm install
+pnpm db:generate
 pnpm db:migrate
 ```
 
-6. Build all packages:
+### 4. Build & Run
+
 ```bash
+pnpm build
+pnpm dev         # Start all services at once
+```
+
+Or run components individually:
+
+```bash
+pnpm dev:api     # API Server (port 3000)
+pnpm dev:editor  # Frontend (port 5173)
+```
+
+## Access Points
+
+| Service | URL |
+|---------|-----|
+| Twiddle Editor | http://localhost:5173 |
+| API Server | http://localhost:3000 |
+| API Documentation | http://localhost:3000/docs |
+| Temporal UI | http://localhost:8080 |
+| Airflow UI | http://localhost:8081 |
+
+## Python DSL & SDK
+
+### Install
+
+```bash
+pip install twiddle-sdk  # Includes twiddle-dsl
+```
+
+### Define Activities
+
+```python
+from twiddle_dsl import activity, Parameter
+
+@activity(
+    name="Send Email",
+    description="Sends an email to a recipient",
+    category="Communications",
+    icon="email"
+)
+async def send_email(
+    recipient: Parameter[str] = Parameter(label="Recipient", required=True),
+    subject: Parameter[str] = Parameter(label="Subject", template=True),
+    body: Parameter[str] = Parameter(label="Body", template=True),
+    input_data=None
+):
+    return {**(input_data or {}), "email_sent": True}
+```
+
+### SDK Commands
+
+```bash
+twiddle version           # Show versions
+twiddle init myproject    # Create new project
+twiddle lint src/         # Lint DSL code
+twiddle convert src/ -o output/  # Convert to Temporal
+```
+
+## Authentication (Optional)
+
+### Azure Entra ID (SSO)
+
+1. Create an App Registration in Azure Portal
+2. Set redirect URI to `http://localhost:3000/api/auth/callback`
+3. Create a client secret and configure API permissions (`openid`, `profile`, `email`, `User.Read`)
+4. Update `.env`:
+
+```env
+AUTH_ENABLED=true
+AUTH_PROVIDER=azure-entra
+AZURE_TENANT_ID=your-tenant-id
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+AZURE_REDIRECT_URI=http://localhost:3000/api/auth/callback
+```
+
+## Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `pnpm dev` | Start all development servers |
+| `pnpm dev:api` | Start API server only |
+| `pnpm dev:editor` | Start frontend only |
+| `pnpm build` | Build all packages |
+| `pnpm lint` | Run linting |
+| `pnpm typecheck` | Run TypeScript type checking |
+| `pnpm clean` | Clean build artifacts and node_modules |
+| `pnpm db:migrate` | Run database migrations |
+| `pnpm db:generate` | Generate Prisma client |
+
+**Docker (run from `docker/` directory):**
+
+| Command | Description |
+|---------|-------------|
+| `docker compose up -d` | Start all services |
+| `docker compose down` | Stop all services |
+| `docker compose down -v` | Stop and remove volumes |
+| `docker compose logs -f` | View logs |
+
+## Troubleshooting
+
+### Clean Rebuild
+
+```bash
+rm -rf node_modules packages/*/node_modules packages/*/dist packages/*/.turbo .turbo
+pnpm install
 pnpm build
 ```
 
-7. Start development servers:
-```bash
-# Terminal 1: API Server
-pnpm dev:api
-
-# Terminal 2: Temporal Worker
-pnpm dev:worker
-
-# Terminal 3: Frontend
-pnpm dev:editor
-```
-
-### Clean Build (if you encounter build issues)
-
-If you encounter module not found errors or stale build artifacts:
+### Database Issues
 
 ```bash
-# Clean all build artifacts, caches, and dependencies
-rm -rf node_modules packages/*/node_modules packages/*/dist packages/*/.turbo packages/*/tsconfig.tsbuildinfo .turbo
+pnpm db:generate              # Regenerate Prisma client
+cd packages/api && npx prisma migrate reset  # Reset database (WARNING: deletes data)
 ```
-And then go to setup section above
 
-### Access Points
+### Docker Issues
 
-- **API Server**: http://localhost:3000
-- **API Documentation**: http://localhost:3000/docs
-- **Temporal UI**: http://localhost:8080
+```bash
+cd docker
+docker compose down -v        # Remove all containers and volumes
+docker compose up -d          # Fresh start
+```
 
-## Available Nodes
+### Port Conflicts
 
-### Core Nodes
-- **Manual Trigger** - Start workflows manually
-- **HTTP Request** - Make HTTP requests
-- **Code** - Execute custom JavaScript
-- **If** - Conditional branching
-- **Set Data** - Transform data
+```bash
+lsof -i :3000   # API
+lsof -i :5173   # Editor
+lsof -i :5432   # PostgreSQL (Temporal)
+lsof -i :5433   # PostgreSQL (Airflow)
+lsof -i :7233   # Temporal gRPC
+lsof -i :8080   # Temporal UI
+lsof -i :8081   # Airflow UI
+```
 
 ## API Endpoints
 
@@ -148,79 +256,18 @@ And then go to setup section above
 - `GET /api/executions/:id` - Get execution details
 - `POST /api/executions/:id/cancel` - Cancel an execution
 
-### Nodes
-- `GET /api/nodes` - List available node types
-- `GET /api/nodes/:type` - Get node definition
-
 ### Credentials
 - `GET /api/credentials` - List credentials
 - `POST /api/credentials` - Create a credential
 - `PUT /api/credentials/:id` - Update a credential
 - `DELETE /api/credentials/:id` - Delete a credential
 
-## Authentication (Optional)
-
-Twiddle supports optional Single Sign-On (SSO) authentication with Azure Entra ID (formerly Azure AD).
-
-### Enabling Azure Entra SSO
-
-1. **Create an App Registration in Azure Portal**
-   - Go to Azure Portal > Azure Active Directory > App registrations
-   - Click "New registration"
-   - Name: `Twiddle`
-   - Supported account types: Choose based on your needs
-   - Redirect URI: `http://localhost:3000/api/auth/callback` (Web)
-
-2. **Configure Client Secret**
-   - Go to "Certificates & secrets"
-   - Create a new client secret
-   - Copy the secret value (you won't see it again)
-
-3. **Configure API Permissions**
-   - Go to "API permissions"
-   - Add: Microsoft Graph > Delegated > `openid`, `profile`, `email`, `User.Read`
-
-4. **Update Environment Variables**
-   ```bash
-   AUTH_ENABLED=true
-   AUTH_PROVIDER=azure-entra
-   AZURE_TENANT_ID=your-tenant-id
-   AZURE_CLIENT_ID=your-client-id
-   AZURE_CLIENT_SECRET=your-client-secret
-   AZURE_REDIRECT_URI=http://localhost:3000/api/auth/callback
-   ```
-
-5. **Restart the API server**
-
-When SSO is enabled:
-- Users must sign in with their Microsoft account
-- User info is displayed in the sidebar
-- Sessions are managed server-side with secure cookies
-
-### Auth Endpoints
-
+### Authentication
 - `GET /api/auth/config` - Get auth configuration
 - `GET /api/auth/me` - Get current user session
 - `GET /api/auth/login` - Initiate login flow
 - `GET /api/auth/callback` - OAuth callback
 - `POST /api/auth/logout` - Logout user
-
-## Development
-
-### Build all packages
-```bash
-pnpm build
-```
-
-### Run tests
-```bash
-pnpm test
-```
-
-### Type checking
-```bash
-pnpm typecheck
-```
 
 ## License
 
