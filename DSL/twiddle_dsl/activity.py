@@ -45,7 +45,8 @@ def activity(
             return {**input_data, "slack_sent": True}
 
     Notes:
-        - Activities must be async functions (async def)
+        - For Temporal: Activities should be async functions (async def)
+        - For Airflow: Activities can be sync functions with **kwargs
         - Activities should accept input_data as a parameter
         - Activities should return Dict[str, Any]
     """

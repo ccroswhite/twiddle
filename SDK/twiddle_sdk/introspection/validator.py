@@ -24,19 +24,24 @@ class LintError:
         return f"{icon} [{self.rule_id}] {self.location}: {self.message}"
 
 
-def validate_activity(func: Callable) -> List[LintError]:
+def validate_activity(func: Callable, target: str = "temporal") -> List[LintError]:
     """
     Validate an activity function using introspection.
 
-    Checks:
+    Common Checks:
         TWD001: Activity must have @activity decorator
         TWD002: Activity function must be async def
         TWD003: Activity should accept input_data parameter
         TWD004: Activity should have return type annotation
         TWD007: Parameters should use Parameter() class
+    
+    Airflow-specific Checks:
+        TWD010: Airflow tasks should not use async def (use sync functions)
+        TWD011: Airflow tasks should accept **kwargs for context
 
     Args:
         func: A function to validate
+        target: Target platform ('temporal' or 'airflow')
 
     Returns:
         List of LintError objects
@@ -56,21 +61,38 @@ def validate_activity(func: Callable) -> List[LintError]:
         )
         return errors  # Can't validate further without decorator
 
-    # TWD002: Must be async
-    if not inspect.iscoroutinefunction(func):
-        errors.append(
-            LintError(
-                rule_id="TWD002",
-                severity="error",
-                message="Activity function must be async def",
-                location=name,
+    # Target-specific async check
+    is_async = inspect.iscoroutinefunction(func)
+    
+    if target == "temporal":
+        # TWD002: Temporal requires async
+        if not is_async:
+            errors.append(
+                LintError(
+                    rule_id="TWD002",
+                    severity="error",
+                    message="Activity function must be async def for Temporal",
+                    location=name,
+                )
             )
-        )
+    elif target == "airflow":
+        # TWD010: Airflow prefers sync functions
+        if is_async:
+            errors.append(
+                LintError(
+                    rule_id="TWD010",
+                    severity="warning",
+                    message="Airflow tasks typically use sync functions (async is experimental)",
+                    location=name,
+                )
+            )
 
     # TWD003: Check for input_data parameter
     try:
         sig = inspect.signature(func)
-        if "input_data" not in sig.parameters:
+        param_names = list(sig.parameters.keys())
+        
+        if "input_data" not in param_names:
             errors.append(
                 LintError(
                     rule_id="TWD003",
@@ -79,6 +101,22 @@ def validate_activity(func: Callable) -> List[LintError]:
                     location=name,
                 )
             )
+        
+        # TWD011: Airflow should have **kwargs for context
+        if target == "airflow":
+            has_kwargs = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+            if not has_kwargs:
+                errors.append(
+                    LintError(
+                        rule_id="TWD011",
+                        severity="info",
+                        message="Airflow tasks should accept **kwargs for task context",
+                        location=name,
+                    )
+                )
     except (ValueError, TypeError):
         pass  # Can't get signature, skip this check
 
@@ -103,6 +141,8 @@ def validate_activity(func: Callable) -> List[LintError]:
         for param_name, param in sig.parameters.items():
             if param_name in ("self", "cls", "input_data"):
                 continue
+            if param.kind == inspect.Parameter.VAR_KEYWORD:
+                continue  # Skip **kwargs
             if param.default is not inspect.Parameter.empty:
                 if not isinstance(param.default, Parameter):
                     errors.append(
@@ -119,16 +159,17 @@ def validate_activity(func: Callable) -> List[LintError]:
     return errors
 
 
-def validate_workflow(cls: Type) -> List[LintError]:
+def validate_workflow(cls: Type, target: str = "temporal") -> List[LintError]:
     """
     Validate a workflow class using introspection.
 
-    Checks:
+    Common Checks:
         TWD005: Workflow class must have @workflow decorator
         TWD006: Workflow must have run() method
 
     Args:
         cls: A class to validate
+        target: Target platform ('temporal' or 'airflow')
 
     Returns:
         List of LintError objects

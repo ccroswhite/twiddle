@@ -18,7 +18,7 @@ except ImportError:
 @click.group()
 @click.version_option(version=SDK_VERSION, prog_name="twiddle")
 def cli():
-    """Twiddle Python SDK - Build Temporal workflows with ease."""
+    """Twiddle Python SDK - Build Temporal and Airflow workflows with ease."""
     pass
 
 
@@ -65,14 +65,21 @@ def init(name: str, template: str, output: str):
     type=click.Choice(["text", "json"]),
     help="Output format",
 )
-def lint(path: str, output_format: str):
+@click.option(
+    "--target",
+    "-T",
+    default="temporal",
+    type=click.Choice(["temporal", "airflow"]),
+    help="Target platform for linting rules (default: temporal)",
+)
+def lint(path: str, output_format: str, target: str):
     """Lint Twiddle Python code for DSL conformity.
 
     PATH is the file or directory to lint.
     """
     from twiddle_sdk.cli.lint import run_linter
 
-    run_linter(path, output_format)
+    run_linter(path, output_format, target)
 
 
 @cli.command()
@@ -80,7 +87,7 @@ def lint(path: str, output_format: str):
 @click.option(
     "--output",
     "-o",
-    default="./temporal_output",
+    default=None,
     type=click.Path(),
     help="Output directory for generated files",
 )
@@ -90,14 +97,25 @@ def lint(path: str, output_format: str):
     default=None,
     help="Workflow name (defaults to first workflow found)",
 )
-def convert(path: str, output: str, name: str):
-    """Convert Twiddle Python code to a Temporal application.
+@click.option(
+    "--target",
+    "-T",
+    default="temporal",
+    type=click.Choice(["temporal", "airflow"]),
+    help="Target platform to generate code for (default: temporal)",
+)
+def convert(path: str, output: str, name: str, target: str):
+    """Convert Twiddle Python code to a Temporal or Airflow application.
 
     PATH is the file or directory containing Twiddle code.
     """
+    # Set default output based on target
+    if output is None:
+        output = f"./{target}_output"
+    
     from twiddle_sdk.cli.convert import run_conversion
 
-    run_conversion(path, output, name)
+    run_conversion(path, output, name, target)
 
 
 def main():
@@ -107,3 +125,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

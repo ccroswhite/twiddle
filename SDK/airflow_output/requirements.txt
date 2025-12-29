@@ -1,0 +1,9 @@
+# Twiddle DSL
+twiddle-dsl>=1.0.0
+
+# Apache Airflow
+apache-airflow>=2.8.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0

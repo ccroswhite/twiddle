@@ -23,12 +23,13 @@ from twiddle_sdk.introspection.validator import (
 )
 
 
-def lint_file(file_path: Path) -> dict:
+def lint_file(file_path: Path, target: str = "temporal") -> dict:
     """
     Lint a single Python file.
 
     Args:
         file_path: Path to the Python file
+        target: Target platform ('temporal' or 'airflow')
 
     Returns:
         Dict with lint results
@@ -44,14 +45,14 @@ def lint_file(file_path: Path) -> dict:
         activities = discover_activities(module)
         activities_found = len(activities)
         for activity in activities:
-            activity_errors = validate_activity(activity)
+            activity_errors = validate_activity(activity, target)
             errors.extend(activity_errors)
 
         # Discover and validate workflows
         workflows = discover_workflows(module)
         workflows_found = len(workflows)
         for workflow in workflows:
-            workflow_errors = validate_workflow(workflow)
+            workflow_errors = validate_workflow(workflow, target)
             errors.extend(workflow_errors)
 
     except Exception as e:
@@ -72,12 +73,13 @@ def lint_file(file_path: Path) -> dict:
     }
 
 
-def lint_directory(dir_path: Path) -> list:
+def lint_directory(dir_path: Path, target: str = "temporal") -> list:
     """
     Lint all Python files in a directory.
 
     Args:
         dir_path: Path to the directory
+        target: Target platform ('temporal' or 'airflow')
 
     Returns:
         List of lint results for each file
@@ -91,7 +93,7 @@ def lint_directory(dir_path: Path) -> list:
         if py_file.name.startswith("."):
             continue
 
-        result = lint_file(py_file)
+        result = lint_file(py_file, target)
         # Only include files with Twiddle components or errors
         if (
             result["activities_found"] > 0
@@ -103,20 +105,23 @@ def lint_directory(dir_path: Path) -> list:
     return results
 
 
-def run_linter(path: str, output_format: str = "text"):
+def run_linter(path: str, output_format: str = "text", target: str = "temporal"):
     """
     Run the linter on a file or directory.
 
     Args:
         path: Path to file or directory
         output_format: 'text' or 'json'
+        target: Target platform ('temporal' or 'airflow')
     """
     path_obj = Path(path)
+    
+    target_display = "Temporal" if target == "temporal" else "Airflow"
 
     if path_obj.is_file():
-        results = [lint_file(path_obj)]
+        results = [lint_file(path_obj, target)]
     elif path_obj.is_dir():
-        results = lint_directory(path_obj)
+        results = lint_directory(path_obj, target)
     else:
         click.echo(f"Error: {path} is not a valid file or directory", err=True)
         sys.exit(1)

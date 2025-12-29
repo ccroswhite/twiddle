@@ -1,7 +1,7 @@
 """
 Twiddle SDK - Convert Command
 
-Converts Twiddle Python code to a full Temporal application.
+Converts Twiddle Python code to Temporal or Airflow applications.
 """
 
 import sys
@@ -21,24 +21,34 @@ from twiddle_sdk.converter.extractor import (
     extract_workflow_metadata,
 )
 from twiddle_sdk.converter.generator import generate_all_files
+from twiddle_sdk.converter.airflow_generator import generate_all_airflow_files
 
 
-def run_conversion(path: str, output: str, workflow_name: Optional[str] = None):
+def run_conversion(
+    path: str,
+    output: str,
+    workflow_name: Optional[str] = None,
+    target: str = "temporal",
+):
     """
-    Convert Twiddle Python code to a Temporal application.
+    Convert Twiddle Python code to a Temporal or Airflow application.
 
     Args:
         path: Path to file or directory containing Twiddle code
         output: Output directory for generated files
         workflow_name: Optional workflow name to use (defaults to first found)
+        target: Target platform ('temporal' or 'airflow')
     """
     path_obj = Path(path)
     output_dir = Path(output)
+    
+    target_display = "Temporal" if target == "temporal" else "Airflow DAG"
 
-    click.echo(f"\nTwiddle Convert")
+    click.echo(f"\nTwiddle Convert ({target_display})")
     click.echo("=" * 40)
     click.echo(f"Source: {path_obj}")
     click.echo(f"Output: {output_dir}")
+    click.echo(f"Target: {target_display}")
     click.echo()
 
     # Discover activities and workflows
@@ -95,9 +105,15 @@ def run_conversion(path: str, output: str, workflow_name: Optional[str] = None):
     for activity_meta in activities_meta:
         click.echo(f"  Activity: {activity_meta.get('name', 'Unknown')}")
 
-    # Generate files
-    click.echo("\nGenerating Temporal application...")
-    files = generate_all_files(workflow_meta, activities_meta)
+    # Generate files based on target
+    click.echo(f"\nGenerating {target_display} application...")
+    
+    if target == "airflow":
+        # Add dag_id to workflow metadata
+        workflow_meta["dag_id"] = workflow_meta.get("name", "twiddle_dag").lower().replace(" ", "_")
+        files = generate_all_airflow_files(workflow_meta, activities_meta)
+    else:
+        files = generate_all_files(workflow_meta, activities_meta)
 
     # Create output directory
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -105,15 +121,28 @@ def run_conversion(path: str, output: str, workflow_name: Optional[str] = None):
     # Write files
     for filename, content in files.items():
         file_path = output_dir / filename
+        # Create subdirectories if needed (e.g., tasks/)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.write_text(content)
         click.echo(f"  Created: {file_path}")
 
     click.echo()
     click.secho("✓ Conversion complete!", fg="green")
     click.echo()
-    click.echo("Next steps:")
-    click.echo(f"  cd {output_dir}")
-    click.echo("  pip install -r requirements.txt")
-    click.echo("  # Start Temporal: temporal server start-dev")
-    click.echo("  python worker.py  # Terminal 1")
-    click.echo("  python starter.py  # Terminal 2")
+    
+    if target == "airflow":
+        click.echo("Next steps:")
+        click.echo(f"  1. Copy DAG to Airflow DAGs folder:")
+        click.echo(f"     cp -r {output_dir} $AIRFLOW_HOME/dags/")
+        click.echo(f"  2. Or for Twiddle Docker setup:")
+        click.echo(f"     cp -r {output_dir} docker/airflow/dags/")
+        click.echo(f"  3. Open Airflow UI: http://localhost:8080")
+        click.echo(f"  4. Enable and trigger the DAG")
+    else:
+        click.echo("Next steps:")
+        click.echo(f"  cd {output_dir}")
+        click.echo("  pip install -r requirements.txt")
+        click.echo("  # Start Temporal: temporal server start-dev")
+        click.echo("  python worker.py  # Terminal 1")
+        click.echo("  python starter.py  # Terminal 2")
+

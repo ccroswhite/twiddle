@@ -1,6 +1,6 @@
 # Twiddle SDK
 
-CLI tools for building Temporal workflows with the Twiddle visual workflow editor.
+CLI tools for building Temporal and Airflow workflows with the Twiddle visual workflow editor.
 
 ## Installation
 
@@ -38,22 +38,30 @@ Lint Twiddle Python code for DSL conformity:
 
 ```bash
 twiddle lint src/
+twiddle lint src/ --target temporal   # Default
+twiddle lint src/ --target airflow    # Airflow-specific rules
 ```
 
 Options:
 - `--format, -f`: Output format (`text` or `json`)
+- `--target, -T`: Target platform (`temporal` or `airflow`)
 
 ### Convert
 
-Convert Twiddle Python code to a Temporal application:
+Convert Twiddle Python code to a target application:
 
 ```bash
+# Convert to Temporal (default)
 twiddle convert src/ -o temporal_output/
+
+# Convert to Airflow DAG
+twiddle convert src/ -o airflow_output/ --target airflow
 ```
 
 Options:
 - `--output, -o`: Output directory for generated files
 - `--name, -n`: Workflow name to use
+- `--target, -T`: Target platform (`temporal` or `airflow`)
 
 ## Workflow Example
 
@@ -82,27 +90,38 @@ Options:
    twiddle convert src/ -o temporal_output/
    ```
 
-6. Run the workflow:
+6. Convert to Airflow:
    ```bash
-   cd temporal_output
-   pip install -r requirements.txt
-   temporal server start-dev  # In another terminal
-   python worker.py  # Terminal 1
-   python starter.py  # Terminal 2
+   twiddle convert src/ -o airflow_output/ --target airflow
    ```
 
 ## Linting Rules
 
+### Common Rules
+
 | Rule | Severity | Description |
 |------|----------|-------------|
 | TWD001 | Error | Activity must have @activity decorator |
-| TWD002 | Error | Activity function must be async def |
 | TWD003 | Warning | Activity should accept input_data parameter |
 | TWD004 | Warning | Activity should have return type annotation |
 | TWD005 | Error | Workflow class must have @workflow decorator |
 | TWD006 | Error | Workflow must have run() method |
 | TWD007 | Info | Parameter should use Parameter() class |
 
+### Temporal-specific Rules
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| TWD002 | Error | Activity function must be async def |
+
+### Airflow-specific Rules
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| TWD010 | Warning | Airflow tasks typically use sync functions |
+| TWD011 | Info | Airflow tasks should accept **kwargs for context |
+
 ## License
 
 Apache-2.0
+

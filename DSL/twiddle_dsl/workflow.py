@@ -12,6 +12,8 @@ def workflow(
     description: str = "",
     version: str = "1.0.0",
     task_queue: Optional[str] = None,
+    dag_id: Optional[str] = None,
+    schedule: Optional[str] = None,
 ) -> Type:
     """
     Decorator to define a Twiddle workflow.
@@ -24,6 +26,8 @@ def workflow(
         description: Help text describing what the workflow does
         version: Semantic version for the workflow definition
         task_queue: Temporal task queue name (defaults to snake_case of name)
+        dag_id: Airflow DAG ID (defaults to snake_case of name)
+        schedule: Airflow schedule interval (e.g., "@daily", "0 0 * * *")
 
     Example:
         @workflow(
@@ -40,13 +44,16 @@ def workflow(
 
     Notes:
         - Workflow classes must have a `run` method
-        - The `run` method should be async
+        - For Temporal: The `run` method should be async
+        - For Airflow: The `run` method defines task dependencies
         - The `run` method should accept input_data and return a dict
     """
 
     def decorator(cls: Type) -> Type:
-        # Generate task queue from name if not provided
-        queue = task_queue or name.lower().replace(" ", "_").replace("-", "_")
+        # Generate identifiers from name if not provided
+        snake_name = name.lower().replace(" ", "_").replace("-", "_")
+        queue = task_queue or snake_name
+        airflow_dag_id = dag_id or snake_name
 
         # Store metadata on the class for introspection
         cls._twiddle_workflow = {
@@ -54,9 +61,12 @@ def workflow(
             "description": description,
             "version": version,
             "task_queue": queue,
+            "dag_id": airflow_dag_id,
+            "schedule": schedule,
             "class_name": cls.__name__,
         }
 
         return cls
 
     return decorator
+
