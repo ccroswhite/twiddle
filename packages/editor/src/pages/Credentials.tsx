@@ -430,7 +430,7 @@ export function Credentials() {
         >
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">New Credential</h2>
+              <h2 className="text-lg font-semibold">New Data Source</h2>
               <button
                 onClick={() => {
                   setShowCreate(false);
@@ -455,20 +455,13 @@ export function Credentials() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data Source</label>
                 <select
                   value={newCredential.type}
                   onChange={(e) => setNewCredential({ ...newCredential, type: e.target.value, data: {} })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="">Select type...</option>
-                  <option value="httpBasicAuth">HTTP Basic Auth</option>
-                  <option value="httpBearerToken">HTTP Bearer Token</option>
-                  <option value="apiKey">API Key</option>
-                  <option value="oauth2">OAuth2</option>
-                  <option value="githubCredentials">GitHub</option>
-                  <option value="winrmCredentials">WinRM Credentials</option>
-                  <option value="sshCredentials">SSH Credentials</option>
+                  <option value="">Select data source...</option>
                   <option value="mssqlCredentials">MS SQL Server</option>
                   <option value="postgresqlCredentials">PostgreSQL</option>
                   <option value="mysqlCredentials">MySQL</option>
