@@ -918,14 +918,23 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
 
-  async function handleExportPython() {
+  async function handleExport(format: 'temporal' | 'airflow' | 'ir') {
     if (isNew) {
       alert('Please save the workflow first');
       return;
     }
     try {
-      // The API now handles the download directly as a tarball
-      await workflowsApi.exportPython(id!);
+      switch (format) {
+        case 'temporal':
+          await workflowsApi.exportPython(id!);
+          break;
+        case 'airflow':
+          await workflowsApi.exportAirflow(id!);
+          break;
+        case 'ir':
+          await workflowsApi.exportIR(id!);
+          break;
+      }
     } catch (err) {
       alert((err as Error).message);
     }
@@ -947,7 +956,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         onUndo={handleUndo}
         onOpenBrowser={handleOpenWorkflowBrowser}
         onAddActivity={() => setShowNodePanel(true)}
-        onExportPython={handleExportPython}
+        onExport={handleExport}
         onViewCode={() => setShowPythonCode(true)}
         onGitHubSettings={() => setShowGitHubSettings(true)}
         onProperties={() => setShowPropertiesPanel(true)}
@@ -1385,7 +1394,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 Close
               </button>
               <button
-                onClick={handleExportPython}
+                onClick={() => handleExport('temporal')}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
               >
                 Download All Files

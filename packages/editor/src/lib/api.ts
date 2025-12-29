@@ -152,6 +152,56 @@ export const workflowsApi = {
       };
       files: Record<string, string>;
     }>(`/workflows/${id}/export/python?format=json`),
+  exportAirflow: async (id: string) => {
+    // Download as tarball
+    const response = await fetch(`${API_BASE}/workflows/${id}/export/airflow?format=tar`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(error.error || 'Export failed');
+    }
+    // Get filename from Content-Disposition header
+    const disposition = response.headers.get('Content-Disposition');
+    const filenameMatch = disposition?.match(/filename="([^"]+)"/);
+    const filename = filenameMatch?.[1] || 'workflow-airflow.tar.gz';
+
+    // Download the blob
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
+  exportIR: async (id: string) => {
+    // Download as JSON file
+    const response = await fetch(`${API_BASE}/workflows/${id}/export/ir`, {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(error.error || 'Export failed');
+    }
+    // Get filename from Content-Disposition header
+    const disposition = response.headers.get('Content-Disposition');
+    const filenameMatch = disposition?.match(/filename="([^"]+)"/);
+    const filename = filenameMatch?.[1] || 'workflow.twiddle.json';
+
+    // Download the blob
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  },
   importWorkflow: (data: {
     workflowName?: string;
     workflowDescription?: string;

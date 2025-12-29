@@ -20,11 +20,13 @@
     "@fastify/cors": "^10.0.0",
     "@fastify/swagger": "^9.4.0",
     "@fastify/swagger-ui": "^5.2.0",
-    "@prisma/client": "^6.1.0",
+    "@prisma/adapter-pg": "^7.2.0",
+    "@prisma/client": "^7.2.0",
     "@temporalio/client": "^1.11.0",
     "@twiddle/nodes": "workspace:*",
     "@twiddle/shared": "workspace:*",
     "ajv": "^8.17.1",
+    "dotenv": "^16.4.0",
     "fastify": "^5.1.0",
     "nanoid": "^5.0.0",
     "pg": "^8.16.3",
@@ -37,13 +39,10 @@
     "@types/node": "^20.17.0",
     "@types/pg": "^8.15.6",
     "pino-pretty": "^13.1.3",
-    "prisma": "^6.1.0",
+    "prisma": "^7.2.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.15"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
   }
 }

@@ -9,7 +9,6 @@
 import {
     Save,
     Plus,
-    Download,
     Code,
     Github,
     FolderOpen,
@@ -17,6 +16,7 @@ import {
     Settings,
     Play,
 } from 'lucide-react';
+import { ExportDropdown, type ExportFormat } from './ExportDropdown';
 
 // =============================================================================
 // Types
@@ -40,7 +40,7 @@ export interface EditorToolbarProps {
     onUndo: () => void;
     onOpenBrowser: () => void;
     onAddActivity: () => void;
-    onExportPython: () => void;
+    onExport: (format: ExportFormat) => void;
     onViewCode: () => void;
     onGitHubSettings: () => void;
     onProperties: () => void;
@@ -65,7 +65,7 @@ export function EditorToolbar({
     onUndo,
     onOpenBrowser,
     onAddActivity,
-    onExportPython,
+    onExport,
     onViewCode,
     onGitHubSettings,
     onProperties,
@@ -117,15 +117,7 @@ export function EditorToolbar({
                     <Plus className="w-4 h-4" />
                     Add Activity
                 </button>
-                <button
-                    onClick={onExportPython}
-                    disabled={isNew}
-                    className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
-                    title="Export as Python Temporal application"
-                >
-                    <Download className="w-4 h-4" />
-                    Export Python
-                </button>
+                <ExportDropdown disabled={isNew} onExport={onExport} />
                 <button
                     onClick={onViewCode}
                     disabled={isNew || !pythonCode}

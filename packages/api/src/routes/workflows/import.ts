@@ -3,7 +3,7 @@
  * Handles importing workflows from exported JSON
  */
 import type { FastifyPluginAsync } from 'fastify';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
 import { generatePythonCode } from '../../lib/python-export.js';
 

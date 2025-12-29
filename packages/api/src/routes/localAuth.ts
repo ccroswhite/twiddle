@@ -2,7 +2,7 @@
  * Local authentication routes (username/password)
  */
 import type { FastifyPluginAsync } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 import {
   hashPassword,
   verifyPassword,
@@ -11,8 +11,6 @@ import {
   validateEmail,
 } from '../lib/password.js';
 import { randomBytes } from 'crypto';
-
-const prisma = new PrismaClient();
 
 // Session duration: 7 days
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;

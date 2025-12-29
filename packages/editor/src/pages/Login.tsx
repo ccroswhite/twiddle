@@ -10,7 +10,7 @@ export function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { refreshAuth } = useAuth();
-  
+
   const [mode, setMode] = useState<LoginMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +25,7 @@ export function Login() {
 
   useEffect(() => {
     checkSetupRequired();
-    
+
     // Check for reset token in URL
     const token = searchParams.get('token');
     const emailParam = searchParams.get('email');
@@ -59,7 +59,7 @@ export function Login() {
       if (mode === 'forgot-password') {
         const result = await localAuthApi.forgotPassword({ email });
         setSuccess(result.message);
-        
+
         // In development, show the reset URL if provided
         if (result.resetUrl) {
           console.log('Reset URL:', result.resetUrl);
@@ -76,7 +76,7 @@ export function Login() {
           token: resetToken,
           newPassword: password,
         });
-        
+
         setSuccess(result.message);
         // Redirect to login after a short delay
         setTimeout(() => {
@@ -94,14 +94,14 @@ export function Login() {
 
         const apiCall = mode === 'setup' ? localAuthApi.setup : localAuthApi.register;
         const result = await apiCall({ email, password, name: name || undefined });
-        
+
         if (result.success) {
           await refreshAuth();
           navigate('/workflows');
         }
       } else {
         const result = await localAuthApi.login({ email, password });
-        
+
         if (result.success) {
           await refreshAuth();
           navigate('/workflows');
@@ -131,7 +131,6 @@ export function Login() {
             <Workflow className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-slate-900">Twiddle</h1>
-          <p className="text-slate-500 mt-2">Workflow Automation Platform</p>
         </div>
 
         {/* Card */}
@@ -324,7 +323,7 @@ export function Login() {
                   </p>
                 </>
               )}
-              
+
               {mode === 'register' && (
                 <p className="text-sm text-slate-600">
                   Already have an account?{' '}
@@ -352,10 +351,6 @@ export function Login() {
           )}
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-sm text-slate-500 mt-8">
-          Powered by Temporal
-        </p>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@
  * Handles List, Get (with locking), Create, Update, Delete operations
  */
 import type { FastifyPluginAsync } from 'fastify';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
 import { generatePythonCode } from '../../lib/python-export.js';
 import { commitWorkflowToGitHub } from './helpers.js';

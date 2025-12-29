@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '../generated/prisma/client.js';
 
 interface FolderCreateInput {
   name: string;
@@ -25,12 +25,12 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
   }>('/', async (request, _reply) => {
     const userId = (request as { user?: { id: string } }).user?.id;
     const { parentId } = request.query;
-    
+
     // Build where clause based on authentication and parent filter
     let whereClause: Prisma.FolderWhereInput = {
       parentId: parentId || null,
     };
-    
+
     if (userId) {
       // Get user's group IDs
       const memberships = await prisma.groupMember.findMany({
@@ -38,7 +38,7 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
         select: { groupId: true },
       });
       const userGroupIds = memberships.map((m) => m.groupId);
-      
+
       // Show folders in user's groups OR created by user OR with no group
       whereClause = {
         ...whereClause,
@@ -49,7 +49,7 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
         ],
       };
     }
-    
+
     const folders = await prisma.folder.findMany({
       where: whereClause,
       orderBy: { name: 'asc' },
@@ -75,14 +75,14 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
         },
       },
     });
-    
+
     return folders;
   });
 
   // Get a single folder with its contents
   app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { id } = request.params;
-    
+
     const folder = await prisma.folder.findUnique({
       where: { id },
       include: {
