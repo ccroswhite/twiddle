@@ -177,6 +177,23 @@ export const workflowsApi = {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   },
+  exportAirflowJson: (id: string) =>
+    request<{
+      workflowId: string;
+      workflowName: string;
+      workflowDescription?: string;
+      version: number;
+      environment: string;
+      exportedAt: string;
+      directoryName: string;
+      definition: {
+        nodes: unknown[];
+        connections: unknown[];
+        settings?: unknown;
+        tags?: string[];
+      };
+      files: Record<string, string>;
+    }>(`/workflows/${id}/export/airflow?format=json`),
   exportIR: async (id: string) => {
     // Download as JSON file
     const response = await fetch(`${API_BASE}/workflows/${id}/export/ir`, {

@@ -9,7 +9,6 @@
 import {
     Save,
     Plus,
-    Code,
     Github,
     FolderOpen,
     Undo2,
@@ -17,6 +16,7 @@ import {
     Play,
 } from 'lucide-react';
 import { ExportDropdown, type ExportFormat } from './ExportDropdown';
+import { ViewCodeDropdown, type ViewCodeFormat } from './ViewCodeDropdown';
 
 // =============================================================================
 // Types
@@ -41,7 +41,7 @@ export interface EditorToolbarProps {
     onOpenBrowser: () => void;
     onAddActivity: () => void;
     onExport: (format: ExportFormat) => void;
-    onViewCode: () => void;
+    onViewCode: (format: ViewCodeFormat) => void;
     onGitHubSettings: () => void;
     onProperties: () => void;
     onExecutions: () => void;
@@ -118,15 +118,7 @@ export function EditorToolbar({
                     Add Activity
                 </button>
                 <ExportDropdown disabled={isNew} onExport={onExport} />
-                <button
-                    onClick={onViewCode}
-                    disabled={isNew || !pythonCode}
-                    className="flex items-center gap-2 px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
-                    title="View generated Python code"
-                >
-                    <Code className="w-4 h-4" />
-                    View Code
-                </button>
+                <ViewCodeDropdown disabled={isNew || !pythonCode} onViewCode={onViewCode} />
                 <button
                     onClick={onGitHubSettings}
                     disabled={isNew}
@@ -168,3 +160,4 @@ export function EditorToolbar({
         </div>
     );
 }
+
