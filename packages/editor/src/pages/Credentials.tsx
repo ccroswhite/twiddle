@@ -451,7 +451,7 @@ export function Credentials() {
                   value={newCredential.name}
                   onChange={(e) => setNewCredential({ ...newCredential, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="My API Key"
+                  placeholder="Data source name"
                 />
               </div>
               <div>
