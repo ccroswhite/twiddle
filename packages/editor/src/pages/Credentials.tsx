@@ -494,7 +494,7 @@ export function Credentials() {
                   ))}
                 </select>
                 <p className="text-xs text-slate-500 mt-1">
-                  Sharing with a group allows all group members to use this credential
+                  Groups you are a member of. Sharing allows all group members to use this data source.
                 </p>
               </div>
 
@@ -634,173 +634,176 @@ export function Credentials() {
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* Edit Credential Modal */}
-      {editingCredential && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setEditingCredential(null);
-              setEditShowPasswords({});
-            }
-          }}
-        >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Edit Credential</h2>
-              <button
-                onClick={() => {
-                  setEditingCredential(null);
-                  setEditShowPasswords({});
-                }}
-                className="p-1 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Credential name"
-                />
-              </div>
-
-              {/* Type (read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                  {editingCredential.type}
-                </div>
-              </div>
-
-              {/* Share with Group */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Share with Group
-                </label>
-                <select
-                  value={editGroupId}
-                  onChange={(e) => setEditGroupId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+      {
+        editingCredential && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setEditingCredential(null);
+                setEditShowPasswords({});
+              }
+            }}
+          >
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Edit Credential</h2>
+                <button
+                  onClick={() => {
+                    setEditingCredential(null);
+                    setEditShowPasswords({});
+                  }}
+                  className="p-1 text-slate-400 hover:text-slate-600"
                 >
-                  <option value="">Private (only you)</option>
-                  {userGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">
-                  Group members will be able to use this credential in their workflows
-                </p>
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Dynamic credential fields based on type */}
-              {credentialFields[editingCredential.type] && (
-                <div className="border-t border-slate-200 pt-4 space-y-4">
-                  <h3 className="text-sm font-medium text-slate-700">
-                    Update Credential Details
-                    <span className="text-xs font-normal text-slate-500 ml-2">
-                      (leave blank to keep existing values)
-                    </span>
-                  </h3>
-                  {credentialFields[editingCredential.type].map((fieldDef) => (
-                    <div key={fieldDef.field}>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        {fieldDef.label}
-                      </label>
-                      {fieldDef.type === 'checkbox' ? (
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!editData[fieldDef.field]}
-                            onChange={(e) => updateEditData(fieldDef.field, e.target.checked)}
-                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-slate-600">Enable</span>
+              <div className="space-y-4">
+                {/* Name */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Credential name"
+                  />
+                </div>
+
+                {/* Type (read-only) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
+                    {editingCredential.type}
+                  </div>
+                </div>
+
+                {/* Share with Group */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Share with Group
+                  </label>
+                  <select
+                    value={editGroupId}
+                    onChange={(e) => setEditGroupId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Private (only you)</option>
+                    {userGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Group members will be able to use this credential in their workflows
+                  </p>
+                </div>
+
+                {/* Dynamic credential fields based on type */}
+                {credentialFields[editingCredential.type] && (
+                  <div className="border-t border-slate-200 pt-4 space-y-4">
+                    <h3 className="text-sm font-medium text-slate-700">
+                      Update Credential Details
+                      <span className="text-xs font-normal text-slate-500 ml-2">
+                        (leave blank to keep existing values)
+                      </span>
+                    </h3>
+                    {credentialFields[editingCredential.type].map((fieldDef) => (
+                      <div key={fieldDef.field}>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          {fieldDef.label}
                         </label>
-                      ) : fieldDef.type === 'textarea' ? (
-                        <textarea
-                          value={(editData[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                          rows={4}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                          placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                        />
-                      ) : fieldDef.type === 'password' ? (
-                        <div className="relative">
-                          <input
-                            type={editShowPasswords[fieldDef.field] ? 'text' : 'password'}
+                        {fieldDef.type === 'checkbox' ? (
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!editData[fieldDef.field]}
+                              onChange={(e) => updateEditData(fieldDef.field, e.target.checked)}
+                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-slate-600">Enable</span>
+                          </label>
+                        ) : fieldDef.type === 'textarea' ? (
+                          <textarea
                             value={(editData[fieldDef.field] as string) || ''}
                             onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                            className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            rows={4}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                             placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
                           />
-                          <button
-                            type="button"
-                            onClick={() => toggleEditPasswordVisibility(fieldDef.field)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          >
-                            {editShowPasswords[fieldDef.field] ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      ) : fieldDef.type === 'number' ? (
-                        <input
-                          type="number"
-                          value={(editData[fieldDef.field] as number) || ''}
-                          onChange={(e) => updateEditData(fieldDef.field, parseInt(e.target.value) || 0)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={(editData[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                        />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                        ) : fieldDef.type === 'password' ? (
+                          <div className="relative">
+                            <input
+                              type={editShowPasswords[fieldDef.field] ? 'text' : 'password'}
+                              value={(editData[fieldDef.field] as string) || ''}
+                              onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
+                              className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => toggleEditPasswordVisibility(fieldDef.field)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {editShowPasswords[fieldDef.field] ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        ) : fieldDef.type === 'number' ? (
+                          <input
+                            type="number"
+                            value={(editData[fieldDef.field] as number) || ''}
+                            onChange={(e) => updateEditData(fieldDef.field, parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={(editData[fieldDef.field] as string) || ''}
+                            onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setEditingCredential(null);
-                  setEditShowPasswords({});
-                }}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateCredential}
-                disabled={!editName}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                Save Changes
-              </button>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setEditingCredential(null);
+                    setEditShowPasswords({});
+                  }}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateCredential}
+                  disabled={!editName}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
