@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import type { CredentialCreateInput, CredentialUpdateInput } from '@twiddle/shared';
-import { testCredential } from '../lib/credentialTester.js';
+import { testCredential } from '../lib/datasourceTester.js';
 
 // Helper to get user from session cookie
 async function getUserFromSession(request: FastifyRequest) {
