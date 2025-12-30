@@ -8,7 +8,7 @@ A workflow automation platform similar to n8n, powered by [Temporal](https://tem
 - **Multi-Target Export** - Export workflows to Temporal or Airflow
 - **Python DSL** - Define activities and workflows using Python decorators
 - **Real-time Monitoring** - Track workflow executions with waterfall visualization
-- **Credential Management** - Secure storage for API keys and credentials
+- **Data Source Management** - Secure storage for database connections and API credentials with SSL/TLS options
 - **Folder Organization** - Organize workflows with nested folders and permissions
 - **Version History** - Track and restore previous workflow versions
 
@@ -260,11 +260,14 @@ lsof -i :8443   # Temporal UI
 - `GET /api/executions/:id` - Get execution details
 - `POST /api/executions/:id/cancel` - Cancel an execution
 
-### Credentials
-- `GET /api/credentials` - List credentials
-- `POST /api/credentials` - Create a credential
-- `PUT /api/credentials/:id` - Update a credential
-- `DELETE /api/credentials/:id` - Delete a credential
+### Data Sources
+- `GET /api/datasources` - List data sources
+- `POST /api/datasources` - Create a data source
+- `GET /api/datasources/:id` - Get a data source
+- `PUT /api/datasources/:id` - Update a data source
+- `DELETE /api/datasources/:id` - Delete a data source
+- `POST /api/datasources/:id/test` - Test data source connectivity
+- `POST /api/datasources/test` - Test unsaved data source connectivity
 
 ### Authentication
 - `GET /api/auth/config` - Get auth configuration
