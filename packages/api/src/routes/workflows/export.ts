@@ -4,7 +4,7 @@
  */
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
-import { generatePythonExport } from '../../lib/python-export.js';
+import { generatePythonExport } from '../../lib/export/temporal-python/index.js';
 import { generateAirflowExport } from '../../lib/airflow-export.js';
 import { workflowToIR } from '../../lib/ir/index.js';
 import { create as createTar } from 'tar';

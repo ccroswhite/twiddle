@@ -5,7 +5,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
-import { generatePythonCode } from '../../lib/python-export.js';
+import { generatePythonCode } from '../../lib/export/temporal-python/index.js';
 import { commitWorkflowToGitHub } from './helpers.js';
 import type { WorkflowCreateInput, WorkflowUpdateInput } from '@twiddle/shared';
 

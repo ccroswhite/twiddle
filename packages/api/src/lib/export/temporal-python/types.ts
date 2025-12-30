@@ -42,3 +42,19 @@ export interface GeneratedPythonCode {
     pythonActivities: string;
     pythonRequirements: string;
 }
+
+/**
+ * Trigger nodes are not activities - they start workflows.
+ */
+export const TRIGGER_NODE_TYPES = new Set([
+    'twiddle.manualTrigger',
+    'twiddle.webhook',
+    'twiddle.interval',
+]);
+
+/**
+ * Check if a node type is an activity (not a trigger).
+ */
+export function isActivityNode(nodeType: string): boolean {
+    return !TRIGGER_NODE_TYPES.has(nodeType);
+}

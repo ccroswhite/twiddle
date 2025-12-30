@@ -49,8 +49,8 @@ twiddle/
 │   ├── nodes/            # Node type definitions
 │   ├── shared/           # Shared types and utilities
 │   └── workflows/        # Workflow definitions
-├── DSL/                  # Python package: twiddle-dsl
-├── SDK/                  # Python package: twiddle-sdk (CLI tools)
+├── dsl/                  # Python package: twiddle-dsl
+├── sdk/                  # Python package: twiddle-sdk (CLI tools)
 ├── docker/               # Docker Compose for Temporal + Airflow
 ├── utilities/            # Admin scripts (password reset, etc.)
 └── temporal-config/      # Temporal dynamic configuration

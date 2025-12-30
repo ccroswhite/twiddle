@@ -2,20 +2,6 @@
  * Utility functions for Python code generation
  */
 
-// Trigger nodes are not activities - they start workflows
-const TRIGGER_NODE_TYPES = new Set([
-    'twiddle.manualTrigger',
-    'twiddle.webhook',
-    'twiddle.interval',
-]);
-
-/**
- * Check if a node type is an activity (not a trigger)
- */
-export function isActivityNode(nodeType: string): boolean {
-    return !TRIGGER_NODE_TYPES.has(nodeType);
-}
-
 /**
  * Convert workflow name to valid Python identifier
  */

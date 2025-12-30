@@ -31,7 +31,7 @@ Requires-Dist: mypy>=1.0.0; extra == "dev"
 
 # Twiddle DSL
 
-Decorators and types for building Temporal workflows with the Twiddle visual workflow editor.
+Decorators and types for building Temporal and Airflow workflows with the Twiddle visual workflow editor.
 
 ## Installation
 
@@ -43,6 +43,12 @@ For Temporal runtime support:
 
 ```bash
 pip install twiddle-dsl[temporal]
+```
+
+For Airflow runtime support:
+
+```bash
+pip install twiddle-dsl[airflow]
 ```
 
 ## Quick Start
@@ -86,7 +92,12 @@ from twiddle_dsl import workflow
 @workflow(
     name="Customer Onboarding",
     description="Onboards new customers",
-    version="1.0.0"
+    version="1.0.0",
+    # Temporal-specific
+    task_queue="customer-onboarding",
+    # Airflow-specific
+    dag_id="customer_onboarding",
+    schedule="@daily"
 )
 class CustomerOnboarding:
     async def run(self, input_data: dict) -> dict:
@@ -102,13 +113,25 @@ class CustomerOnboarding:
 - **`ActivityInput`** - Standard input dataclass for activities
 - **`ExecutionLogger`** - Structured logging for waterfall visualization
 
+## Platform Compatibility
+
+| Feature | Temporal | Airflow |
+|---------|----------|---------|
+| Async activities | ✅ Required | ⚠️ Optional (experimental) |
+| Sync activities | ❌ Not supported | ✅ Recommended |
+| `task_queue` | ✅ Used | ➖ Ignored |
+| `dag_id` | ➖ Ignored | ✅ Used |
+| `schedule` | ➖ Ignored | ✅ Used |
+
 ## Compatibility
 
 The DSL is designed to work with:
 - Twiddle visual workflow editor
 - Temporal Python SDK
+- Apache Airflow
 - Twiddle SDK CLI tools (`twiddle lint`, `twiddle convert`)
 
 ## License
 
 Apache-2.0
+

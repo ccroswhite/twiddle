@@ -15,7 +15,7 @@ import {
   SelectionMode,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Code, X, User, Users, Clock, Trash2, Folder, Shield, Copy, Lock } from 'lucide-react';
+import { Clock, Copy, Lock, Trash2 } from 'lucide-react';
 import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel, type NodeTypeInfo } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
@@ -27,6 +27,9 @@ import { EditorToolbar } from '@/components/EditorToolbar';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
+import { CodeViewerModal } from '@/components/CodeViewerModal';
+import { VersionHistoryModal, type WorkflowVersion } from '@/components/VersionHistoryModal';
+import { FolderPermissionsModal } from '@/components/FolderPermissionsModal';
 import { ReadOnlyBanner, TakeoverRequestModal, RequestingAccessBanner } from '@/components/editor';
 import { generatePropertyId } from '@/utils/workflowUtils';
 import { remapEdgesForCollapsedNode, calculateEdgeHandles } from '@/utils/embeddedWorkflowUtils';
@@ -37,6 +40,7 @@ import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useWorkflowLocking } from '@/hooks/useWorkflowLocking';
 import { useContextMenus } from '@/hooks/useContextMenus';
 import { useWorkflowState } from '@/hooks/useWorkflowState';
+
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -116,13 +120,10 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [loadingPermissions] = useState(false);
   const [availableUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
   const [availableGroups] = useState<{ id: string; name: string }[]>([]);
-  const [newPermissionType, setNewPermissionType] = useState<'user' | 'group'>('user');
-  const [newPermissionTargetId, setNewPermissionTargetId] = useState('');
-  const [newPermissionLevel, setNewPermissionLevel] = useState<FolderPermissionLevel>('READ');
 
   // Version History state
   const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [versions, setVersions] = useState<{ id: string; version: number; createdAt: string; createdBy: { name: string; email: string } | null }[]>([]);
+  const [versions, setVersions] = useState<WorkflowVersion[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
   // Pending node being dragged to place
@@ -866,16 +867,15 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
   // Folder permissions handlers
-  async function handleAddPermission() {
-    if (!permissionsFolder || !newPermissionTargetId) return;
+  async function handleAddPermission(type: 'user' | 'group', targetId: string, level: FolderPermissionLevel) {
+    if (!permissionsFolder || !targetId) return;
     try {
       const permission = await foldersApi.addPermission(permissionsFolder.id, {
-        userId: newPermissionType === 'user' ? newPermissionTargetId : undefined,
-        groupId: newPermissionType === 'group' ? newPermissionTargetId : undefined,
-        permission: newPermissionLevel,
+        userId: type === 'user' ? targetId : undefined,
+        groupId: type === 'group' ? targetId : undefined,
+        permission: level,
       });
       setFolderPermissions(prev => [...prev, permission]);
-      setNewPermissionTargetId('');
     } catch (err) {
       alert(`Failed to add permission: ${(err as Error).message}`);
     }
@@ -902,6 +902,78 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       setFolderPermissions(prev => prev.filter(p => p.id !== permissionId));
     } catch (err) {
       alert(`Failed to delete permission: ${(err as Error).message}`);
+    }
+  }
+
+  // Version History handlers
+  async function handleOpenVersion(version: WorkflowVersion) {
+    if (!versionHistoryWorkflow) return;
+
+    // Close modal
+    setShowVersionHistory(false);
+    closeWorkflowBrowser();
+
+    // Fetch full version data
+    const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, version.id);
+
+    // Navigate if needed
+    if (id !== versionHistoryWorkflow.id) {
+      navigate(`/workflows/${versionHistoryWorkflow.id}`);
+    }
+
+    // Convert to React Flow nodes
+    const flowNodes: Node[] = (versionData.nodes as any[]).map((node: any) => ({
+      id: node.id,
+      type: 'workflowNode',
+      position: node.position,
+      data: {
+        label: node.name,
+        nodeType: node.type,
+        parameters: node.parameters,
+        onOpenProperties: handleOpenProperties,
+      },
+    })).map(n => ({ ...n, draggable: false, selectable: true }));
+
+    const flowEdges: Edge[] = (versionData.connections as any[]).map((conn: any, index: number) => ({
+      id: `e${index}`,
+      source: conn.sourceNodeId,
+      target: conn.targetNodeId,
+      sourceHandle: conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null),
+      targetHandle: conn.targetInput === 'main' ? null : (conn.targetInput ?? null),
+      animated: false,
+      deletable: false
+    }));
+
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+    setWorkflowName(`${versionHistoryWorkflow.name} (v${version.version})`);
+    setWorkflowDescription(versionHistoryWorkflow.description || '');
+    updateLockState({ isReadOnly: true, lockedBy: null });
+  }
+
+  async function handleRestoreVersion(version: WorkflowVersion) {
+    if (!versionHistoryWorkflow) return;
+
+    if (!confirm(`Are you sure you want to restore Version ${version.version}? This will become the new HEAD.`)) return;
+
+    // Fetch version
+    const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, version.id);
+
+    // Save as new update
+    await workflowsApi.update(versionHistoryWorkflow.id, {
+      name: versionHistoryWorkflow.name,
+      description: versionHistoryWorkflow.description,
+      nodes: versionData.nodes as any,
+      connections: versionData.connections as any,
+      settings: versionData.settings as any
+    });
+
+    alert(`Restored version ${version.version} successfully.`);
+    setShowVersionHistory(false);
+
+    // Reload if current
+    if (id === versionHistoryWorkflow.id) {
+      loadWorkflow(id);
     }
   }
 
@@ -1174,155 +1246,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
       {/* Version History Modal */}
       {showVersionHistory && versionHistoryWorkflow && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-          <div className="bg-neutral-800 rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col border border-neutral-700">
-            <div className="p-4 border-b border-neutral-700 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">Version History: {versionHistoryWorkflow.name}</h3>
-              <button
-                onClick={() => setShowVersionHistory(false)}
-                className="text-neutral-400 hover:text-white"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {loadingVersions ? (
-                <div className="text-center text-neutral-400 py-8">Loading versions...</div>
-              ) : versions.length === 0 ? (
-                <div className="text-center text-neutral-400 py-8">No version history available</div>
-              ) : (
-                <div className="space-y-2">
-                  {versions.map((ver) => (
-                    <div key={ver.id} className="flex items-center justify-between p-3 bg-neutral-900/50 rounded border border-neutral-700/50 hover:border-neutral-600">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-white">Version {ver.version}</span>
-                          <span className="text-xs text-neutral-500">
-                            {new Date(ver.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <div className="text-xs text-neutral-400 mt-1">
-                          Saved by {ver.createdBy?.name || ver.createdBy?.email || 'Unknown'}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={async () => {
-                            // Open Version Logic
-                            // We load this version into the editor as Read-Only
-                            // 1. Close modal
-                            setShowVersionHistory(false);
-                            closeWorkflowBrowser();
-
-                            // 2. Fetch full version data
-                            const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, ver.id);
-
-                            // 3. Load into state
-                            // If current ID is different or we are 'new', we should probably navigate or set ID?
-                            // But we want to open *this* workflow's version.
-                            // If we are currently editing a different workflow, we should probably warn?
-                            // Ideally we navigate to /workflows/:id then load valid version data.
-
-                            if (id !== versionHistoryWorkflow.id) {
-                              navigate(`/workflows/${versionHistoryWorkflow.id}`);
-                              // The useEffect will load HEAD, then we overwrite? Race condition.
-                              // Simpler: Just load it if we are already on the page or it matches.
-                              // For now, let's assume user opens it from the browser.
-                            }
-
-                            // Set Viewing Version State (Read Only Mode)
-                            // setViewingVersion(ver.version); // Could be used to show a banner "Viewing Version X"
-
-                            // Overwrite nodes/edges
-                            const flowNodes: Node[] = (versionData.nodes as any[]).map((node: any) => ({
-                              id: node.id,
-                              type: 'workflowNode',
-                              position: node.position,
-                              data: {
-                                label: node.name,
-                                nodeType: node.type,
-                                parameters: node.parameters,
-                                onOpenProperties: handleOpenProperties,
-                              },
-                            })).map(n => ({ ...n, draggable: false, selectable: true })); // Read only tweaks?
-
-                            const flowEdges: Edge[] = (versionData.connections as any[]).map((conn: any, index: number) => ({
-                              id: `e${index}`,
-                              source: conn.sourceNodeId,
-                              target: conn.targetNodeId,
-                              sourceHandle: conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null),
-                              targetHandle: conn.targetInput === 'main' ? null : (conn.targetInput ?? null),
-                              animated: false,
-                              deletable: false
-                            }));
-
-                            setNodes(flowNodes);
-                            setEdges(flowEdges);
-                            setWorkflowName(`${versionHistoryWorkflow.name} (v${ver.version})`);
-                            setWorkflowDescription(versionHistoryWorkflow.description || '');
-                            updateLockState({ isReadOnly: true, lockedBy: null }); // Force read only for old version
-                          }}
-                          className="px-3 py-1 bg-neutral-700 hover:bg-neutral-600 text-white text-xs rounded"
-                        >
-                          Open
-                        </button>
-
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`Are you sure you want to restore Version ${ver.version}? This will become the new HEAD.`)) return;
-
-                            // Restore Logic (Revert)
-                            // 1. Fetch version
-                            const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, ver.id);
-
-                            // 2. Save as new update
-                            // If we are not currently editing this workflow, we need to switch?
-                            // Assuming we are context switching or just doing it via API.
-                            // Simply calling Update on the workflow with this data effectively restores it.
-
-                            // Convert back to workflow format
-                            // const workflowNodes = versionData.nodes; // Already in workflow format in DB? NO, check schema. `nodes` is Json.
-                            // Actually schema says it stores the same structure as Workflow.nodes.
-                            // Workflow.nodes is stored as {id, name, type, position, parameters}
-
-                            await workflowsApi.update(versionHistoryWorkflow.id, {
-                              name: versionHistoryWorkflow.name, // Keep name? Or restore old name? Usually keep current metadata.
-                              description: versionHistoryWorkflow.description,
-                              nodes: versionData.nodes as any,
-                              connections: versionData.connections as any,
-                              settings: versionData.settings as any
-                            });
-
-                            alert(`Restored version ${ver.version} successfully.`);
-                            setShowVersionHistory(false);
-
-                            // Reload if current
-                            if (id === versionHistoryWorkflow.id) {
-                              loadWorkflow(id);
-                            }
-                          }}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded"
-                        >
-                          Restore
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-neutral-700 flex justify-end">
-              <button
-                onClick={() => setShowVersionHistory(false)}
-                className="px-4 py-2 bg-neutral-700 hover:bg-neutral-600 text-white rounded"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <VersionHistoryModal
+          workflow={versionHistoryWorkflow}
+          versions={versions}
+          loading={loadingVersions}
+          onClose={() => setShowVersionHistory(false)}
+          onOpenVersion={handleOpenVersion}
+          onRestoreVersion={handleRestoreVersion}
+        />
       )}
 
       {/* Pane Context Menu (Read Only Request) */}
@@ -1370,88 +1301,16 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         />
       )}
 
-      {/* Code Viewer - Temporal or Airflow */}
-      {showCodeViewer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-slate-200">
-              <h2 className="text-xl font-semibold text-slate-900">
-                {viewCodeFormat === 'temporal' ? 'Temporal Python Code' : 'Airflow DAG Code'}
-              </h2>
-              <button
-                onClick={() => setShowCodeViewer(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto p-4 space-y-4">
-              {viewCodeFormat === 'temporal' && pythonCode ? (
-                <>
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <Code className="w-4 h-4" />
-                      workflow.py
-                    </h3>
-                    <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-sm overflow-x-auto">
-                      <code>{pythonCode.workflow}</code>
-                    </pre>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                      <Code className="w-4 h-4" />
-                      activities.py
-                    </h3>
-                    <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-sm overflow-x-auto">
-                      <code>{pythonCode.activities}</code>
-                    </pre>
-                  </div>
-                </>
-              ) : viewCodeFormat === 'airflow' ? (
-                loadingAirflowCode ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-slate-500">Loading Airflow code...</div>
-                  </div>
-                ) : airflowCode ? (
-                  Object.entries(airflowCode).map(([filename, content]) => (
-                    <div key={filename}>
-                      <h3 className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
-                        <Code className="w-4 h-4" />
-                        {filename}
-                      </h3>
-                      <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg text-sm overflow-x-auto">
-                        <code>{content}</code>
-                      </pre>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-slate-500">Failed to load Airflow code</div>
-                  </div>
-                )
-              ) : (
-                <div className="flex items-center justify-center py-12">
-                  <div className="text-slate-500">No code available</div>
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => setShowCodeViewer(false)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => handleExport(viewCodeFormat)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                Download All Files
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Code Viewer Modal */}
+      <CodeViewerModal
+        isOpen={showCodeViewer}
+        format={viewCodeFormat}
+        pythonCode={pythonCode}
+        airflowCode={airflowCode}
+        loadingAirflowCode={loadingAirflowCode}
+        onClose={() => setShowCodeViewer(false)}
+        onExport={handleExport}
+      />
 
       {/* GitHub Settings Modal */}
       {showGitHubSettings && id && (
@@ -1492,7 +1351,11 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 setShowVersionHistory(true);
                 try {
                   const list = await workflowsApi.getVersions(workflow.id);
-                  setVersions(list);
+                  // Map null to undefined for createdBy to match WorkflowVersion type
+                  setVersions(list.map((v) => ({
+                    ...v,
+                    createdBy: v.createdBy || undefined,
+                  })));
                 } finally {
                   setLoadingVersions(false);
                 }
@@ -1527,182 +1390,22 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       )}
 
       {/* Folder Permissions Modal */}
-      {
-        showPermissionsModal && permissionsFolder && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center">
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/50"
-              onClick={() => {
-                setShowPermissionsModal(false);
-                setPermissionsFolder(null);
-              }}
-            />
-
-            {/* Modal */}
-            <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
-              {/* Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-primary-600" />
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    Folder Permissions
-                  </h3>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowPermissionsModal(false);
-                    setPermissionsFolder(null);
-                  }}
-                  className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Folder info */}
-              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
-                <div className="flex items-center gap-2">
-                  <Folder className="w-5 h-5 text-amber-600" />
-                  <span className="font-medium text-slate-900">{permissionsFolder.name}</span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  Users and groups with access to this folder can view or edit workflows within it.
-                </p>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto p-4">
-                {loadingPermissions ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Add new permission */}
-                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                      <div className="text-sm font-medium text-slate-700 mb-2">Add Permission</div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={newPermissionType}
-                          onChange={(e) => {
-                            setNewPermissionType(e.target.value as 'user' | 'group');
-                            setNewPermissionTargetId('');
-                          }}
-                          className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value="user">User</option>
-                          <option value="group">Group</option>
-                        </select>
-                        <select
-                          value={newPermissionTargetId}
-                          onChange={(e) => setNewPermissionTargetId(e.target.value)}
-                          className="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value="">Select {newPermissionType}...</option>
-                          {newPermissionType === 'user'
-                            ? availableUsers.map((u) => (
-                              <option key={u.id} value={u.id}>
-                                {u.name || u.email}
-                              </option>
-                            ))
-                            : availableGroups.map((g) => (
-                              <option key={g.id} value={g.id}>
-                                {g.name}
-                              </option>
-                            ))}
-                        </select>
-                        <select
-                          value={newPermissionLevel}
-                          onChange={(e) => setNewPermissionLevel(e.target.value as FolderPermissionLevel)}
-                          className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        >
-                          <option value="READ">Read</option>
-                          <option value="WRITE">Write</option>
-                          <option value="ADMIN">Admin</option>
-                        </select>
-                        <button
-                          onClick={handleAddPermission}
-                          disabled={!newPermissionTargetId}
-                          className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Existing permissions */}
-                    <div>
-                      <div className="text-sm font-medium text-slate-700 mb-2">Current Permissions</div>
-                      {folderPermissions.length === 0 ? (
-                        <div className="text-sm text-slate-500 text-center py-4">
-                          No permissions set. Only the folder owner has access.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {folderPermissions.map((perm) => (
-                            <div
-                              key={perm.id}
-                              className="flex items-center justify-between p-2 bg-white border border-slate-200 rounded"
-                            >
-                              <div className="flex items-center gap-2">
-                                {perm.user ? (
-                                  <>
-                                    <User className="w-4 h-4 text-slate-400" />
-                                    <span className="text-sm">{perm.user.name || perm.user.email}</span>
-                                  </>
-                                ) : perm.group ? (
-                                  <>
-                                    <Users className="w-4 h-4 text-slate-400" />
-                                    <span className="text-sm">{perm.group.name}</span>
-                                  </>
-                                ) : null}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={perm.permission}
-                                  onChange={(e) =>
-                                    handleUpdatePermission(perm.id, e.target.value as FolderPermissionLevel)
-                                  }
-                                  className="px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                >
-                                  <option value="READ">Read</option>
-                                  <option value="WRITE">Write</option>
-                                  <option value="ADMIN">Admin</option>
-                                </select>
-                                <button
-                                  onClick={() => handleDeletePermission(perm.id)}
-                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                  title="Remove permission"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="p-4 border-t border-slate-200 flex justify-end">
-                <button
-                  onClick={() => {
-                    setShowPermissionsModal(false);
-                    setPermissionsFolder(null);
-                  }}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-                >
-                  Done
-                </button>
-              </div>
-            </div>
-          </div>
-        )
-      }
+      {showPermissionsModal && permissionsFolder && (
+        <FolderPermissionsModal
+          folder={permissionsFolder}
+          permissions={folderPermissions}
+          loading={loadingPermissions}
+          availableUsers={availableUsers}
+          availableGroups={availableGroups}
+          onClose={() => {
+            setShowPermissionsModal(false);
+            setPermissionsFolder(null);
+          }}
+          onAddPermission={handleAddPermission}
+          onUpdatePermission={handleUpdatePermission}
+          onDeletePermission={handleDeletePermission}
+        />
+      )}
 
       {
         showPromotionModal && id && (

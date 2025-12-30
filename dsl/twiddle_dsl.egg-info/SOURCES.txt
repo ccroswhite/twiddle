@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+tests/test_decorators.py
 twiddle_dsl/__init__.py
 twiddle_dsl/activity.py
 twiddle_dsl/logging.py

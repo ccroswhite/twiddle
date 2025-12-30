@@ -1,5 +1,9 @@
 README.md
 pyproject.toml
+tests/test_airflow.py
+tests/test_cli.py
+tests/test_converter.py
+tests/test_introspection.py
 twiddle_sdk/__init__.py
 twiddle_sdk.egg-info/PKG-INFO
 twiddle_sdk.egg-info/SOURCES.txt
@@ -13,6 +17,7 @@ twiddle_sdk/cli/init.py
 twiddle_sdk/cli/lint.py
 twiddle_sdk/cli/main.py
 twiddle_sdk/converter/__init__.py
+twiddle_sdk/converter/airflow_generator.py
 twiddle_sdk/converter/extractor.py
 twiddle_sdk/converter/generator.py
 twiddle_sdk/introspection/__init__.py
