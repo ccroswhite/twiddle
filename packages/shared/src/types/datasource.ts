@@ -66,6 +66,18 @@ export interface CredentialUpdateInput {
 export interface CredentialTestResult {
   success: boolean;
   message: string;
+  details?: {
+    errorCode?: string;
+    rawError?: string;
+    connectionInfo?: {
+      host?: string;
+      port?: number;
+      user?: string;
+      database?: string;
+    };
+    version?: string;
+    [key: string]: unknown;
+  };
 }
 
 export interface DataSourceWithAccess {

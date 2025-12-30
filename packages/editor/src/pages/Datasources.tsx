@@ -125,7 +125,8 @@ export function Datasources() {
   const [showCreate, setShowCreate] = useState(false);
   const [newCredential, setNewCredential] = useState<{ name: string; type: string; data: CredentialData; groupIds: string[] }>({ name: '', type: '', data: {}, groupIds: [] });
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: Record<string, unknown> } | null>(null);
+  const [showTestDetails, setShowTestDetails] = useState(false);
   const [testing, setTesting] = useState(false);
 
   // Groups the user belongs to (for sharing)
@@ -607,16 +608,32 @@ export function Datasources() {
                 >
                   <div className="flex items-center gap-2">
                     {testResult.success ? (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     )}
-                    {testResult.message}
+                    <span className="flex-1">{testResult.message}</span>
+                    {testResult.details && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTestDetails(!showTestDetails)}
+                        className="text-xs underline opacity-75 hover:opacity-100"
+                      >
+                        {showTestDetails ? 'Hide details' : 'Show details'}
+                      </button>
+                    )}
                   </div>
+                  {showTestDetails && testResult.details && (
+                    <div className="mt-3 pt-3 border-t border-current/20">
+                      <pre className="text-xs whitespace-pre-wrap font-mono opacity-90 overflow-x-auto">
+                        {JSON.stringify(testResult.details, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

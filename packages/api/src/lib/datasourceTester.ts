@@ -216,31 +216,43 @@ async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
     };
   } catch (error) {
     const err = error as Error & { code?: string };
-    const message = err.message || String(error);
+    const rawMessage = err.message || String(error);
     const code = err.code || '';
 
-    logger.error({ message, code, error }, 'PostgreSQL connection error');
+    const connectionInfo = {
+      host: data.host,
+      port,
+      user: data.username,
+      database: data.database || 'postgres',
+    };
 
-    // Provide more helpful error messages
-    if (code === 'ECONNREFUSED' || message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that PostgreSQL is running on ${data.host}:${port}` };
+    logger.error({ rawMessage, code, error }, 'PostgreSQL connection error');
+
+    const details = {
+      errorCode: code,
+      rawError: rawMessage,
+      connectionInfo,
+    };
+
+    if (code === 'ECONNREFUSED' || rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that PostgreSQL is running.`, details };
     }
-    if (code === 'ENOTFOUND' || message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (code === 'ENOTFOUND' || rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (code === 'ETIMEDOUT' || message.includes('ETIMEDOUT') || message.includes('timeout')) {
-      return { success: false, message: `Connection timed out. Check that ${data.host}:${port} is reachable.` };
+    if (code === 'ETIMEDOUT' || rawMessage.includes('ETIMEDOUT') || rawMessage.includes('timeout')) {
+      return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
     }
-    if (message.includes('password authentication failed')) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
+    if (rawMessage.includes('password authentication failed')) {
+      return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
     }
-    if (message.includes('does not exist')) {
-      return { success: false, message: message };
+    if (rawMessage.includes('does not exist')) {
+      return { success: false, message: rawMessage, details };
     }
-    if (code === 'ECONNRESET' || message.includes('ECONNRESET')) {
-      return { success: false, message: `Connection reset. The server at ${data.host}:${port} closed the connection.` };
+    if (code === 'ECONNRESET' || rawMessage.includes('ECONNRESET')) {
+      return { success: false, message: `Connection reset by ${data.host}:${port}.`, details };
     }
-    return { success: false, message: `Connection failed: ${message || code || 'Unknown error'}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -257,9 +269,18 @@ async function testMySQL(data: CredentialData): Promise<TestResult> {
     return { success: false, message: 'Invalid port number' };
   }
 
+  logger.info({
+    host: data.host,
+    port,
+    user: data.username,
+    database: data.database || '(none)',
+    useTls: !!data.useTls
+  }, 'MySQL connection attempt');
+
   try {
     const mysql = await import('mysql2/promise');
-    const connection = await mysql.createConnection({
+
+    const connectionConfig = {
       host: data.host,
       port: port,
       user: data.username,
@@ -267,12 +288,18 @@ async function testMySQL(data: CredentialData): Promise<TestResult> {
       database: data.database || undefined,
       connectTimeout: 10000,
       ssl: data.useTls ? { rejectUnauthorized: false } : undefined,
-    });
+    };
+
+    logger.debug({ config: { ...connectionConfig, password: '***' } }, 'MySQL connection config');
+
+    const connection = await mysql.createConnection(connectionConfig);
 
     const [rows] = await connection.query('SELECT VERSION() as version');
     await connection.end();
 
     const version = (rows as Array<{ version: string }>)[0]?.version || 'Unknown';
+
+    logger.info({ version }, 'MySQL connection successful');
 
     return {
       success: true,
@@ -280,23 +307,85 @@ async function testMySQL(data: CredentialData): Promise<TestResult> {
       details: { version },
     };
   } catch (error) {
-    const err = error as Error & { code?: string };
-    const message = err.message || String(error);
+    const err = error as Error & { code?: string; errno?: number; sqlState?: string; sqlMessage?: string };
+    const rawMessage = err.message || String(error);
     const code = err.code || '';
 
-    if (code === 'ECONNREFUSED' || message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that MySQL is running on ${data.host}:${port}` };
+    const connectionInfo = {
+      host: data.host,
+      port,
+      user: data.username,
+      database: data.database,
+    };
+
+    logger.error({
+      rawMessage,
+      code,
+      errno: err.errno,
+      sqlState: err.sqlState,
+      sqlMessage: err.sqlMessage,
+      stack: err.stack,
+      error
+    }, 'MySQL connection error');
+
+    // Create base details object for all errors
+    const details = {
+      errorCode: code,
+      rawError: rawMessage,
+      connectionInfo,
+      errno: err.errno,
+      sqlState: err.sqlState,
+    };
+
+    // Return user-friendly message with full details
+    if (code === 'ECONNREFUSED' || rawMessage.includes('ECONNREFUSED')) {
+      return {
+        success: false,
+        message: `Connection refused to ${data.host}:${port}. Check that MySQL is running.`,
+        details,
+      };
     }
-    if (code === 'ENOTFOUND' || message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (code === 'ENOTFOUND' || rawMessage.includes('ENOTFOUND')) {
+      return {
+        success: false,
+        message: `Host not found: ${data.host}`,
+        details,
+      };
     }
-    if (code === 'ER_ACCESS_DENIED_ERROR' || message.includes('Access denied')) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
+    if (code === 'ER_ACCESS_DENIED_ERROR' || rawMessage.includes('Access denied')) {
+      return {
+        success: false,
+        message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`,
+        details,
+      };
     }
-    if (code === 'ETIMEDOUT' || message.includes('ETIMEDOUT')) {
-      return { success: false, message: `Connection timed out. Check that ${data.host}:${port} is reachable.` };
+    if (code === 'ETIMEDOUT' || rawMessage.includes('ETIMEDOUT')) {
+      return {
+        success: false,
+        message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`,
+        details,
+      };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    if (code === 'ECONNRESET' || rawMessage.includes('ECONNRESET')) {
+      return {
+        success: false,
+        message: `Connection reset by ${data.host}:${port}. Try enabling TLS or check server configuration.`,
+        details,
+      };
+    }
+    if (code === 'ER_NOT_SUPPORTED_AUTH_MODE' || rawMessage.includes('caching_sha2_password')) {
+      return {
+        success: false,
+        message: `Authentication plugin not supported. Try using mysql_native_password or enabling TLS.`,
+        details,
+      };
+    }
+    // For any other error
+    return {
+      success: false,
+      message: `Connection failed to ${data.host}:${port}.`,
+      details,
+    };
   }
 }
 
@@ -345,21 +434,35 @@ async function testMSSQL(data: CredentialData): Promise<TestResult> {
     };
   } catch (error) {
     const err = error as Error & { code?: string };
-    const message = err.message || String(error);
+    const rawMessage = err.message || String(error);
+    const code = err.code || '';
 
-    if (message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that SQL Server is running on ${data.host}:${port}` };
+    const connectionInfo = {
+      host: data.host,
+      port,
+      user: data.username,
+      database: data.database || 'master',
+    };
+
+    const details = {
+      errorCode: code,
+      rawError: rawMessage,
+      connectionInfo,
+    };
+
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that SQL Server is running.`, details };
     }
-    if (message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (message.includes('Login failed')) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
+    if (rawMessage.includes('Login failed')) {
+      return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
     }
-    if (message.includes('ETIMEDOUT')) {
-      return { success: false, message: `Connection timed out. Check that ${data.host}:${port} is reachable.` };
+    if (rawMessage.includes('ETIMEDOUT')) {
+      return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -408,16 +511,28 @@ async function testRedis(data: CredentialData): Promise<TestResult> {
     };
   } catch (error) {
     const err = error as Error;
-    if (err.message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that Redis is running on ${data.host}:${port}` };
+    const rawMessage = err.message || String(error);
+
+    const connectionInfo = {
+      host: data.host,
+      port,
+    };
+
+    const details = {
+      rawError: rawMessage,
+      connectionInfo,
+    };
+
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that Redis is running.`, details };
     }
-    if (err.message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (err.message.includes('NOAUTH') || err.message.includes('AUTH')) {
-      return { success: false, message: 'Authentication failed. Check password.' };
+    if (rawMessage.includes('NOAUTH') || rawMessage.includes('AUTH')) {
+      return { success: false, message: `Authentication failed for ${data.host}:${port}. Check password.`, details };
     }
-    return { success: false, message: `Connection failed: ${err.message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -435,6 +550,13 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
 
   const port = data.port || 22;
 
+  const connectionInfo = {
+    host: data.host,
+    port,
+    user: data.username,
+    authMethod: data.privateKey ? 'privateKey' : 'password',
+  };
+
   try {
     const { Client } = await import('ssh2');
 
@@ -442,7 +564,11 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
       const conn = new Client();
       const timeout = setTimeout(() => {
         conn.end();
-        resolve({ success: false, message: `Connection timed out after 10 seconds` });
+        resolve({
+          success: false,
+          message: `Connection timed out to ${data.host}:${port} after 10 seconds.`,
+          details: { rawError: 'Connection timeout', connectionInfo },
+        });
       }, 10000);
 
       conn.on('ready', () => {
@@ -451,20 +577,23 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
         resolve({
           success: true,
           message: `Successfully connected to ${data.host}:${port} as ${data.username}`,
+          details: { connectionInfo },
         });
       });
 
       conn.on('error', (err: Error) => {
         clearTimeout(timeout);
-        const message = err.message || String(err);
-        if (message.includes('ECONNREFUSED')) {
-          resolve({ success: false, message: `Connection refused. Check that SSH is running on ${data.host}:${port}` });
-        } else if (message.includes('ENOTFOUND')) {
-          resolve({ success: false, message: `Host not found: ${data.host}` });
-        } else if (message.includes('Authentication failed') || message.includes('All configured authentication methods failed')) {
-          resolve({ success: false, message: 'Authentication failed. Check username and password/key.' });
+        const rawMessage = err.message || String(err);
+        const details = { rawError: rawMessage, connectionInfo };
+
+        if (rawMessage.includes('ECONNREFUSED')) {
+          resolve({ success: false, message: `Connection refused to ${data.host}:${port}. Check that SSH is running.`, details });
+        } else if (rawMessage.includes('ENOTFOUND')) {
+          resolve({ success: false, message: `Host not found: ${data.host}`, details });
+        } else if (rawMessage.includes('Authentication failed') || rawMessage.includes('All configured authentication methods failed')) {
+          resolve({ success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details });
         } else {
-          resolve({ success: false, message: `Connection failed: ${message}` });
+          resolve({ success: false, message: `Connection failed to ${data.host}:${port}.`, details });
         }
       });
 
@@ -487,7 +616,12 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
       conn.connect(connectConfig);
     });
   } catch (error) {
-    return { success: false, message: `SSH connection failed: ${(error as Error).message}` };
+    const rawMessage = (error as Error).message;
+    return {
+      success: false,
+      message: `SSH connection failed to ${data.host}:${port}.`,
+      details: { rawError: rawMessage, connectionInfo },
+    };
   }
 }
 
@@ -534,15 +668,26 @@ async function testElasticsearch(data: CredentialData): Promise<TestResult> {
           name: info.name,
           cluster_name: info.cluster_name,
           version: info.version?.number,
+          connectionInfo: { host: data.host, port, protocol },
         },
       };
-    } else if (response.status === 401) {
-      return { success: false, message: 'Authentication failed' };
     } else {
-      return { success: false, message: `Server returned status ${response.status}` };
+      const connectionInfo = { host: data.host, port, protocol };
+      const details = { rawError: `HTTP ${response.status}`, connectionInfo };
+
+      if (response.status === 401) {
+        return { success: false, message: `Authentication failed for ${data.host}:${port}.`, details };
+      }
+      return { success: false, message: `Server at ${data.host}:${port} returned status ${response.status}.`, details };
     }
   } catch (error) {
-    return { success: false, message: `Connection failed: ${(error as Error).message}` };
+    const rawMessage = (error as Error).message;
+    const connectionInfo = { host: data.host, port: data.port || 9200, protocol: data.useTls ? 'https' : 'http' };
+    return {
+      success: false,
+      message: `Connection failed to ${data.host}:${data.port || 9200}.`,
+      details: { rawError: rawMessage, connectionInfo },
+    };
   }
 }
 
@@ -581,22 +726,24 @@ async function testCassandra(data: CredentialData): Promise<TestResult> {
     return {
       success: true,
       message: `Successfully connected to Cassandra ${version}`,
-      details: { version },
+      details: { version, connectionInfo: { host: data.host, port } },
     };
   } catch (error) {
     const err = error as Error;
-    const message = err.message || String(error);
+    const rawMessage = err.message || String(error);
+    const connectionInfo = { host: data.host, port, user: data.username };
+    const details = { rawError: rawMessage, connectionInfo };
 
-    if (message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that Cassandra is running on ${data.host}:${port}` };
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that Cassandra is running.`, details };
     }
-    if (message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (message.includes('Authentication') || message.includes('credentials')) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
+    if (rawMessage.includes('Authentication') || rawMessage.includes('credentials')) {
+      return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -632,25 +779,27 @@ async function testOracle(data: CredentialData): Promise<TestResult> {
     return {
       success: true,
       message: `Successfully connected to Oracle`,
-      details: { version },
+      details: { version, connectionInfo: { host: data.host, port, database: data.database || 'ORCL' } },
     };
   } catch (error) {
     const err = error as Error & { errorNum?: number };
-    const message = err.message || String(error);
+    const rawMessage = err.message || String(error);
+    const connectionInfo = { host: data.host, port, user: data.username, database: data.database || 'ORCL' };
+    const details = { rawError: rawMessage, connectionInfo, errorNum: err.errorNum };
 
-    if (message.includes('TNS:no listener') || message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that Oracle is running on ${data.host}:${port}` };
+    if (rawMessage.includes('TNS:no listener') || rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that Oracle is running.`, details };
     }
-    if (message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (err.errorNum === 1017 || message.includes('ORA-01017')) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
+    if (err.errorNum === 1017 || rawMessage.includes('ORA-01017')) {
+      return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
     }
-    if (message.includes('ORA-12154') || message.includes('TNS:could not resolve')) {
-      return { success: false, message: `Could not resolve service name: ${data.database || 'ORCL'}` };
+    if (rawMessage.includes('ORA-12154') || rawMessage.includes('TNS:could not resolve')) {
+      return { success: false, message: `Could not resolve service name: ${data.database || 'ORCL'}`, details };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -661,6 +810,14 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
   if (!data.account || !data.username || !data.password) {
     return { success: false, message: 'Account, username, and password are required' };
   }
+
+  const connectionInfo = {
+    account: data.account,
+    user: data.username,
+    warehouse: data.warehouse,
+    database: data.database,
+    role: data.role,
+  };
 
   try {
     const snowflake = await import('snowflake-sdk');
@@ -679,11 +836,23 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
         if (err) {
           const message = err.message || String(err);
           if (message.includes('Incorrect username or password')) {
-            resolve({ success: false, message: 'Authentication failed. Check username and password.' });
+            resolve({
+              success: false,
+              message: `Authentication failed for user '${data.username}'@'${data.account}'.`,
+              details: { rawError: message, connectionInfo },
+            });
           } else if (message.includes('account') || message.includes('not found')) {
-            resolve({ success: false, message: `Account not found: ${data.account}` });
+            resolve({
+              success: false,
+              message: `Account not found: ${data.account}`,
+              details: { rawError: message, connectionInfo },
+            });
           } else {
-            resolve({ success: false, message: `Connection failed: ${message}` });
+            resolve({
+              success: false,
+              message: `Connection failed to Snowflake account '${data.account}'.`,
+              details: { rawError: message, connectionInfo },
+            });
           }
           return;
         }
@@ -693,7 +862,11 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
           sqlText: 'SELECT CURRENT_VERSION() as version',
           complete: (err2: Error | undefined, _stmt: unknown, rows: unknown) => {
             if (err2) {
-              resolve({ success: false, message: `Query failed: ${err2.message}` });
+              resolve({
+                success: false,
+                message: `Query failed on Snowflake account '${data.account}'.`,
+                details: { rawError: err2.message, connectionInfo },
+              });
               return;
             }
             const version = (rows as Array<{ VERSION: string }>)?.[0]?.VERSION || 'Unknown';
@@ -701,7 +874,7 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
               resolve({
                 success: true,
                 message: `Successfully connected to Snowflake ${version}`,
-                details: { version, account: data.account },
+                details: { version, connectionInfo },
               });
             });
           },
@@ -709,7 +882,12 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
       });
     });
   } catch (error) {
-    return { success: false, message: `Snowflake connection failed: ${(error as Error).message}` };
+    const rawMessage = (error as Error).message;
+    return {
+      success: false,
+      message: `Snowflake connection failed.`,
+      details: { rawError: rawMessage, connectionInfo },
+    };
   }
 }
 
@@ -723,6 +901,7 @@ async function testPrestoDB(data: CredentialData): Promise<TestResult> {
 
   const port = data.port || 8080;
   const protocol = data.useTls ? 'https' : 'http';
+  const connectionInfo = { host: data.host, port, protocol, user: data.username };
 
   try {
     // PrestoDB uses HTTP REST API
@@ -748,22 +927,26 @@ async function testPrestoDB(data: CredentialData): Promise<TestResult> {
       return {
         success: true,
         message: `Successfully connected to PrestoDB ${version}`,
-        details: { version },
+        details: { version, connectionInfo },
       };
-    } else if (response.status === 401 || response.status === 403) {
-      return { success: false, message: 'Authentication failed. Check username and password.' };
     } else {
-      return { success: false, message: `Server returned status ${response.status}` };
+      const details = { rawError: `HTTP ${response.status}`, connectionInfo };
+      if (response.status === 401 || response.status === 403) {
+        return { success: false, message: `Authentication failed for ${data.host}:${port}.`, details };
+      }
+      return { success: false, message: `Server at ${data.host}:${port} returned status ${response.status}.`, details };
     }
   } catch (error) {
-    const message = (error as Error).message || String(error);
-    if (message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that PrestoDB is running on ${data.host}:${port}` };
+    const rawMessage = (error as Error).message || String(error);
+    const details = { rawError: rawMessage, connectionInfo };
+
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that PrestoDB is running.`, details };
     }
-    if (message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
 
@@ -777,6 +960,7 @@ async function testWinRM(data: CredentialData): Promise<TestResult> {
 
   const port = data.useHttps ? 5986 : 5985;
   const protocol = data.useHttps ? 'https' : 'http';
+  const connectionInfo = { host: data.host, port, protocol, user: data.username, domain: data.domain };
 
   try {
     // WinRM uses HTTP SOAP protocol - we'll just test the endpoint is reachable
@@ -804,21 +988,25 @@ async function testWinRM(data: CredentialData): Promise<TestResult> {
       return {
         success: true,
         message: `Successfully connected to WinRM on ${data.host}:${port}`,
-        details: { host: data.host, port },
+        details: { connectionInfo },
       };
-    } else if (response.status === 401) {
-      return { success: false, message: 'Authentication failed. Check username, password, and domain.' };
     } else {
-      return { success: false, message: `Server returned status ${response.status}` };
+      const details = { rawError: `HTTP ${response.status}`, connectionInfo };
+      if (response.status === 401) {
+        return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
+      }
+      return { success: false, message: `Server at ${data.host}:${port} returned status ${response.status}.`, details };
     }
   } catch (error) {
-    const message = (error as Error).message || String(error);
-    if (message.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused. Check that WinRM is enabled on ${data.host}:${port}` };
+    const rawMessage = (error as Error).message || String(error);
+    const details = { rawError: rawMessage, connectionInfo };
+
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that WinRM is enabled.`, details };
     }
-    if (message.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}` };
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    return { success: false, message: `Connection failed: ${message}` };
+    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
 }
