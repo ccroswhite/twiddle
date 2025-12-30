@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import type { CredentialCreateInput, CredentialUpdateInput } from '@twiddle/shared';
-import { testCredential } from '../lib/datasourceTester.js';
+import { testDataSource } from '../lib/datasourceTester.js';
 
 // Helper to get user from session cookie
 async function getUserFromSession(request: FastifyRequest) {
@@ -392,7 +392,7 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ error: 'Access denied' });
     }
 
-    const result = await testCredential(
+    const result = await testDataSource(
       dataSource.type,
       dataSource.data as Record<string, unknown>
     );
@@ -413,7 +413,7 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return { success: false, message: 'Data source type is required' };
     }
 
-    const result = await testCredential(type, data || {});
+    const result = await testDataSource(type, data || {});
     return result;
   });
 };

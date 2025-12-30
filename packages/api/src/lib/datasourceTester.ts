@@ -1,11 +1,11 @@
 /**
- * Credential testing utilities
- * Tests connectivity for various credential types
+ * Data Source testing utilities
+ * Tests connectivity for various data source types
  */
 import { logger } from './logger.js';
 
 
-interface CredentialData {
+interface DataSourceData {
   // Common fields
   username?: string;
   password?: string;
@@ -29,6 +29,9 @@ interface CredentialData {
   // WinRM
   domain?: string;
   useHttps?: boolean;
+  // SSL/TLS options
+  allowSelfSigned?: boolean;
+  skipHostnameVerification?: boolean;
 }
 
 interface TestResult {
@@ -38,9 +41,9 @@ interface TestResult {
 }
 
 /**
- * Test credential connectivity based on type
+ * Test data source connectivity based on type
  */
-export async function testCredential(type: string, data: CredentialData): Promise<TestResult> {
+export async function testDataSource(type: string, data: DataSourceData): Promise<TestResult> {
   try {
     switch (type) {
       case 'httpBasicAuth':
@@ -92,7 +95,7 @@ export async function testCredential(type: string, data: CredentialData): Promis
 /**
  * Test HTTP Basic Auth by making a simple request
  */
-async function testHttpBasicAuth(data: CredentialData): Promise<TestResult> {
+async function testHttpBasicAuth(data: DataSourceData): Promise<TestResult> {
   if (!data.username || !data.password) {
     return { success: false, message: 'Username and password are required' };
   }
@@ -108,7 +111,7 @@ async function testHttpBasicAuth(data: CredentialData): Promise<TestResult> {
 /**
  * Test HTTP Bearer Token
  */
-async function testHttpBearerToken(data: CredentialData): Promise<TestResult> {
+async function testHttpBearerToken(data: DataSourceData): Promise<TestResult> {
   if (!data.token) {
     return { success: false, message: 'Token is required' };
   }
@@ -127,7 +130,7 @@ async function testHttpBearerToken(data: CredentialData): Promise<TestResult> {
 /**
  * Test API Key
  */
-async function testApiKey(data: CredentialData): Promise<TestResult> {
+async function testApiKey(data: DataSourceData): Promise<TestResult> {
   if (!data.apiKey) {
     return { success: false, message: 'API Key is required' };
   }
@@ -145,7 +148,7 @@ async function testApiKey(data: CredentialData): Promise<TestResult> {
 /**
  * Test GitHub credentials by calling the GitHub API
  */
-async function testGitHub(data: CredentialData): Promise<TestResult> {
+async function testGitHub(data: DataSourceData): Promise<TestResult> {
   if (!data.token) {
     return { success: false, message: 'Personal Access Token is required' };
   }
@@ -179,7 +182,7 @@ async function testGitHub(data: CredentialData): Promise<TestResult> {
 /**
  * Test PostgreSQL connection
  */
-async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
+async function testPostgreSQL(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
@@ -259,7 +262,7 @@ async function testPostgreSQL(data: CredentialData): Promise<TestResult> {
 /**
  * Test MySQL connection
  */
-async function testMySQL(data: CredentialData): Promise<TestResult> {
+async function testMySQL(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
@@ -392,7 +395,7 @@ async function testMySQL(data: CredentialData): Promise<TestResult> {
 /**
  * Test MS SQL Server connection
  */
-async function testMSSQL(data: CredentialData): Promise<TestResult> {
+async function testMSSQL(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
@@ -469,7 +472,7 @@ async function testMSSQL(data: CredentialData): Promise<TestResult> {
 /**
  * Test Redis/Valkey connection
  */
-async function testRedis(data: CredentialData): Promise<TestResult> {
+async function testRedis(data: DataSourceData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
@@ -479,58 +482,79 @@ async function testRedis(data: CredentialData): Promise<TestResult> {
     return { success: false, message: 'Invalid port number' };
   }
 
+  const connectionInfo = { host: data.host, port, user: data.username };
+
   try {
     const { createClient } = await import('redis');
 
-    const url = data.password
-      ? `redis://:${data.password}@${data.host}:${port}`
-      : `redis://${data.host}:${port}`;
+    // Build Redis URL - supports ACL auth with username:password
+    let url: string;
+    if (data.username && data.password) {
+      // ACL authentication: redis://username:password@host:port
+      url = `redis://${encodeURIComponent(data.username)}:${encodeURIComponent(data.password)}@${data.host}:${port}`;
+    } else if (data.password) {
+      // Legacy password-only auth: redis://:password@host:port
+      url = `redis://:${encodeURIComponent(data.password)}@${data.host}:${port}`;
+    } else {
+      // No authentication
+      url = `redis://${data.host}:${port}`;
+    }
 
     const client = createClient({
       url,
       socket: {
         connectTimeout: 10000,
+        reconnectStrategy: false, // Don't try to reconnect during test
       },
     });
 
-    client.on('error', () => { }); // Suppress error events during test
+    // Track errors but don't suppress them completely
+    let connectionError: Error | null = null;
+    client.on('error', (err) => { connectionError = err; });
 
-    await client.connect();
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Connection timed out after 10 seconds')), 10000);
+    });
+
+    // Race between connection and timeout
+    try {
+      await Promise.race([client.connect(), timeoutPromise]);
+    } catch (connectError) {
+      // If there was a connection error, use that for better messaging
+      const error = connectionError || connectError;
+      throw error;
+    }
+
     const pong = await client.ping();
     const info = await client.info('server');
     await client.quit();
 
-    // Extract Redis version from info
+    // Extract Redis/Valkey version from info
     const versionMatch = info.match(/redis_version:([\d.]+)/);
     const version = versionMatch ? versionMatch[1] : 'unknown';
 
     return {
       success: true,
-      message: `Successfully connected to Redis ${version}`,
-      details: { ping: pong, version },
+      message: `Successfully connected to Redis/Valkey ${version}`,
+      details: { ping: pong, version, connectionInfo },
     };
   } catch (error) {
     const err = error as Error;
     const rawMessage = err.message || String(error);
-
-    const connectionInfo = {
-      host: data.host,
-      port,
-    };
-
-    const details = {
-      rawError: rawMessage,
-      connectionInfo,
-    };
+    const details = { rawError: rawMessage, connectionInfo };
 
     if (rawMessage.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that Redis is running.`, details };
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that Redis/Valkey is running.`, details };
     }
     if (rawMessage.includes('ENOTFOUND')) {
       return { success: false, message: `Host not found: ${data.host}`, details };
     }
-    if (rawMessage.includes('NOAUTH') || rawMessage.includes('AUTH')) {
+    if (rawMessage.includes('NOAUTH') || rawMessage.includes('AUTH') || rawMessage.includes('WRONGPASS')) {
       return { success: false, message: `Authentication failed for ${data.host}:${port}. Check password.`, details };
+    }
+    if (rawMessage.includes('timed out') || rawMessage.includes('timeout')) {
+      return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
     }
     return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
   }
@@ -539,7 +563,7 @@ async function testRedis(data: CredentialData): Promise<TestResult> {
 /**
  * Test SSH connection
  */
-async function testSSH(data: CredentialData): Promise<TestResult> {
+async function testSSH(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username) {
     return { success: false, message: 'Host and username are required' };
   }
@@ -628,16 +652,19 @@ async function testSSH(data: CredentialData): Promise<TestResult> {
 /**
  * Test Elasticsearch/OpenSearch connection
  */
-async function testElasticsearch(data: CredentialData): Promise<TestResult> {
+async function testElasticsearch(data: DataSourceData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
 
-  try {
-    const protocol = data.useTls ? 'https' : 'http';
-    const port = data.port || 9200;
-    const url = `${protocol}://${data.host}:${port}`;
+  const protocol = data.useTls ? 'https' : 'http';
+  const port = data.port || 9200;
+  const url = `${protocol}://${data.host}:${port}`;
+  const connectionInfo = { host: data.host, port, protocol, user: data.username };
 
+  logger.info({ url, user: data.username, useTls: data.useTls }, 'OpenSearch/Elasticsearch connection attempt');
+
+  try {
     const headers: Record<string, string> = {
       'Accept': 'application/json',
     };
@@ -645,56 +672,126 @@ async function testElasticsearch(data: CredentialData): Promise<TestResult> {
     if (data.username && data.password) {
       const auth = Buffer.from(`${data.username}:${data.password}`).toString('base64');
       headers['Authorization'] = `Basic ${auth}`;
+      logger.debug({ user: data.username }, 'Using Basic auth');
     } else if (data.apiKey) {
       headers['Authorization'] = `ApiKey ${data.apiKey}`;
+      logger.debug('Using API Key auth');
+    } else {
+      logger.debug('No authentication configured');
     }
 
-    const response = await fetch(url, {
-      headers,
-      // @ts-expect-error - Node fetch supports this
-      rejectUnauthorized: false,
-    });
+    logger.debug({ url, headers: { ...headers, Authorization: headers.Authorization ? '***' : undefined } }, 'Fetching URL');
+
+    // For HTTPS connections, optionally allow self-signed certificates and skip hostname verification
+    const fetchOptions: RequestInit & { agent?: unknown } = { headers };
+    if (data.useTls) {
+      const https = await import('https');
+      const agent = new https.Agent({
+        rejectUnauthorized: !data.allowSelfSigned,
+        // Skip hostname verification if requested
+        checkServerIdentity: data.skipHostnameVerification ? () => undefined : undefined,
+      });
+      fetchOptions.agent = agent;
+      logger.debug({ allowSelfSigned: data.allowSelfSigned, skipHostnameVerification: data.skipHostnameVerification }, 'Using HTTPS agent');
+    }
+
+    const response = await fetch(url, fetchOptions);
+
+    logger.info({ status: response.status, statusText: response.statusText }, 'OpenSearch/Elasticsearch response');
 
     if (response.ok) {
       const info = await response.json() as {
         name?: string;
         cluster_name?: string;
-        version?: { number?: string }
+        version?: { number?: string; distribution?: string }
       };
+
+      logger.info({
+        name: info.name,
+        cluster_name: info.cluster_name,
+        version: info.version?.number,
+        distribution: info.version?.distribution,
+      }, 'OpenSearch/Elasticsearch connection successful');
+
       return {
         success: true,
-        message: `Successfully connected to ${info.cluster_name || 'cluster'}`,
+        message: `Successfully connected to ${info.cluster_name || 'cluster'} (${info.version?.distribution || 'Elasticsearch'} ${info.version?.number || ''})`,
         details: {
           name: info.name,
           cluster_name: info.cluster_name,
           version: info.version?.number,
-          connectionInfo: { host: data.host, port, protocol },
+          distribution: info.version?.distribution,
+          connectionInfo,
         },
       };
     } else {
-      const connectionInfo = { host: data.host, port, protocol };
-      const details = { rawError: `HTTP ${response.status}`, connectionInfo };
+      // Try to get error body
+      let errorBody = '';
+      try {
+        errorBody = await response.text();
+        logger.error({ status: response.status, body: errorBody }, 'OpenSearch/Elasticsearch error response');
+      } catch {
+        // Ignore body read error
+      }
+
+      const details = {
+        rawError: `HTTP ${response.status}: ${response.statusText}`,
+        responseBody: errorBody.substring(0, 500),
+        connectionInfo
+      };
 
       if (response.status === 401) {
-        return { success: false, message: `Authentication failed for ${data.host}:${port}.`, details };
+        return { success: false, message: `Authentication failed for ${data.host}:${port}. Check username and password.`, details };
+      }
+      if (response.status === 403) {
+        return { success: false, message: `Access forbidden for ${data.host}:${port}. Check user permissions.`, details };
       }
       return { success: false, message: `Server at ${data.host}:${port} returned status ${response.status}.`, details };
     }
   } catch (error) {
-    const rawMessage = (error as Error).message;
-    const connectionInfo = { host: data.host, port: data.port || 9200, protocol: data.useTls ? 'https' : 'http' };
-    return {
-      success: false,
-      message: `Connection failed to ${data.host}:${data.port || 9200}.`,
-      details: { rawError: rawMessage, connectionInfo },
+    const err = error as Error & { cause?: Error };
+    // Node fetch wraps errors - extract the underlying cause
+    const underlyingError = err.cause || err;
+    const rawMessage = underlyingError.message || err.message;
+    const stack = underlyingError.stack || err.stack;
+
+    logger.error({
+      message: err.message,
+      causeMessage: err.cause?.message,
+      rawMessage,
+      stack,
+      connectionInfo
+    }, 'OpenSearch/Elasticsearch connection error');
+
+    const details = {
+      rawError: rawMessage,
+      outerError: err.message !== rawMessage ? err.message : undefined,
+      connectionInfo
     };
+
+    if (rawMessage.includes('ECONNREFUSED')) {
+      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that the server is running.`, details };
+    }
+    if (rawMessage.includes('ENOTFOUND')) {
+      return { success: false, message: `Host not found: ${data.host}`, details };
+    }
+    if (rawMessage.includes('ETIMEDOUT')) {
+      return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
+    }
+    if (rawMessage.includes('unable to verify') || rawMessage.includes('certificate') || rawMessage.includes('self signed') || rawMessage.includes('CERT_')) {
+      return { success: false, message: `SSL/TLS certificate error for ${data.host}:${port}. Try enabling/disabling TLS or the server may have a self-signed certificate.`, details };
+    }
+    if (rawMessage.includes('ECONNRESET')) {
+      return { success: false, message: `Connection reset by ${data.host}:${port}. The server closed the connection.`, details };
+    }
+    return { success: false, message: `Connection failed to ${data.host}:${port}: ${rawMessage}`, details };
   }
 }
 
 /**
  * Test Cassandra connection
  */
-async function testCassandra(data: CredentialData): Promise<TestResult> {
+async function testCassandra(data: DataSourceData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
@@ -750,7 +847,7 @@ async function testCassandra(data: CredentialData): Promise<TestResult> {
 /**
  * Test Oracle connection
  */
-async function testOracle(data: CredentialData): Promise<TestResult> {
+async function testOracle(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }
@@ -806,7 +903,7 @@ async function testOracle(data: CredentialData): Promise<TestResult> {
 /**
  * Test Snowflake connection
  */
-async function testSnowflake(data: CredentialData): Promise<TestResult> {
+async function testSnowflake(data: DataSourceData): Promise<TestResult> {
   if (!data.account || !data.username || !data.password) {
     return { success: false, message: 'Account, username, and password are required' };
   }
@@ -894,7 +991,7 @@ async function testSnowflake(data: CredentialData): Promise<TestResult> {
 /**
  * Test PrestoDB connection
  */
-async function testPrestoDB(data: CredentialData): Promise<TestResult> {
+async function testPrestoDB(data: DataSourceData): Promise<TestResult> {
   if (!data.host) {
     return { success: false, message: 'Host is required' };
   }
@@ -953,7 +1050,7 @@ async function testPrestoDB(data: CredentialData): Promise<TestResult> {
 /**
  * Test WinRM connection
  */
-async function testWinRM(data: CredentialData): Promise<TestResult> {
+async function testWinRM(data: DataSourceData): Promise<TestResult> {
   if (!data.host || !data.username || !data.password) {
     return { success: false, message: 'Host, username, and password are required' };
   }

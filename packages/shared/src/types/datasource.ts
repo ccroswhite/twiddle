@@ -1,12 +1,12 @@
 /**
- * Credential types for Twiddle
+ * Data Source types for Twiddle
  */
 
 /**
- * Type-safe definition of all possible credential data fields.
- * Different credential types use different subsets of these fields.
+ * Type-safe definition of all possible data source connection fields.
+ * Different data source types use different subsets of these fields.
  */
-export interface CredentialData {
+export interface DataSourceData {
   // Authentication
   username?: string;
   password?: string;
@@ -40,30 +40,34 @@ export interface CredentialData {
   // WinRM
   domain?: string;
   useHttps?: boolean;
+
+  // SSL/TLS options
+  allowSelfSigned?: boolean;
+  skipHostnameVerification?: boolean;
 }
 
-export interface Credential {
+export interface DataSource {
   id: string;
   name: string;
   type: string;
-  data: CredentialData;
+  data: DataSourceData;
   createdAt: Date;
   updatedAt: Date;
   createdBy?: string;
 }
 
-export interface CredentialCreateInput {
+export interface DataSourceCreateInput {
   name: string;
   type: string;
   data: Record<string, unknown>;
 }
 
-export interface CredentialUpdateInput {
+export interface DataSourceUpdateInput {
   name?: string;
   data?: Record<string, unknown>;
 }
 
-export interface CredentialTestResult {
+export interface DataSourceTestResult {
   success: boolean;
   message: string;
   details?: {
@@ -94,5 +98,10 @@ export interface DataSourceWithAccess {
   isOwner: boolean;
 }
 
-// Backwards compatibility alias
+// Backwards compatibility aliases
+export type CredentialData = DataSourceData;
+export type Credential = DataSource;
+export type CredentialCreateInput = DataSourceCreateInput;
+export type CredentialUpdateInput = DataSourceUpdateInput;
+export type CredentialTestResult = DataSourceTestResult;
 export type CredentialWithAccess = DataSourceWithAccess;

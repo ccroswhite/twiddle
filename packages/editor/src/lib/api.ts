@@ -9,10 +9,10 @@ export type {
   FolderPermissionLevel,
   FolderCreateInput,
   FolderUpdateInput,
-  CredentialWithAccess,
-  CredentialCreateInput,
-  CredentialUpdateInput,
-  CredentialData,
+  DataSourceWithAccess,
+  DataSourceCreateInput,
+  DataSourceUpdateInput,
+  DataSourceData,
   Group,
   GroupMember,
   GroupCreateInput,
@@ -41,9 +41,9 @@ import type {
   FolderPermissionLevel,
   FolderCreateInput,
   FolderUpdateInput,
-  CredentialWithAccess,
-  CredentialCreateInput,
-  CredentialUpdateInput,
+  DataSourceWithAccess,
+  DataSourceCreateInput,
+  DataSourceUpdateInput,
   Group,
   GroupMember,
   GroupCreateInput,
@@ -308,15 +308,15 @@ export const nodesApi = {
 
 
 export const datasourcesApi = {
-  list: () => request<CredentialWithAccess[]>('/datasources'),
-  get: (id: string) => request<CredentialWithAccess>(`/datasources/${id}`),
-  create: (data: CredentialCreateInput & { groupIds?: string[] }) =>
-    request<CredentialWithAccess>('/datasources', {
+  list: () => request<DataSourceWithAccess[]>('/datasources'),
+  get: (id: string) => request<DataSourceWithAccess>(`/datasources/${id}`),
+  create: (data: DataSourceCreateInput & { groupIds?: string[] }) =>
+    request<DataSourceWithAccess>('/datasources', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: CredentialUpdateInput & { groupIds?: string[] }) =>
-    request<CredentialWithAccess>(`/datasources/${id}`, {
+  update: (id: string, data: DataSourceUpdateInput & { groupIds?: string[] }) =>
+    request<DataSourceWithAccess>(`/datasources/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),

@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Database, X, Eye, EyeOff, Users, Share2, Pencil } from 'lucide-react';
-import { credentialsApi, groupsApi, type CredentialWithAccess, type Group, type CredentialData } from '@/lib/api';
+import { datasourcesApi, groupsApi, type DataSourceWithAccess, type Group, type DataSourceData } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Define which fields each credential type needs
-const credentialFields: Record<string, { label: string; field: string & keyof CredentialData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
+const datasourceFields: Record<string, { label: string; field: string & keyof DataSourceData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
   httpBasicAuth: [
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
@@ -40,6 +40,8 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   postgresqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -48,6 +50,8 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
     { label: 'TLS Certificate', field: 'tlsCert', type: 'textarea' },
   ],
   mysqlDatasource: [
@@ -57,24 +61,35 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   cassandraDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
+    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   redisDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
+    { label: 'Username (optional)', field: 'username', type: 'text' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   valkeyDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
+    { label: 'Username (optional)', field: 'username', type: 'text' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   opensearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -82,6 +97,8 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   elasticsearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -90,6 +107,8 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'API Key (alternative)', field: 'apiKey', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   snowflakeDatasource: [
     { label: 'Account', field: 'account', type: 'text' },
@@ -104,6 +123,9 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
+    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   oracleDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -119,11 +141,11 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
 
 export function Datasources() {
   useAuth(); // Ensure user is authenticated
-  const [credentials, setCredentials] = useState<CredentialWithAccess[]>([]);
+  const [dataSources, setDataSources] = useState<DataSourceWithAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCredential, setNewCredential] = useState<{ name: string; type: string; data: CredentialData; groupIds: string[] }>({ name: '', type: '', data: {}, groupIds: [] });
+  const [newDataSource, setNewDataSource] = useState<{ name: string; type: string; data: DataSourceData; groupIds: string[] }>({ name: '', type: '', data: {}, groupIds: [] });
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: Record<string, unknown> } | null>(null);
   const [showTestDetails, setShowTestDetails] = useState(false);
@@ -133,18 +155,18 @@ export function Datasources() {
   const [userGroups, setUserGroups] = useState<Group[]>([]);
 
   // For editing credential
-  const [editingCredential, setEditingCredential] = useState<CredentialWithAccess | null>(null);
+  const [editingDataSource, setEditingDataSource] = useState<DataSourceWithAccess | null>(null);
   const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [editName, setEditName] = useState<string>('');
-  const [editData, setEditData] = useState<CredentialData>({});
+  const [editData, setEditData] = useState<DataSourceData>({});
   const [editShowPasswords, setEditShowPasswords] = useState<Record<string, boolean>>({});
 
   // For sharing data source
-  const [sharingCredential, setSharingCredential] = useState<CredentialWithAccess | null>(null);
+  const [sharingDataSource, setSharingDataSource] = useState<DataSourceWithAccess | null>(null);
   const [shareGroupIds, setShareGroupIds] = useState<string[]>([]);
 
   // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; credential: CredentialWithAccess } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; dataSource: DataSourceWithAccess } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu when clicking outside
@@ -159,7 +181,7 @@ export function Datasources() {
   }, []);
 
   useEffect(() => {
-    loadCredentials();
+    loadDataSources();
     loadUserGroups();
   }, []);
 
@@ -172,11 +194,11 @@ export function Datasources() {
     }
   }
 
-  async function loadCredentials() {
+  async function loadDataSources() {
     try {
       setLoading(true);
-      const data = await credentialsApi.list();
-      setCredentials(data);
+      const data = await datasourcesApi.list();
+      setDataSources(data);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -186,17 +208,17 @@ export function Datasources() {
 
   async function handleCreate() {
     try {
-      await credentialsApi.create({
-        name: newCredential.name,
-        type: newCredential.type,
-        data: newCredential.data as Record<string, unknown>,
-        groupIds: newCredential.groupIds.length > 0 ? newCredential.groupIds : undefined,
+      await datasourcesApi.create({
+        name: newDataSource.name,
+        type: newDataSource.type,
+        data: newDataSource.data as Record<string, unknown>,
+        groupIds: newDataSource.groupIds.length > 0 ? newDataSource.groupIds : undefined,
       });
       setShowCreate(false);
-      setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
+      setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
       setShowPasswords({});
       setTestResult(null);
-      loadCredentials();
+      loadDataSources();
     } catch (err) {
       console.error('Create credential error:', err);
       alert((err as Error).message);
@@ -204,18 +226,18 @@ export function Datasources() {
   }
 
   async function handleUpdateCredential() {
-    if (!editingCredential) return;
+    if (!editingDataSource) return;
     try {
       // Only include data if there are actual changes (non-empty values)
       const hasDataChanges = Object.values(editData).some(v => v !== '' && v !== undefined && v !== null);
 
-      await credentialsApi.update(editingCredential.id, {
+      await datasourcesApi.update(editingDataSource.id, {
         name: editName,
         ...(hasDataChanges && { data: editData as Record<string, unknown> }),
         groupIds: editGroupIds,
       });
-      loadCredentials();
-      setEditingCredential(null);
+      loadDataSources();
+      setEditingDataSource(null);
       setEditShowPasswords({});
     } catch (err) {
       alert((err as Error).message);
@@ -223,31 +245,31 @@ export function Datasources() {
   }
 
   async function handleUpdateSharing() {
-    if (!sharingCredential) return;
+    if (!sharingDataSource) return;
     try {
-      await credentialsApi.update(sharingCredential.id, {
-        name: sharingCredential.name,
+      await datasourcesApi.update(sharingDataSource.id, {
+        name: sharingDataSource.name,
         groupIds: shareGroupIds,
       });
-      loadCredentials();
-      setSharingCredential(null);
+      loadDataSources();
+      setSharingDataSource(null);
     } catch (err) {
       alert((err as Error).message);
     }
   }
 
-  function openEditModal(credential: CredentialWithAccess) {
-    setEditingCredential(credential);
-    setEditGroupIds(credential.groups.map(g => g.id));
-    setEditName(credential.name);
+  function openEditModal(dataSource: DataSourceWithAccess) {
+    setEditingDataSource(dataSource);
+    setEditGroupIds(dataSource.groups.map(g => g.id));
+    setEditName(dataSource.name);
     // Note: We don't have access to the actual credential data from the list
     // The API would need to return it or we'd need to fetch it
     setEditData({});
     setEditShowPasswords({});
   }
 
-  function updateEditData(field: keyof CredentialData, value: string | number | boolean) {
-    setEditData((prev: CredentialData) => ({ ...prev, [field]: value }));
+  function updateEditData(field: keyof DataSourceData, value: string | number | boolean) {
+    setEditData((prev: DataSourceData) => ({ ...prev, [field]: value }));
   }
 
   function toggleEditPasswordVisibility(field: string) {
@@ -257,17 +279,17 @@ export function Datasources() {
   async function handleDelete(id: string) {
     if (!confirm('Are you sure you want to delete this credential?')) return;
     try {
-      await credentialsApi.delete(id);
-      loadCredentials();
+      await datasourcesApi.delete(id);
+      loadDataSources();
     } catch (err) {
       alert((err as Error).message);
     }
   }
 
-  function updateCredentialData(field: keyof CredentialData, value: string | number | boolean) {
-    setNewCredential({
-      ...newCredential,
-      data: { ...newCredential.data, [field]: value },
+  function updateDataSourceData(field: keyof DataSourceData, value: string | number | boolean) {
+    setNewDataSource({
+      ...newDataSource,
+      data: { ...newDataSource.data, [field]: value },
     });
   }
 
@@ -276,16 +298,16 @@ export function Datasources() {
   }
 
   async function handleTestConnectivity() {
-    if (!newCredential.type) return;
+    if (!newDataSource.type) return;
 
     setTesting(true);
     setTestResult(null);
 
     try {
-      console.log('Testing credentials:', newCredential.type, newCredential.data);
-      const result = await credentialsApi.testUnsaved(
-        newCredential.type,
-        newCredential.data as Record<string, unknown>
+      console.log('Testing credentials:', newDataSource.type, newDataSource.data);
+      const result = await datasourcesApi.testUnsaved(
+        newDataSource.type,
+        newDataSource.data as Record<string, unknown>
       );
       console.log('Test result:', result);
       setTestResult(result);
@@ -298,7 +320,7 @@ export function Datasources() {
   }
 
   // Get fields for the selected credential type
-  const currentFields = newCredential.type ? credentialFields[newCredential.type] || [] : [];
+  const currentFields = newDataSource.type ? datasourceFields[newDataSource.type] || [] : [];
 
   if (loading) {
     return (
@@ -332,20 +354,20 @@ export function Datasources() {
         </button>
       </div>
 
-      {credentials.length === 0 ? (
+      {dataSources.length === 0 ? (
         <div className="text-center py-12 text-slate-400">
           No data sources yet
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {credentials.map((credential) => (
+          {dataSources.map((dataSource) => (
             <div
-              key={credential.id}
+              key={dataSource.id}
               className="bg-white rounded-lg border border-slate-200 p-4 cursor-context-menu"
               onContextMenu={(e) => {
-                if (credential.isOwner) {
+                if (dataSource.isOwner) {
                   e.preventDefault();
-                  setContextMenu({ x: e.clientX, y: e.clientY, credential });
+                  setContextMenu({ x: e.clientX, y: e.clientY, dataSource });
                 }
               }}
             >
@@ -355,16 +377,16 @@ export function Datasources() {
                     <Database className="w-5 h-5 text-slate-600" />
                   </div>
                   <div>
-                    <div className="font-medium text-slate-900">{credential.name}</div>
-                    <div className="text-sm text-slate-500">{credential.type}</div>
+                    <div className="font-medium text-slate-900">{dataSource.name}</div>
+                    <div className="text-sm text-slate-500">{dataSource.type}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  {credential.isOwner && (
+                  {dataSource.isOwner && (
                     <button
                       onClick={() => {
-                        setSharingCredential(credential);
-                        setShareGroupIds(credential.groups.map(g => g.id));
+                        setSharingDataSource(dataSource);
+                        setShareGroupIds(dataSource.groups.map(g => g.id));
                       }}
                       className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                       title="Share with group"
@@ -372,9 +394,9 @@ export function Datasources() {
                       <Share2 className="w-4 h-4" />
                     </button>
                   )}
-                  {credential.isOwner && (
+                  {dataSource.isOwner && (
                     <button
-                      onClick={() => handleDelete(credential.id)}
+                      onClick={() => handleDelete(dataSource.id)}
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Delete"
                     >
@@ -384,14 +406,14 @@ export function Datasources() {
                 </div>
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Updated {new Date(credential.updatedAt).toLocaleDateString()}</span>
-                {credential.groups.length > 0 && (
+                <span>Updated {new Date(dataSource.updatedAt).toLocaleDateString()}</span>
+                {dataSource.groups.length > 0 && (
                   <span className="flex items-center gap-1 text-primary-600">
                     <Users className="w-3 h-3" />
-                    {credential.groups.map(g => g.name).join(', ')}
+                    {dataSource.groups.map(g => g.name).join(', ')}
                   </span>
                 )}
-                {!credential.isOwner && (
+                {!dataSource.isOwner && (
                   <span className="text-amber-600">Shared</span>
                 )}
               </div>
@@ -412,7 +434,7 @@ export function Datasources() {
         >
           <button
             onClick={() => {
-              openEditModal(contextMenu.credential);
+              openEditModal(contextMenu.dataSource);
               setContextMenu(null);
             }}
             className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
@@ -422,7 +444,7 @@ export function Datasources() {
           </button>
           <button
             onClick={() => {
-              handleDelete(contextMenu.credential.id);
+              handleDelete(contextMenu.dataSource.id);
               setContextMenu(null);
             }}
             className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -441,7 +463,7 @@ export function Datasources() {
             // Close modal when clicking backdrop
             if (e.target === e.currentTarget) {
               setShowCreate(false);
-              setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
+              setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
               setShowPasswords({});
               setTestResult(null);
             }
@@ -453,7 +475,7 @@ export function Datasources() {
               <button
                 onClick={() => {
                   setShowCreate(false);
-                  setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
+                  setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
                   setShowPasswords({});
                   setTestResult(null);
                 }}
@@ -467,8 +489,8 @@ export function Datasources() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
                 <input
                   type="text"
-                  value={newCredential.name}
-                  onChange={(e) => setNewCredential({ ...newCredential, name: e.target.value })}
+                  value={newDataSource.name}
+                  onChange={(e) => setNewDataSource({ ...newDataSource, name: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Data source name"
                 />
@@ -476,8 +498,8 @@ export function Datasources() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Data Source</label>
                 <select
-                  value={newCredential.type}
-                  onChange={(e) => setNewCredential({ ...newCredential, type: e.target.value, data: {} })}
+                  value={newDataSource.type}
+                  onChange={(e) => setNewDataSource({ ...newDataSource, type: e.target.value, data: {} })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">Select data source...</option>
@@ -508,12 +530,12 @@ export function Datasources() {
                       <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={newCredential.groupIds.includes(group.id)}
+                          checked={newDataSource.groupIds.includes(group.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setNewCredential({ ...newCredential, groupIds: [...newCredential.groupIds, group.id] });
+                              setNewDataSource({ ...newDataSource, groupIds: [...newDataSource.groupIds, group.id] });
                             } else {
-                              setNewCredential({ ...newCredential, groupIds: newCredential.groupIds.filter(id => id !== group.id) });
+                              setNewDataSource({ ...newDataSource, groupIds: newDataSource.groupIds.filter(id => id !== group.id) });
                             }
                           }}
                           className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
@@ -541,16 +563,16 @@ export function Datasources() {
                         <label className="flex items-center gap-2">
                           <input
                             type="checkbox"
-                            checked={!!newCredential.data[fieldDef.field]}
-                            onChange={(e) => updateCredentialData(fieldDef.field, e.target.checked)}
+                            checked={!!newDataSource.data[fieldDef.field]}
+                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.checked)}
                             className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                           />
                           <span className="text-sm text-slate-600">Enable</span>
                         </label>
                       ) : fieldDef.type === 'textarea' ? (
                         <textarea
-                          value={(newCredential.data[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateCredentialData(fieldDef.field, e.target.value)}
+                          value={(newDataSource.data[fieldDef.field] as string) || ''}
+                          onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
                           rows={4}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                           placeholder={fieldDef.label}
@@ -559,8 +581,8 @@ export function Datasources() {
                         <div className="relative">
                           <input
                             type={showPasswords[fieldDef.field] ? 'text' : 'password'}
-                            value={(newCredential.data[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateCredentialData(fieldDef.field, e.target.value)}
+                            value={(newDataSource.data[fieldDef.field] as string) || ''}
+                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
                             className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                             placeholder={fieldDef.label}
                           />
@@ -579,16 +601,16 @@ export function Datasources() {
                       ) : fieldDef.type === 'number' ? (
                         <input
                           type="number"
-                          value={(newCredential.data[fieldDef.field] as number) || ''}
-                          onChange={(e) => updateCredentialData(fieldDef.field, parseInt(e.target.value) || 0)}
+                          value={(newDataSource.data[fieldDef.field] as number) || ''}
+                          onChange={(e) => updateDataSourceData(fieldDef.field, parseInt(e.target.value) || 0)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder={fieldDef.label}
                         />
                       ) : (
                         <input
                           type="text"
-                          value={(newCredential.data[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateCredentialData(fieldDef.field, e.target.value)}
+                          value={(newDataSource.data[fieldDef.field] as string) || ''}
+                          onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                           placeholder={fieldDef.label}
                         />
@@ -640,7 +662,7 @@ export function Datasources() {
             <div className="flex justify-between gap-3 mt-6">
               <button
                 onClick={handleTestConnectivity}
-                disabled={!newCredential.type || testing}
+                disabled={!newDataSource.type || testing}
                 className="flex items-center gap-2 px-4 py-2 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors disabled:opacity-50"
               >
                 {testing ? (
@@ -661,7 +683,7 @@ export function Datasources() {
                 <button
                   onClick={() => {
                     setShowCreate(false);
-                    setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
+                    setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
                     setShowPasswords({});
                     setTestResult(null);
                   }}
@@ -671,7 +693,7 @@ export function Datasources() {
                 </button>
                 <button
                   onClick={handleCreate}
-                  disabled={!newCredential.name || !newCredential.type}
+                  disabled={!newDataSource.name || !newDataSource.type}
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
                   Create
@@ -685,12 +707,12 @@ export function Datasources() {
 
       {/* Edit Credential Modal */}
       {
-        editingCredential && (
+        editingDataSource && (
           <div
             className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
-                setEditingCredential(null);
+                setEditingDataSource(null);
                 setEditShowPasswords({});
               }
             }}
@@ -700,7 +722,7 @@ export function Datasources() {
                 <h2 className="text-lg font-semibold">Edit Data Source</h2>
                 <button
                   onClick={() => {
-                    setEditingCredential(null);
+                    setEditingDataSource(null);
                     setEditShowPasswords({});
                   }}
                   className="p-1 text-slate-400 hover:text-slate-600"
@@ -726,7 +748,7 @@ export function Datasources() {
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
                   <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-600">
-                    {editingCredential.type}
+                    {editingDataSource.type}
                   </div>
                 </div>
 
@@ -764,7 +786,7 @@ export function Datasources() {
                 </div>
 
                 {/* Dynamic credential fields based on type */}
-                {credentialFields[editingCredential.type] && (
+                {datasourceFields[editingDataSource.type] && (
                   <div className="border-t border-slate-200 pt-4 space-y-4">
                     <h3 className="text-sm font-medium text-slate-700">
                       Update Connection Details
@@ -772,7 +794,7 @@ export function Datasources() {
                         (leave blank to keep existing values)
                       </span>
                     </h3>
-                    {credentialFields[editingCredential.type].map((fieldDef) => (
+                    {datasourceFields[editingDataSource.type].map((fieldDef) => (
                       <div key={fieldDef.field}>
                         <label className="block text-sm font-medium text-slate-700 mb-1">
                           {fieldDef.label}
@@ -842,7 +864,7 @@ export function Datasources() {
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => {
-                    setEditingCredential(null);
+                    setEditingDataSource(null);
                     setEditShowPasswords({});
                   }}
                   className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -863,12 +885,12 @@ export function Datasources() {
       }
 
       {/* Share Connection Modal */}
-      {sharingCredential && (
+      {sharingDataSource && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setSharingCredential(null);
+              setSharingDataSource(null);
             }
           }}
         >
@@ -876,7 +898,7 @@ export function Datasources() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Share Connection</h2>
               <button
-                onClick={() => setSharingCredential(null)}
+                onClick={() => setSharingDataSource(null)}
                 className="p-1 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-5 h-5" />
@@ -890,8 +912,8 @@ export function Datasources() {
                 <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
                   <Database className="w-5 h-5 text-slate-500" />
                   <div>
-                    <div className="font-medium text-slate-900">{sharingCredential.name}</div>
-                    <div className="text-sm text-slate-500">{sharingCredential.type}</div>
+                    <div className="font-medium text-slate-900">{sharingDataSource.name}</div>
+                    <div className="text-sm text-slate-500">{sharingDataSource.type}</div>
                   </div>
                 </div>
               </div>
@@ -900,10 +922,10 @@ export function Datasources() {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
                 <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                  {sharingCredential.groups.length > 0 ? (
+                  {sharingDataSource.groups.length > 0 ? (
                     <span className="flex items-center gap-2 text-primary-600">
                       <Users className="w-4 h-4" />
-                      Shared with {sharingCredential.groups.map(g => g.name).join(', ')}
+                      Shared with {sharingDataSource.groups.map(g => g.name).join(', ')}
                     </span>
                   ) : (
                     <span className="text-slate-500">Private - only you can access</span>
@@ -947,7 +969,7 @@ export function Datasources() {
 
             <div className="flex justify-end gap-3 mt-6">
               <button
-                onClick={() => setSharingCredential(null)}
+                onClick={() => setSharingDataSource(null)}
                 className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 Cancel
