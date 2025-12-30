@@ -21,19 +21,19 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Access Token', field: 'accessToken', type: 'password' },
     { label: 'Refresh Token', field: 'refreshToken', type: 'password' },
   ],
-  winrmCredentials: [
+  winrmDatasource: [
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Domain', field: 'domain', type: 'text' },
     { label: 'Use HTTPS', field: 'useHttps', type: 'checkbox' },
   ],
-  sshCredentials: [
+  sshDatasource: [
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
     { label: 'Private Key', field: 'privateKey', type: 'textarea' },
     { label: 'Passphrase (optional)', field: 'passphrase', type: 'password' },
   ],
-  mssqlCredentials: [
+  mssqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
@@ -41,7 +41,7 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  postgresqlCredentials: [
+  postgresqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
@@ -50,7 +50,7 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'TLS Certificate', field: 'tlsCert', type: 'textarea' },
   ],
-  mysqlCredentials: [
+  mysqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
@@ -58,32 +58,32 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  cassandraCredentials: [
+  cassandraDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
   ],
-  redisCredentials: [
+  redisDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  valkeyCredentials: [
+  valkeyDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  opensearchCredentials: [
+  opensearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  elasticsearchCredentials: [
+  elasticsearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
@@ -91,7 +91,7 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'API Key (alternative)', field: 'apiKey', type: 'password' },
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
   ],
-  snowflakeCredentials: [
+  snowflakeDatasource: [
     { label: 'Account', field: 'account', type: 'text' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
@@ -99,31 +99,31 @@ const credentialFields: Record<string, { label: string; field: string & keyof Cr
     { label: 'Database', field: 'database', type: 'text' },
     { label: 'Role (optional)', field: 'role', type: 'text' },
   ],
-  prestodbCredentials: [
+  prestodbDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password (optional)', field: 'password', type: 'password' },
   ],
-  oracleCredentials: [
+  oracleDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database/Service Name', field: 'database', type: 'text' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
   ],
-  githubCredentials: [
+  githubDatasource: [
     { label: 'Personal Access Token', field: 'token', type: 'password' },
   ],
 };
 
-export function Credentials() {
+export function Datasources() {
   useAuth(); // Ensure user is authenticated
   const [credentials, setCredentials] = useState<CredentialWithAccess[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newCredential, setNewCredential] = useState<{ name: string; type: string; data: CredentialData; groupId: string }>({ name: '', type: '', data: {}, groupId: '' });
+  const [newCredential, setNewCredential] = useState<{ name: string; type: string; data: CredentialData; groupIds: string[] }>({ name: '', type: '', data: {}, groupIds: [] });
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
@@ -133,10 +133,14 @@ export function Credentials() {
 
   // For editing credential
   const [editingCredential, setEditingCredential] = useState<CredentialWithAccess | null>(null);
-  const [editGroupId, setEditGroupId] = useState<string>('');
+  const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
   const [editName, setEditName] = useState<string>('');
   const [editData, setEditData] = useState<CredentialData>({});
   const [editShowPasswords, setEditShowPasswords] = useState<Record<string, boolean>>({});
+
+  // For sharing data source
+  const [sharingCredential, setSharingCredential] = useState<CredentialWithAccess | null>(null);
+  const [shareGroupIds, setShareGroupIds] = useState<string[]>([]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; credential: CredentialWithAccess } | null>(null);
@@ -185,10 +189,10 @@ export function Credentials() {
         name: newCredential.name,
         type: newCredential.type,
         data: newCredential.data as Record<string, unknown>,
-        groupId: newCredential.groupId || undefined,
+        groupIds: newCredential.groupIds.length > 0 ? newCredential.groupIds : undefined,
       });
       setShowCreate(false);
-      setNewCredential({ name: '', type: '', data: {}, groupId: '' });
+      setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
       setShowPasswords({});
       setTestResult(null);
       loadCredentials();
@@ -207,7 +211,7 @@ export function Credentials() {
       await credentialsApi.update(editingCredential.id, {
         name: editName,
         ...(hasDataChanges && { data: editData as Record<string, unknown> }),
-        groupId: editGroupId || null,
+        groupIds: editGroupIds,
       });
       loadCredentials();
       setEditingCredential(null);
@@ -217,9 +221,23 @@ export function Credentials() {
     }
   }
 
+  async function handleUpdateSharing() {
+    if (!sharingCredential) return;
+    try {
+      await credentialsApi.update(sharingCredential.id, {
+        name: sharingCredential.name,
+        groupIds: shareGroupIds,
+      });
+      loadCredentials();
+      setSharingCredential(null);
+    } catch (err) {
+      alert((err as Error).message);
+    }
+  }
+
   function openEditModal(credential: CredentialWithAccess) {
     setEditingCredential(credential);
-    setEditGroupId(credential.groupId || '');
+    setEditGroupIds(credential.groups.map(g => g.id));
     setEditName(credential.name);
     // Note: We don't have access to the actual credential data from the list
     // The API would need to return it or we'd need to fetch it
@@ -344,8 +362,8 @@ export function Credentials() {
                   {credential.isOwner && (
                     <button
                       onClick={() => {
-                        setEditingCredential(credential);
-                        setEditGroupId(credential.groupId || '');
+                        setSharingCredential(credential);
+                        setShareGroupIds(credential.groups.map(g => g.id));
                       }}
                       className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                       title="Share with group"
@@ -366,10 +384,10 @@ export function Credentials() {
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Updated {new Date(credential.updatedAt).toLocaleDateString()}</span>
-                {credential.group && (
+                {credential.groups.length > 0 && (
                   <span className="flex items-center gap-1 text-primary-600">
                     <Users className="w-3 h-3" />
-                    {credential.group.name}
+                    {credential.groups.map(g => g.name).join(', ')}
                   </span>
                 )}
                 {!credential.isOwner && (
@@ -422,7 +440,7 @@ export function Credentials() {
             // Close modal when clicking backdrop
             if (e.target === e.currentTarget) {
               setShowCreate(false);
-              setNewCredential({ name: '', type: '', data: {}, groupId: '' });
+              setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
               setShowPasswords({});
               setTestResult(null);
             }
@@ -434,7 +452,7 @@ export function Credentials() {
               <button
                 onClick={() => {
                   setShowCreate(false);
-                  setNewCredential({ name: '', type: '', data: {}, groupId: '' });
+                  setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
                   setShowPasswords({});
                   setTestResult(null);
                 }}
@@ -462,46 +480,57 @@ export function Credentials() {
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">Select data source...</option>
-                  <option value="mssqlCredentials">MS SQL Server</option>
-                  <option value="postgresqlCredentials">PostgreSQL</option>
-                  <option value="mysqlCredentials">MySQL</option>
-                  <option value="oracleCredentials">Oracle</option>
-                  <option value="cassandraCredentials">Cassandra</option>
-                  <option value="redisCredentials">Redis</option>
-                  <option value="valkeyCredentials">Valkey</option>
-                  <option value="opensearchCredentials">OpenSearch</option>
-                  <option value="elasticsearchCredentials">Elasticsearch</option>
-                  <option value="snowflakeCredentials">Snowflake</option>
-                  <option value="prestodbCredentials">PrestoDB</option>
+                  <option value="mssqlDatasource">MS SQL Server</option>
+                  <option value="postgresqlDatasource">PostgreSQL</option>
+                  <option value="mysqlDatasource">MySQL</option>
+                  <option value="oracleDatasource">Oracle</option>
+                  <option value="cassandraDatasource">Cassandra</option>
+                  <option value="redisDatasource">Redis</option>
+                  <option value="valkeyDatasource">Valkey</option>
+                  <option value="opensearchDatasource">OpenSearch</option>
+                  <option value="elasticsearchDatasource">Elasticsearch</option>
+                  <option value="snowflakeDatasource">Snowflake</option>
+                  <option value="prestodbDatasource">PrestoDB</option>
                 </select>
               </div>
 
-              {/* Share with Group */}
+              {/* Share with Groups */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Share with Group (optional)
+                  Share with Groups (optional)
                 </label>
-                <select
-                  value={newCredential.groupId}
-                  onChange={(e) => setNewCredential({ ...newCredential, groupId: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Private (only you)</option>
-                  {userGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+                  {userGroups.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
+                  ) : (
+                    userGroups.map((group) => (
+                      <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newCredential.groupIds.includes(group.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setNewCredential({ ...newCredential, groupIds: [...newCredential.groupIds, group.id] });
+                            } else {
+                              setNewCredential({ ...newCredential, groupIds: newCredential.groupIds.filter(id => id !== group.id) });
+                            }
+                          }}
+                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-slate-700">{group.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Groups you are a member of. Sharing allows all group members to use this data source.
+                  All members of selected groups will be able to use this data source.
                 </p>
               </div>
 
               {/* Dynamic fields based on credential type */}
               {currentFields.length > 0 && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">
-                  <h3 className="text-sm font-medium text-slate-700">Credential Details</h3>
+                  <h3 className="text-sm font-medium text-slate-700">Connection Details</h3>
                   {currentFields.map((fieldDef) => (
                     <div key={fieldDef.field}>
                       <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -615,7 +644,7 @@ export function Credentials() {
                 <button
                   onClick={() => {
                     setShowCreate(false);
-                    setNewCredential({ name: '', type: '', data: {}, groupId: '' });
+                    setNewCredential({ name: '', type: '', data: {}, groupIds: [] });
                     setShowPasswords({});
                     setTestResult(null);
                   }}
@@ -651,7 +680,7 @@ export function Credentials() {
           >
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Edit Credential</h2>
+                <h2 className="text-lg font-semibold">Edit Data Source</h2>
                 <button
                   onClick={() => {
                     setEditingCredential(null);
@@ -672,7 +701,7 @@ export function Credentials() {
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Credential name"
+                    placeholder="Data source name"
                   />
                 </div>
 
@@ -684,25 +713,36 @@ export function Credentials() {
                   </div>
                 </div>
 
-                {/* Share with Group */}
+                {/* Share with Groups */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Share with Group
+                    Share with Groups
                   </label>
-                  <select
-                    value={editGroupId}
-                    onChange={(e) => setEditGroupId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Private (only you)</option>
-                    {userGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+                    {userGroups.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
+                    ) : (
+                      userGroups.map((group) => (
+                        <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={editGroupIds.includes(group.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditGroupIds([...editGroupIds, group.id]);
+                              } else {
+                                setEditGroupIds(editGroupIds.filter(id => id !== group.id));
+                              }
+                            }}
+                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                          />
+                          <span className="text-sm text-slate-700">{group.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    Group members will be able to use this credential in their workflows
+                    All members of selected groups will be able to use this data source.
                   </p>
                 </div>
 
@@ -710,7 +750,7 @@ export function Credentials() {
                 {credentialFields[editingCredential.type] && (
                   <div className="border-t border-slate-200 pt-4 space-y-4">
                     <h3 className="text-sm font-medium text-slate-700">
-                      Update Credential Details
+                      Update Connection Details
                       <span className="text-xs font-normal text-slate-500 ml-2">
                         (leave blank to keep existing values)
                       </span>
@@ -804,6 +844,107 @@ export function Credentials() {
           </div>
         )
       }
+
+      {/* Share Connection Modal */}
+      {sharingCredential && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSharingCredential(null);
+            }
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Share Connection</h2>
+              <button
+                onClick={() => setSharingCredential(null)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Data Source Name (read-only) */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Data Source</label>
+                <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                  <Database className="w-5 h-5 text-slate-500" />
+                  <div>
+                    <div className="font-medium text-slate-900">{sharingCredential.name}</div>
+                    <div className="text-sm text-slate-500">{sharingCredential.type}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Sharing Status */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
+                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                  {sharingCredential.groups.length > 0 ? (
+                    <span className="flex items-center gap-2 text-primary-600">
+                      <Users className="w-4 h-4" />
+                      Shared with {sharingCredential.groups.map(g => g.name).join(', ')}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">Private - only you can access</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Share with Groups */}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Share with Groups
+                </label>
+                <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+                  {userGroups.length === 0 ? (
+                    <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
+                  ) : (
+                    userGroups.map((group) => (
+                      <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={shareGroupIds.includes(group.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setShareGroupIds([...shareGroupIds, group.id]);
+                            } else {
+                              setShareGroupIds(shareGroupIds.filter(id => id !== group.id));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <span className="text-sm text-slate-700">{group.name}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  All members of selected groups will be able to use this data source.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setSharingCredential(null)}
+                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateSharing}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+              >
+                Save Sharing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 }

@@ -46,7 +46,7 @@ model User {
   // Workflows created by this user
   workflows     Workflow[]
   createdVersions WorkflowVersion[]
-  credentials   Credential[]
+  dataSources   DataSource[]
 
   // SDLC Promotions
   requestedPromotions PromotionRequest[] @relation("RequestedPromotions")
@@ -104,8 +104,8 @@ model Group {
   // Workflows in this group (legacy - prefer folder-based organization)
   workflows   Workflow[]
   
-  // Credentials accessible to this group
-  credentials Credential[]
+  // Data sources accessible to this group
+  dataSourceGroups DataSourceGroup[]
 
   @@index([name])
   @@index([isDefault])
@@ -304,7 +304,7 @@ model WorkflowVersion {
   @@index([workflowId])
 }
 
-model Credential {
+model DataSource {
   id          String   @id @default(cuid())
   name        String
   type        String
@@ -312,17 +312,33 @@ model Credential {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
-  // Owner and group
+  // Owner
   createdById String?
-  groupId     String?
-  
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  
+  // Many-to-many with groups
+  groups      DataSourceGroup[]
 
   @@unique([name, type])
   @@index([type])
-  @@index([groupId])
   @@index([createdById])
+  
+  // Keep old table name for migration
+  @@map("Credential")
+}
+
+model DataSourceGroup {
+  id           String     @id @default(cuid())
+  dataSourceId String
+  groupId      String
+  createdAt    DateTime   @default(now())
+  
+  dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  
+  @@unique([dataSourceId, groupId])
+  @@index([dataSourceId])
+  @@index([groupId])
 }
 
 // ============================================================================

@@ -304,37 +304,41 @@ export const nodesApi = {
   byCategory: (category: string) => request<NodeTypeInfo[]>(`/nodes/category/${category}`),
 };
 
-// Credentials API
+// Data Sources API
 
 
-export const credentialsApi = {
-  list: () => request<CredentialWithAccess[]>('/credentials'),
-  get: (id: string) => request<CredentialWithAccess>(`/credentials/${id}`),
-  create: (data: CredentialCreateInput & { groupId?: string }) =>
-    request<CredentialWithAccess>('/credentials', {
+export const datasourcesApi = {
+  list: () => request<CredentialWithAccess[]>('/datasources'),
+  get: (id: string) => request<CredentialWithAccess>(`/datasources/${id}`),
+  create: (data: CredentialCreateInput & { groupIds?: string[] }) =>
+    request<CredentialWithAccess>('/datasources', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: CredentialUpdateInput & { groupId?: string | null }) =>
-    request<CredentialWithAccess>(`/credentials/${id}`, {
+  update: (id: string, data: CredentialUpdateInput & { groupIds?: string[] }) =>
+    request<CredentialWithAccess>(`/datasources/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
   delete: (id: string) =>
-    request<void>(`/credentials/${id}`, {
+    request<void>(`/datasources/${id}`, {
       method: 'DELETE',
     }),
   test: (id: string) =>
-    request<{ success: boolean; message: string; details?: Record<string, unknown> }>(`/credentials/${id}/test`, {
+    request<{ success: boolean; message: string; details?: Record<string, unknown> }>(`/datasources/${id}/test`, {
       method: 'POST',
     }),
-  // Test credentials without saving (for the create form)
+  // Test data source without saving (for the create form)
   testUnsaved: (type: string, data: Record<string, unknown>) =>
-    request<{ success: boolean; message: string; details?: Record<string, unknown> }>('/credentials/test', {
+    request<{ success: boolean; message: string; details?: Record<string, unknown> }>('/datasources/test', {
       method: 'POST',
       body: JSON.stringify({ type, data }),
     }),
 };
+
+// Backwards compatibility alias
+export const credentialsApi = datasourcesApi;
+
 
 // Types
 export interface Workflow {

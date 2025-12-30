@@ -168,7 +168,7 @@ export const ValkeyNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'valkeyCredentials',
+      name: 'valkeyDatasource',
       required: true,
     },
   ],

@@ -179,7 +179,7 @@ export const SSHNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'sshCredentials',
+      name: 'sshDatasource',
       required: true,
     },
   ],

@@ -93,7 +93,7 @@ export const WinRMNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'winrmCredentials',
+      name: 'winrmDatasource',
       required: true,
     },
   ],

@@ -38,7 +38,7 @@ export const PrestoDBNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'prestodbCredentials',
+      name: 'prestodbDatasource',
       required: true,
     },
   ],

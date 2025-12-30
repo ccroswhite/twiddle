@@ -38,7 +38,7 @@ export const PostgreSQLNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'postgresqlCredentials',
+      name: 'postgresqlDatasource',
       required: true,
     },
   ],

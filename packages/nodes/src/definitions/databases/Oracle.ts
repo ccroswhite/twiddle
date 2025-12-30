@@ -220,7 +220,7 @@ export const OracleNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'oracleCredentials',
+      name: 'oracleDatasource',
       required: true,
     },
   ],

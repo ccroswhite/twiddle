@@ -186,7 +186,7 @@ export const CassandraNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'cassandraCredentials',
+      name: 'cassandraDatasource',
       required: true,
     },
   ],

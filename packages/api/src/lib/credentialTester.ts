@@ -49,21 +49,21 @@ export async function testCredential(type: string, data: CredentialData): Promis
         return testHttpBearerToken(data);
       case 'apiKey':
         return testApiKey(data);
-      case 'githubCredentials':
+      case 'githubDatasource':
         return testGitHub(data);
-      case 'postgresqlCredentials':
+      case 'postgresqlDatasource':
         return testPostgreSQL(data);
-      case 'mysqlCredentials':
+      case 'mysqlDatasource':
         return testMySQL(data);
-      case 'mssqlCredentials':
+      case 'mssqlDatasource':
         return testMSSQL(data);
-      case 'redisCredentials':
-      case 'valkeyCredentials':
+      case 'redisDatasource':
+      case 'valkeyDatasource':
         return testRedis(data);
-      case 'sshCredentials':
+      case 'sshDatasource':
         return testSSH(data);
-      case 'opensearchCredentials':
-      case 'elasticsearchCredentials':
+      case 'opensearchDatasource':
+      case 'elasticsearchDatasource':
         return testElasticsearch(data);
       default:
         return {

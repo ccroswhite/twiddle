@@ -68,17 +68,19 @@ export interface CredentialTestResult {
   message: string;
 }
 
-export interface CredentialWithAccess {
+export interface DataSourceWithAccess {
   id: string;
   name: string;
   type: string;
   createdAt: string;
   updatedAt: string;
   createdById?: string;
-  groupId?: string | null;
-  group?: {
+  groups: {
     id: string;
     name: string;
-  } | null;
+  }[];
   isOwner: boolean;
 }
+
+// Backwards compatibility alias
+export type CredentialWithAccess = DataSourceWithAccess;

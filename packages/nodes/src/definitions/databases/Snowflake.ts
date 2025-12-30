@@ -47,7 +47,7 @@ export const SnowflakeNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'snowflakeCredentials',
+      name: 'snowflakeDatasource',
       required: true,
     },
   ],

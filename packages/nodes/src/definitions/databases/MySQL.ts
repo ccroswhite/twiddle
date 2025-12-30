@@ -30,7 +30,7 @@ export const MySQLNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'mysqlCredentials',
+      name: 'mysqlDatasource',
       required: true,
     },
   ],

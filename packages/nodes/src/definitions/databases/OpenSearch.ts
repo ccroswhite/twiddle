@@ -209,7 +209,7 @@ export const OpenSearchNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'opensearchCredentials',
+      name: 'opensearchDatasource',
       required: true,
     },
   ],

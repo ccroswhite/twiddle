@@ -11,7 +11,7 @@ import { AuthGuard } from './components/AuthGuard';
 const WorkflowEditor = lazy(() => import('./pages/WorkflowEditor').then(m => ({ default: m.WorkflowEditor })));
 const WorkflowBrowser = lazy(() => import('./pages/WorkflowBrowser').then(m => ({ default: m.WorkflowBrowser })));
 const WorkflowExecutions = lazy(() => import('./pages/WorkflowExecutions').then(m => ({ default: m.WorkflowExecutions })));
-const Credentials = lazy(() => import('./pages/Credentials').then(m => ({ default: m.Credentials })));
+const Datasources = lazy(() => import('./pages/Datasources').then(m => ({ default: m.Datasources })));
 const Groups = lazy(() => import('./pages/Groups').then(m => ({ default: m.Groups })));
 const Settings = lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
@@ -54,7 +54,7 @@ export default function App() {
             <Route path="workflows/:id" element={<WorkflowEditor />} />
             <Route path="workflows/new" element={<WorkflowEditor />} />
             <Route path="executions" element={<WorkflowExecutions />} />
-            <Route path="datasources" element={<Credentials />} />
+            <Route path="datasources" element={<Datasources />} />
             <Route path="groups" element={<Groups />} />
             <Route path="settings" element={<Settings />} />
           </Route>

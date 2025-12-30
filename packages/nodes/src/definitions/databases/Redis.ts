@@ -188,7 +188,7 @@ export const RedisNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'redisCredentials',
+      name: 'redisDatasource',
       required: true,
     },
   ],

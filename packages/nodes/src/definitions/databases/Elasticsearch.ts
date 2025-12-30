@@ -198,7 +198,7 @@ export const ElasticsearchNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'elasticsearchCredentials',
+      name: 'elasticsearchDatasource',
       required: true,
     },
   ],

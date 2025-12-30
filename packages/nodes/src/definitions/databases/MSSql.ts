@@ -30,7 +30,7 @@ export const MSSqlNode: NodeDefinition = {
   ],
   credentials: [
     {
-      name: 'mssqlCredentials',
+      name: 'mssqlDatasource',
       required: true,
     },
   ],

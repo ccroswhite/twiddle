@@ -56,7 +56,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { owner, repo, credentialId } = request.query;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 
@@ -85,7 +85,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { owner, repo, credentialId, description, isPrivate } = request.body;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 
@@ -129,7 +129,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { owner, repo, credentialId, branch = 'main' } = request.body;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 
@@ -172,7 +172,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { owner, repo, credentialId, workflowId, description, isPrivate, branch = 'main' } = request.body;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 
@@ -253,7 +253,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { workflowId, owner, repo, credentialId, branch = 'main', path = '' } = request.body;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 
@@ -363,7 +363,7 @@ export const githubRoutes: FastifyPluginAsync = async (app) => {
     const { credentialId } = request.query;
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
       where: { id: credentialId },
     });
 

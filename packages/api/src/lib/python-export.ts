@@ -942,56 +942,56 @@ function generateRequirements(workflow: WorkflowData): string {
   }
 
   // Add PostgreSQL dependencies
-  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlCredentials'))) {
+  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlDatasource'))) {
     requirements.push('', '# PostgreSQL', 'asyncpg>=0.29.0', 'psycopg2-binary>=2.9.9');
   }
 
   // Add MySQL dependencies
-  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlDatasource'))) {
     requirements.push('', '# MySQL', 'aiomysql>=0.2.0', 'PyMySQL>=1.1.0');
   }
 
   // Add MSSQL dependencies
-  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlDatasource'))) {
     requirements.push('', '# Microsoft SQL Server', 'pymssql>=2.2.11');
   }
 
   // Add Redis dependencies
-  if (nodeTypes.has('twiddle.redis') || nodes.some(n => n.type.includes('credential.redisCredentials'))) {
+  if (nodeTypes.has('twiddle.redis') || nodes.some(n => n.type.includes('credential.redisDatasource'))) {
     requirements.push('', '# Redis', 'redis>=5.0.0', 'aioredis>=2.0.1');
   }
 
   // Add Valkey dependencies (Redis-compatible)
-  if (nodeTypes.has('twiddle.valkey') || nodes.some(n => n.type.includes('credential.valkeyCredentials'))) {
+  if (nodeTypes.has('twiddle.valkey') || nodes.some(n => n.type.includes('credential.valkeyDatasource'))) {
     requirements.push('', '# Valkey (Redis-compatible)', 'redis>=5.0.0');
   }
 
   // Add Cassandra dependencies
-  if (nodeTypes.has('twiddle.cassandra') || nodes.some(n => n.type.includes('credential.cassandraCredentials'))) {
+  if (nodeTypes.has('twiddle.cassandra') || nodes.some(n => n.type.includes('credential.cassandraDatasource'))) {
     requirements.push('', '# Cassandra', 'cassandra-driver>=3.29.0');
   }
 
   // Add OpenSearch/Elasticsearch dependencies
-  if (nodeTypes.has('twiddle.opensearch') || nodes.some(n => n.type.includes('credential.opensearchCredentials'))) {
+  if (nodeTypes.has('twiddle.opensearch') || nodes.some(n => n.type.includes('credential.opensearchDatasource'))) {
     requirements.push('', '# OpenSearch', 'opensearch-py>=2.4.0');
   }
 
-  if (nodeTypes.has('twiddle.elasticsearch') || nodes.some(n => n.type.includes('credential.elasticsearchCredentials'))) {
+  if (nodeTypes.has('twiddle.elasticsearch') || nodes.some(n => n.type.includes('credential.elasticsearchDatasource'))) {
     requirements.push('', '# Elasticsearch', 'elasticsearch>=8.11.0');
   }
 
   // Add Snowflake dependencies
-  if (nodeTypes.has('twiddle.snowflake') || nodes.some(n => n.type.includes('credential.snowflakeCredentials'))) {
+  if (nodeTypes.has('twiddle.snowflake') || nodes.some(n => n.type.includes('credential.snowflakeDatasource'))) {
     requirements.push('', '# Snowflake', 'snowflake-connector-python>=3.6.0');
   }
 
   // Add PrestoDB dependencies
-  if (nodeTypes.has('twiddle.prestodb') || nodes.some(n => n.type.includes('credential.prestodbCredentials'))) {
+  if (nodeTypes.has('twiddle.prestodb') || nodes.some(n => n.type.includes('credential.prestodbDatasource'))) {
     requirements.push('', '# PrestoDB', 'presto-python-client>=0.8.4');
   }
 
   // Add Oracle dependencies
-  if (nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleCredentials'))) {
+  if (nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleDatasource'))) {
     requirements.push('', '# Oracle', 'oracledb>=2.0.0');
   }
 
@@ -1168,7 +1168,7 @@ TEMPORAL_NAMESPACE=default
 `;
 
   // Add database-specific env vars
-  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlCredentials'))) {
+  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlDatasource'))) {
     envContent += `
 # PostgreSQL Configuration
 POSTGRES_HOST=localhost
@@ -1179,7 +1179,7 @@ POSTGRES_DB=mydb
 `;
   }
 
-  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlDatasource'))) {
     envContent += `
 # MySQL Configuration
 MYSQL_HOST=localhost
@@ -1190,7 +1190,7 @@ MYSQL_DB=mydb
 `;
   }
 
-  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlDatasource'))) {
     envContent += `
 # SQL Server Configuration
 MSSQL_HOST=localhost
@@ -1202,7 +1202,7 @@ MSSQL_DB=mydb
   }
 
   if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') ||
-    nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
+    nodes.some(n => n.type.includes('credential.redisDatasource') || n.type.includes('credential.valkeyDatasource'))) {
     envContent += `
 # Redis/Valkey Configuration
 REDIS_HOST=localhost
@@ -1229,8 +1229,8 @@ function generateDockerfile(workflow: WorkflowData): string {
   const nodeTypes = new Set(nodes.map(n => n.type));
 
   // Determine if we need special system dependencies
-  const needsMssql = nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'));
-  const needsOracle = nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleCredentials'));
+  const needsMssql = nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlDatasource'));
+  const needsOracle = nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleDatasource'));
   const needsSsh = nodeTypes.has('twiddle.ssh');
 
   let systemDeps = 'gcc libffi-dev';
@@ -1290,7 +1290,7 @@ function generateDockerCompose(workflow: WorkflowData): string {
       - TEMPORAL_NAMESPACE=\${TEMPORAL_NAMESPACE:-default}`;
 
   // Add database environment variables if needed
-  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlCredentials'))) {
+  if (nodeTypes.has('twiddle.postgresql') || nodes.some(n => n.type.includes('credential.postgresqlDatasource'))) {
     envVars += `
       - POSTGRES_HOST=\${POSTGRES_HOST:-localhost}
       - POSTGRES_PORT=\${POSTGRES_PORT:-5432}
@@ -1299,7 +1299,7 @@ function generateDockerCompose(workflow: WorkflowData): string {
       - POSTGRES_DB=\${POSTGRES_DB:-postgres}`;
   }
 
-  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mysql') || nodes.some(n => n.type.includes('credential.mysqlDatasource'))) {
     envVars += `
       - MYSQL_HOST=\${MYSQL_HOST:-localhost}
       - MYSQL_PORT=\${MYSQL_PORT:-3306}
@@ -1308,7 +1308,7 @@ function generateDockerCompose(workflow: WorkflowData): string {
       - MYSQL_DB=\${MYSQL_DB:-mysql}`;
   }
 
-  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlCredentials'))) {
+  if (nodeTypes.has('twiddle.mssql') || nodes.some(n => n.type.includes('credential.mssqlDatasource'))) {
     envVars += `
       - MSSQL_HOST=\${MSSQL_HOST:-localhost}
       - MSSQL_PORT=\${MSSQL_PORT:-1433}
@@ -1318,7 +1318,7 @@ function generateDockerCompose(workflow: WorkflowData): string {
   }
 
   if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') ||
-    nodes.some(n => n.type.includes('credential.redisCredentials') || n.type.includes('credential.valkeyCredentials'))) {
+    nodes.some(n => n.type.includes('credential.redisDatasource') || n.type.includes('credential.valkeyDatasource'))) {
     envVars += `
       - REDIS_HOST=\${REDIS_HOST:-localhost}
       - REDIS_PORT=\${REDIS_PORT:-6379}

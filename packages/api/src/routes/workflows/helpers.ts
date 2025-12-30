@@ -41,7 +41,7 @@ export async function commitWorkflowToGitHub(
     }
 
     // Get credentials
-    const credential = await prisma.credential.findUnique({
+    const credential = await prisma.dataSource.findUnique({
         where: { id: workflow.githubCredentialId },
     });
 

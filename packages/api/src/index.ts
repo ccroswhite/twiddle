@@ -11,7 +11,7 @@ import { workflowRoutes } from './routes/workflows.js';
 import { executionRoutes } from './routes/executions.js';
 import { promotionRoutes } from './routes/promotions.js';
 import { nodeRoutes } from './routes/nodes.js';
-import { credentialRoutes } from './routes/credentials.js';
+import { credentialRoutes } from './routes/datasources.js';
 import { authRoutes } from './routes/auth.js';
 import { localAuthRoutes } from './routes/localAuth.js';
 import { groupRoutes } from './routes/groups.js';
@@ -79,7 +79,7 @@ async function main() {
   await app.register(executionRoutes, { prefix: '/api/executions' });
   await app.register(promotionRoutes, { prefix: '/api/promotions' });
   await app.register(nodeRoutes, { prefix: '/api/nodes' });
-  await app.register(credentialRoutes, { prefix: '/api/credentials' });
+  await app.register(credentialRoutes, { prefix: '/api/datasources' });
   await app.register(groupRoutes, { prefix: '/api/groups' });
   await app.register(userRoutes, { prefix: '/api/users' });
   await app.register(githubRoutes, { prefix: '/api/github' });
