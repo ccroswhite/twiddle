@@ -134,6 +134,15 @@ const datasourceFields: Record<string, { label: string; field: string & keyof Da
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
   ],
+  mongoDatasource: [
+    { label: 'Host', field: 'host', type: 'text' },
+    { label: 'Port', field: 'port', type: 'number' },
+    { label: 'Database', field: 'database', type: 'text' },
+    { label: 'Username (optional)', field: 'username', type: 'text' },
+    { label: 'Password (optional)', field: 'password', type: 'password' },
+    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+  ],
   githubDatasource: [
     { label: 'Personal Access Token', field: 'token', type: 'password' },
   ],
