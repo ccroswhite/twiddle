@@ -650,7 +650,7 @@ async function testSSH(data: DataSourceData): Promise<TestResult> {
 }
 
 /**
- * Test Elasticsearch/OpenSearch connection
+ * Test Elasticsearch/OpenSearch connection using https module for proper SSL handling
  */
 async function testElasticsearch(data: DataSourceData): Promise<TestResult> {
   if (!data.host) {
@@ -659,133 +659,153 @@ async function testElasticsearch(data: DataSourceData): Promise<TestResult> {
 
   const protocol = data.useTls ? 'https' : 'http';
   const port = data.port || 9200;
-  const url = `${protocol}://${data.host}:${port}`;
   const connectionInfo = { host: data.host, port, protocol, user: data.username };
 
-  logger.info({ url, user: data.username, useTls: data.useTls }, 'OpenSearch/Elasticsearch connection attempt');
+  logger.info({
+    host: data.host,
+    port,
+    user: data.username,
+    useTls: data.useTls,
+    allowSelfSigned: data.allowSelfSigned,
+    skipHostnameVerification: data.skipHostnameVerification,
+  }, 'OpenSearch/Elasticsearch connection attempt');
 
-  try {
-    const headers: Record<string, string> = {
-      'Accept': 'application/json',
-    };
+  return new Promise(async (resolve) => {
+    try {
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
 
-    if (data.username && data.password) {
-      const auth = Buffer.from(`${data.username}:${data.password}`).toString('base64');
-      headers['Authorization'] = `Basic ${auth}`;
-      logger.debug({ user: data.username }, 'Using Basic auth');
-    } else if (data.apiKey) {
-      headers['Authorization'] = `ApiKey ${data.apiKey}`;
-      logger.debug('Using API Key auth');
-    } else {
-      logger.debug('No authentication configured');
-    }
+      if (data.username && data.password) {
+        const auth = Buffer.from(`${data.username}:${data.password}`).toString('base64');
+        headers['Authorization'] = `Basic ${auth}`;
+        logger.debug({ user: data.username }, 'Using Basic auth');
+      } else if (data.apiKey) {
+        headers['Authorization'] = `ApiKey ${data.apiKey}`;
+        logger.debug('Using API Key auth');
+      }
 
-    logger.debug({ url, headers: { ...headers, Authorization: headers.Authorization ? '***' : undefined } }, 'Fetching URL');
-
-    // For HTTPS connections, optionally allow self-signed certificates and skip hostname verification
-    const fetchOptions: RequestInit & { agent?: unknown } = { headers };
-    if (data.useTls) {
-      const https = await import('https');
-      const agent = new https.Agent({
+      const requestOptions = {
+        hostname: data.host,
+        port,
+        path: '/',
+        method: 'GET',
+        headers,
         rejectUnauthorized: !data.allowSelfSigned,
         // Skip hostname verification if requested
-        checkServerIdentity: data.skipHostnameVerification ? () => undefined : undefined,
-      });
-      fetchOptions.agent = agent;
-      logger.debug({ allowSelfSigned: data.allowSelfSigned, skipHostnameVerification: data.skipHostnameVerification }, 'Using HTTPS agent');
-    }
-
-    const response = await fetch(url, fetchOptions);
-
-    logger.info({ status: response.status, statusText: response.statusText }, 'OpenSearch/Elasticsearch response');
-
-    if (response.ok) {
-      const info = await response.json() as {
-        name?: string;
-        cluster_name?: string;
-        version?: { number?: string; distribution?: string }
+        checkServerIdentity: data.skipHostnameVerification
+          ? (() => undefined) as () => undefined
+          : undefined,
       };
 
       logger.info({
-        name: info.name,
-        cluster_name: info.cluster_name,
-        version: info.version?.number,
-        distribution: info.version?.distribution,
-      }, 'OpenSearch/Elasticsearch connection successful');
+        rejectUnauthorized: requestOptions.rejectUnauthorized,
+        hasCheckServerIdentity: !!requestOptions.checkServerIdentity,
+      }, 'HTTPS request options');
 
-      return {
-        success: true,
-        message: `Successfully connected to ${info.cluster_name || 'cluster'} (${info.version?.distribution || 'Elasticsearch'} ${info.version?.number || ''})`,
-        details: {
-          name: info.name,
-          cluster_name: info.cluster_name,
-          version: info.version?.number,
-          distribution: info.version?.distribution,
-          connectionInfo,
-        },
-      };
-    } else {
-      // Try to get error body
-      let errorBody = '';
-      try {
-        errorBody = await response.text();
-        logger.error({ status: response.status, body: errorBody }, 'OpenSearch/Elasticsearch error response');
-      } catch {
-        // Ignore body read error
-      }
+      const httpModule = protocol === 'https'
+        ? await import('https')
+        : await import('http');
 
-      const details = {
-        rawError: `HTTP ${response.status}: ${response.statusText}`,
-        responseBody: errorBody.substring(0, 500),
-        connectionInfo
-      };
+      const req = httpModule.request(requestOptions, (res) => {
+        let body = '';
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => {
+          logger.info({ status: res.statusCode }, 'OpenSearch/Elasticsearch response');
 
-      if (response.status === 401) {
-        return { success: false, message: `Authentication failed for ${data.host}:${port}. Check username and password.`, details };
-      }
-      if (response.status === 403) {
-        return { success: false, message: `Access forbidden for ${data.host}:${port}. Check user permissions.`, details };
-      }
-      return { success: false, message: `Server at ${data.host}:${port} returned status ${response.status}.`, details };
-    }
-  } catch (error) {
-    const err = error as Error & { cause?: Error };
-    // Node fetch wraps errors - extract the underlying cause
-    const underlyingError = err.cause || err;
-    const rawMessage = underlyingError.message || err.message;
-    const stack = underlyingError.stack || err.stack;
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              const info = JSON.parse(body) as {
+                name?: string;
+                cluster_name?: string;
+                version?: { number?: string; distribution?: string }
+              };
 
-    logger.error({
-      message: err.message,
-      causeMessage: err.cause?.message,
-      rawMessage,
-      stack,
-      connectionInfo
-    }, 'OpenSearch/Elasticsearch connection error');
+              logger.info({
+                name: info.name,
+                cluster_name: info.cluster_name,
+                version: info.version?.number,
+                distribution: info.version?.distribution,
+              }, 'OpenSearch/Elasticsearch connection successful');
 
-    const details = {
-      rawError: rawMessage,
-      outerError: err.message !== rawMessage ? err.message : undefined,
-      connectionInfo
-    };
+              resolve({
+                success: true,
+                message: `Successfully connected to ${info.cluster_name || 'cluster'} (${info.version?.distribution || 'Elasticsearch'} ${info.version?.number || ''})`,
+                details: {
+                  name: info.name,
+                  cluster_name: info.cluster_name,
+                  version: info.version?.number,
+                  distribution: info.version?.distribution,
+                  connectionInfo,
+                },
+              });
+            } catch (parseError) {
+              resolve({
+                success: false,
+                message: `Failed to parse response from ${data.host}:${port}`,
+                details: { rawError: 'JSON parse error', responseBody: body.substring(0, 500), connectionInfo },
+              });
+            }
+          } else if (res.statusCode === 401) {
+            resolve({
+              success: false,
+              message: `Authentication failed for ${data.host}:${port}. Check username and password.`,
+              details: { rawError: `HTTP ${res.statusCode}`, responseBody: body.substring(0, 500), connectionInfo }
+            });
+          } else if (res.statusCode === 403) {
+            resolve({
+              success: false,
+              message: `Access forbidden for ${data.host}:${port}. Check user permissions.`,
+              details: { rawError: `HTTP ${res.statusCode}`, responseBody: body.substring(0, 500), connectionInfo }
+            });
+          } else {
+            resolve({
+              success: false,
+              message: `Server at ${data.host}:${port} returned status ${res.statusCode}.`,
+              details: { rawError: `HTTP ${res.statusCode}`, responseBody: body.substring(0, 500), connectionInfo }
+            });
+          }
+        });
+      });
 
-    if (rawMessage.includes('ECONNREFUSED')) {
-      return { success: false, message: `Connection refused to ${data.host}:${port}. Check that the server is running.`, details };
+      req.on('error', (error) => {
+        const rawMessage = error.message;
+        logger.error({ rawMessage, connectionInfo }, 'OpenSearch/Elasticsearch connection error');
+
+        const details = { rawError: rawMessage, connectionInfo };
+
+        if (rawMessage.includes('ECONNREFUSED')) {
+          resolve({ success: false, message: `Connection refused to ${data.host}:${port}. Check that the server is running.`, details });
+        } else if (rawMessage.includes('ENOTFOUND')) {
+          resolve({ success: false, message: `Host not found: ${data.host}`, details });
+        } else if (rawMessage.includes('ETIMEDOUT')) {
+          resolve({ success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details });
+        } else if (rawMessage.includes('unable to verify') || rawMessage.includes('certificate') || rawMessage.includes('self signed') || rawMessage.includes('CERT_')) {
+          resolve({ success: false, message: `SSL/TLS certificate error for ${data.host}:${port}. Enable "Allow Self-Signed Certificates".`, details });
+        } else if (rawMessage.includes('ECONNRESET')) {
+          resolve({ success: false, message: `Connection reset by ${data.host}:${port}. The server closed the connection.`, details });
+        } else {
+          resolve({ success: false, message: `Connection failed to ${data.host}:${port}: ${rawMessage}`, details });
+        }
+      });
+
+      // Set timeout
+      req.setTimeout(10000, () => {
+        req.destroy();
+        resolve({
+          success: false,
+          message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`,
+          details: { rawError: 'Request timeout', connectionInfo }
+        });
+      });
+
+      req.end();
+    } catch (error) {
+      const rawMessage = (error as Error).message;
+      logger.error({ rawMessage, connectionInfo }, 'OpenSearch/Elasticsearch setup error');
+      resolve({ success: false, message: `Connection failed to ${data.host}:${port}: ${rawMessage}`, details: { rawError: rawMessage, connectionInfo } });
     }
-    if (rawMessage.includes('ENOTFOUND')) {
-      return { success: false, message: `Host not found: ${data.host}`, details };
-    }
-    if (rawMessage.includes('ETIMEDOUT')) {
-      return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
-    }
-    if (rawMessage.includes('unable to verify') || rawMessage.includes('certificate') || rawMessage.includes('self signed') || rawMessage.includes('CERT_')) {
-      return { success: false, message: `SSL/TLS certificate error for ${data.host}:${port}. Try enabling/disabling TLS or the server may have a self-signed certificate.`, details };
-    }
-    if (rawMessage.includes('ECONNRESET')) {
-      return { success: false, message: `Connection reset by ${data.host}:${port}. The server closed the connection.`, details };
-    }
-    return { success: false, message: `Connection failed to ${data.host}:${port}: ${rawMessage}`, details };
-  }
+  });
 }
 
 /**
