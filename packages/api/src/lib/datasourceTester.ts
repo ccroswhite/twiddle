@@ -26,9 +26,11 @@ interface DataSourceData {
   account?: string;
   warehouse?: string;
   role?: string;
-  // WinRM
+  // WinRM / Windows Auth
   domain?: string;
   useHttps?: boolean;
+  // Azure Entra ID
+  tenantId?: string;
   // SSL/TLS options
   allowSelfSigned?: boolean;
   skipHostnameVerification?: boolean;
@@ -398,8 +400,8 @@ async function testMySQL(data: DataSourceData): Promise<TestResult> {
  * Test MS SQL Server connection
  */
 async function testMSSQL(data: DataSourceData): Promise<TestResult> {
-  if (!data.host || !data.username || !data.password) {
-    return { success: false, message: 'Host, username, and password are required' };
+  if (!data.host) {
+    return { success: false, message: 'Host is required' };
   }
 
   const port = data.port || 1433;
@@ -407,22 +409,71 @@ async function testMSSQL(data: DataSourceData): Promise<TestResult> {
     return { success: false, message: 'Invalid port number' };
   }
 
+  // Determine authentication type from UI selector (stored in 'role' field)
+  const authTypeSelection = data.role as string | undefined;
+  const useEntraId = authTypeSelection === 'entra';
+  const useWindowsAuth = authTypeSelection === 'windows';
+  const useSqlAuth = authTypeSelection === 'sql' || !authTypeSelection;
+
+  // Validate required fields based on auth type
+  if (useEntraId && (!data.tenantId || !data.clientId || !data.clientSecret)) {
+    return { success: false, message: 'Entra ID authentication requires Tenant ID, Client ID, and Client Secret.' };
+  }
+  if (useWindowsAuth && (!data.domain || !data.username || !data.password)) {
+    return { success: false, message: 'Windows authentication requires Domain, Username, and Password.' };
+  }
+  if (useSqlAuth && (!data.username || !data.password)) {
+    return { success: false, message: 'SQL Server authentication requires Username and Password.' };
+  }
+
+  const authType = useEntraId ? 'Entra ID' : useWindowsAuth ? 'Windows' : 'SQL Server';
+
+  logger.info({
+    host: data.host,
+    port,
+    database: data.database,
+    authType,
+    domain: data.domain,
+    username: data.username,
+    hasEntraCredentials: useEntraId,
+  }, 'MSSQL connection attempt');
+
   try {
     const sql = await import('mssql');
 
-    const config = {
+    // Build base config
+    const config: Parameters<typeof sql.default.connect>[0] = {
       server: data.host,
       port: port,
-      user: data.username,
-      password: data.password,
       database: data.database || 'master',
       options: {
         encrypt: data.useTls ?? false,
-        trustServerCertificate: true,
+        trustServerCertificate: data.allowSelfSigned ?? true,
       },
       connectionTimeout: 10000,
       requestTimeout: 10000,
-    } satisfies Parameters<typeof sql.default.connect>[0];
+    };
+
+    if (useEntraId) {
+      // Azure Entra ID Authentication
+      config.authentication = {
+        type: 'azure-active-directory-service-principal-secret',
+        options: {
+          tenantId: data.tenantId!,
+          clientId: data.clientId!,
+          clientSecret: data.clientSecret!,
+        },
+      };
+    } else if (useWindowsAuth) {
+      // Windows/Domain Authentication
+      config.user = data.username;
+      config.password = data.password;
+      config.domain = data.domain;
+    } else {
+      // SQL Server Authentication
+      config.user = data.username;
+      config.password = data.password;
+    }
 
     const pool = await sql.default.connect(config);
     const result = await pool.query('SELECT @@VERSION as version');
@@ -434,8 +485,12 @@ async function testMSSQL(data: DataSourceData): Promise<TestResult> {
 
     return {
       success: true,
-      message: `Successfully connected to ${versionLine.substring(0, 50)}...`,
-      details: { version: versionLine },
+      message: `Successfully connected via ${authType} Auth to ${versionLine.substring(0, 50)}...`,
+      details: {
+        version: versionLine,
+        authType,
+        connectionInfo: { host: data.host, port, database: data.database || 'master' },
+      },
     };
   } catch (error) {
     const err = error as Error & { code?: string };
@@ -447,6 +502,7 @@ async function testMSSQL(data: DataSourceData): Promise<TestResult> {
       port,
       user: data.username,
       database: data.database || 'master',
+      authType,
     };
 
     const details = {
@@ -462,12 +518,15 @@ async function testMSSQL(data: DataSourceData): Promise<TestResult> {
       return { success: false, message: `Host not found: ${data.host}`, details };
     }
     if (rawMessage.includes('Login failed')) {
-      return { success: false, message: `Authentication failed for user '${data.username}'@'${data.host}:${port}'.`, details };
+      return { success: false, message: `${authType} authentication failed for ${data.host}:${port}.`, details };
     }
     if (rawMessage.includes('ETIMEDOUT')) {
       return { success: false, message: `Connection timed out to ${data.host}:${port}. Check that the host is reachable.`, details };
     }
-    return { success: false, message: `Connection failed to ${data.host}:${port}.`, details };
+    if (rawMessage.includes('AADSTS') || rawMessage.includes('tenant') || rawMessage.includes('client')) {
+      return { success: false, message: `Entra ID authentication error: ${rawMessage.substring(0, 100)}`, details };
+    }
+    return { success: false, message: `Connection failed to ${data.host}:${port}: ${rawMessage.substring(0, 100)}`, details };
   }
 }
 

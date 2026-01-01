@@ -37,9 +37,12 @@ export interface DataSourceData {
   warehouse?: string;
   role?: string;
 
-  // WinRM
+  // WinRM / Windows Auth
   domain?: string;
   useHttps?: boolean;
+
+  // Azure Entra ID
+  tenantId?: string;
 
   // SSL/TLS options
   allowSelfSigned?: boolean;

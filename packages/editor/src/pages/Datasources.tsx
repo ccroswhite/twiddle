@@ -3,8 +3,17 @@ import { Plus, Trash2, Database, X, Eye, EyeOff, Users, Share2, Pencil } from 'l
 import { datasourcesApi, groupsApi, type DataSourceWithAccess, type Group, type DataSourceData } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Define which fields each credential type needs
-const datasourceFields: Record<string, { label: string; field: string & keyof DataSourceData; type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' }[]> = {
+// Field definition with support for select and conditional visibility
+interface FieldDefinition {
+  label: string;
+  field: string & keyof DataSourceData;
+  type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' | 'select';
+  options?: { value: string; label: string }[];
+  showWhen?: { field: string & keyof DataSourceData; value: string };
+}
+
+// Define which fields each data source type needs
+const datasourceFields: Record<string, FieldDefinition[]> = {
   httpBasicAuth: [
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
@@ -37,11 +46,30 @@ const datasourceFields: Record<string, { label: string; field: string & keyof Da
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
+    {
+      label: 'Authentication Type',
+      field: 'role', // Using 'role' field to store auth type selection
+      type: 'select',
+      options: [
+        { value: 'sql', label: 'SQL Server Authentication' },
+        { value: 'windows', label: 'Windows/AD Authentication' },
+        { value: 'entra', label: 'Microsoft Entra ID' },
+      ],
+    },
+    // SQL Server Auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'sql' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'sql' } },
+    // Windows Auth fields
+    { label: 'Domain', field: 'domain', type: 'text', showWhen: { field: 'role', value: 'windows' } },
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'windows' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'windows' } },
+    // Entra ID Auth fields
+    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
+    // TLS options (always shown)
+    { label: 'Encrypt Connection', field: 'useTls', type: 'checkbox' },
+    { label: 'Trust Server Certificate', field: 'allowSelfSigned', type: 'checkbox' },
   ],
   postgresqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -563,69 +591,93 @@ export function Datasources() {
               {currentFields.length > 0 && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">
                   <h3 className="text-sm font-medium text-slate-700">Connection Details</h3>
-                  {currentFields.map((fieldDef) => (
-                    <div key={fieldDef.field}>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
-                        {fieldDef.label}
-                      </label>
-                      {fieldDef.type === 'checkbox' ? (
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!newDataSource.data[fieldDef.field]}
-                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.checked)}
-                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-slate-600">Enable</span>
+                  {currentFields.map((fieldDef, index) => {
+                    // Check conditional visibility
+                    if (fieldDef.showWhen) {
+                      const conditionValue = newDataSource.data[fieldDef.showWhen.field];
+                      if (conditionValue !== fieldDef.showWhen.value) {
+                        return null;
+                      }
+                    }
+
+                    // Use index in key for fields that may appear multiple times with same field name
+                    const fieldKey = `${fieldDef.field}-${index}`;
+
+                    return (
+                      <div key={fieldKey}>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          {fieldDef.label}
                         </label>
-                      ) : fieldDef.type === 'textarea' ? (
-                        <textarea
-                          value={(newDataSource.data[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                          rows={4}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                          placeholder={fieldDef.label}
-                        />
-                      ) : fieldDef.type === 'password' ? (
-                        <div className="relative">
-                          <input
-                            type={showPasswords[fieldDef.field] ? 'text' : 'password'}
+                        {fieldDef.type === 'select' ? (
+                          <select
                             value={(newDataSource.data[fieldDef.field] as string) || ''}
                             onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                            className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                          >
+                            <option value="">Select {fieldDef.label}</option>
+                            {fieldDef.options?.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                        ) : fieldDef.type === 'checkbox' ? (
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={!!newDataSource.data[fieldDef.field]}
+                              onChange={(e) => updateDataSourceData(fieldDef.field, e.target.checked)}
+                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-slate-600">Enable</span>
+                          </label>
+                        ) : fieldDef.type === 'textarea' ? (
+                          <textarea
+                            value={(newDataSource.data[fieldDef.field] as string) || ''}
+                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
+                            rows={4}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
                             placeholder={fieldDef.label}
                           />
-                          <button
-                            type="button"
-                            onClick={() => togglePasswordVisibility(fieldDef.field)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          >
-                            {showPasswords[fieldDef.field] ? (
-                              <EyeOff className="w-4 h-4" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      ) : fieldDef.type === 'number' ? (
-                        <input
-                          type="number"
-                          value={(newDataSource.data[fieldDef.field] as number) || ''}
-                          onChange={(e) => updateDataSourceData(fieldDef.field, parseInt(e.target.value) || 0)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder={fieldDef.label}
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={(newDataSource.data[fieldDef.field] as string) || ''}
-                          onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                          placeholder={fieldDef.label}
-                        />
-                      )}
-                    </div>
-                  ))}
+                        ) : fieldDef.type === 'password' ? (
+                          <div className="relative">
+                            <input
+                              type={showPasswords[fieldDef.field] ? 'text' : 'password'}
+                              value={(newDataSource.data[fieldDef.field] as string) || ''}
+                              onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
+                              className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              placeholder={fieldDef.label}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => togglePasswordVisibility(fieldDef.field)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              {showPasswords[fieldDef.field] ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        ) : fieldDef.type === 'number' ? (
+                          <input
+                            type="number"
+                            value={(newDataSource.data[fieldDef.field] as number) || ''}
+                            onChange={(e) => updateDataSourceData(fieldDef.field, parseInt(e.target.value) || 0)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder={fieldDef.label}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={(newDataSource.data[fieldDef.field] as string) || ''}
+                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            placeholder={fieldDef.label}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
