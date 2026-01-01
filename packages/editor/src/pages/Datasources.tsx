@@ -424,14 +424,20 @@ export function Datasources() {
     }
   }
 
-  function openEditModal(dataSource: DataSourceWithAccess) {
+  async function openEditModal(dataSource: DataSourceWithAccess) {
     setEditingDataSource(dataSource);
     setEditGroupIds(dataSource.groups.map(g => g.id));
     setEditName(dataSource.name);
-    // Note: We don't have access to the actual credential data from the list
-    // The API would need to return it or we'd need to fetch it
-    setEditData({});
     setEditShowPasswords({});
+
+    // Fetch full data source details for editing
+    try {
+      const fullData = await datasourcesApi.getForEdit(dataSource.id);
+      setEditData(fullData.data as DataSourceData);
+    } catch (err) {
+      console.error('Failed to fetch data source for editing:', err);
+      setEditData({});
+    }
   }
 
   function updateEditData(field: keyof DataSourceData, value: string | number | boolean) {

@@ -184,6 +184,64 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // Get a single data source with sensitive data for editing (owners only)
+  app.get('/:id/edit', async (request, reply) => {
+    const user = await getUserFromSession(request);
+    if (!user) {
+      return reply.status(401).send({ error: 'Authentication required' });
+    }
+
+    const { id } = request.params as { id: string };
+
+    const dataSource = await prisma.dataSource.findUnique({
+      where: { id },
+      include: {
+        groups: {
+          select: {
+            group: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!dataSource) {
+      return reply.status(404).send({ error: 'Data source not found' });
+    }
+
+    // Only owners can get full data for editing
+    const isOwner = dataSource.createdById === user.id || (dataSource.createdById === null && user.isAdmin);
+    if (!isOwner) {
+      return reply.status(403).send({ error: 'Only the owner can edit this data source' });
+    }
+
+    // Filter out password-type fields from data
+    const rawData = dataSource.data as Record<string, unknown>;
+    const passwordFields = ['password', 'clientSecret', 'apiKey', 'token', 'accessToken', 'refreshToken', 'passphrase', 'privateKey', 'tlsKey'];
+    const filteredData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawData)) {
+      if (!passwordFields.includes(key)) {
+        filteredData[key] = value;
+      }
+    }
+
+    return {
+      id: dataSource.id,
+      name: dataSource.name,
+      type: dataSource.type,
+      data: filteredData,
+      createdAt: dataSource.createdAt,
+      updatedAt: dataSource.updatedAt,
+      createdById: dataSource.createdById,
+      groups: dataSource.groups.map(g => g.group),
+      isOwner: true,
+    };
+  });
+
   // Create a new data source
   app.post('/', async (request, reply) => {
     const user = await getUserFromSession(request);

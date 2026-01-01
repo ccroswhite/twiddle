@@ -310,6 +310,7 @@ export const nodesApi = {
 export const datasourcesApi = {
   list: () => request<DataSourceWithAccess[]>('/datasources'),
   get: (id: string) => request<DataSourceWithAccess>(`/datasources/${id}`),
+  getForEdit: (id: string) => request<DataSourceWithAccess & { data: Record<string, unknown> }>(`/datasources/${id}/edit`),
   create: (data: DataSourceCreateInput & { groupIds?: string[] }) =>
     request<DataSourceWithAccess>('/datasources', {
       method: 'POST',
