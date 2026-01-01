@@ -75,29 +75,74 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'password', label: 'Password Authentication' },
+        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
+      ],
+    },
+    // Password auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // mTLS auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-    { label: 'TLS Certificate', field: 'tlsCert', type: 'textarea' },
   ],
   mysqlDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'password', label: 'Password Authentication' },
+        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
+      ],
+    },
+    // Password auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // mTLS auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-    { label: 'CA Certificate (PEM)', field: 'tlsCert', type: 'textarea' },
   ],
   cassandraDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'password', label: 'Password Authentication' },
+        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
+      ],
+    },
+    // Password auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // mTLS auth fields
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
@@ -105,8 +150,27 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
   redisDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username (optional)', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'none', label: 'No Authentication' },
+        { value: 'password', label: 'Password Only' },
+        { value: 'acl', label: 'ACL (Username + Password)' },
+        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
+      ],
+    },
+    // Password-only auth
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // ACL auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
+    // mTLS auth fields
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
@@ -114,8 +178,27 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
   valkeyDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username (optional)', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'none', label: 'No Authentication' },
+        { value: 'password', label: 'Password Only' },
+        { value: 'acl', label: 'ACL (Username + Password)' },
+        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
+      ],
+    },
+    // Password-only auth
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // ACL auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
+    // mTLS auth fields
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
