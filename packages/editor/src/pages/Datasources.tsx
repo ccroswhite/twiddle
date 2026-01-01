@@ -167,15 +167,15 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
     { label: 'Database', field: 'database', type: 'text' },
     {
       label: 'Authentication Type',
-      field: 'role', // Using 'role' field to store auth type selection
+      field: 'role',
       type: 'select',
       options: [
-        { value: 'sql', label: 'SQL Server Authentication' },
+        { value: 'sql', label: 'Username and Password' },
         { value: 'windows', label: 'Windows/AD Authentication' },
         { value: 'entra', label: 'Microsoft Entra ID' },
       ],
     },
-    // SQL Server Auth fields
+    // Username and Password Auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'sql' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'sql' } },
     // Windows Auth fields
@@ -199,13 +199,18 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'password', label: 'Password Authentication' },
+        { value: 'password', label: 'Username and Password' },
+        { value: 'entra', label: 'Microsoft Entra ID' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
-    // Password auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // Entra ID Auth fields
+    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
     // mTLS auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
     { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
@@ -225,13 +230,18 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'password', label: 'Password Authentication' },
+        { value: 'password', label: 'Username and Password' },
+        { value: 'entra', label: 'Microsoft Entra ID' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
-    // Password auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
+    // Entra ID Auth fields
+    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
     // mTLS auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
     { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
@@ -250,11 +260,11 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'password', label: 'Password Authentication' },
+        { value: 'password', label: 'Username and Password' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
-    // Password auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
     // mTLS auth fields
@@ -274,17 +284,21 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'none', label: 'No Authentication' },
         { value: 'password', label: 'Password Only' },
-        { value: 'acl', label: 'ACL (Username + Password)' },
+        { value: 'acl', label: 'Username and Password' },
+        { value: 'entra', label: 'Microsoft Entra ID' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
     // Password-only auth
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
-    // ACL auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
+    // Entra ID Auth fields
+    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
+    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
     // mTLS auth fields
     { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
     { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
@@ -302,15 +316,14 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'none', label: 'No Authentication' },
         { value: 'password', label: 'Password Only' },
-        { value: 'acl', label: 'ACL (Username + Password)' },
+        { value: 'acl', label: 'Username and Password' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
     // Password-only auth
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
-    // ACL auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
     // mTLS auth fields
@@ -330,7 +343,7 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'basic', label: 'Basic Authentication' },
+        { value: 'basic', label: 'Username and Password' },
         { value: 'apikey', label: 'API Key' },
       ],
     },
@@ -352,7 +365,7 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'basic', label: 'Basic Authentication' },
+        { value: 'basic', label: 'Username and Password' },
         { value: 'apikey', label: 'API Key' },
       ],
     },
