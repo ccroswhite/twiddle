@@ -91,6 +91,7 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
+    { label: 'CA Certificate (PEM)', field: 'tlsCert', type: 'textarea' },
   ],
   cassandraDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
@@ -122,8 +123,21 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
   opensearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'basic', label: 'Basic Authentication' },
+        { value: 'apikey', label: 'API Key' },
+      ],
+    },
+    // Basic auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'basic' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'basic' } },
+    // API Key field
+    { label: 'API Key', field: 'apiKey', type: 'password', showWhen: { field: 'role', value: 'apikey' } },
+    // TLS options
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
@@ -131,9 +145,21 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
   elasticsearchDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-    { label: 'API Key (alternative)', field: 'apiKey', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'basic', label: 'Basic Authentication' },
+        { value: 'apikey', label: 'API Key' },
+      ],
+    },
+    // Basic auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'basic' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'basic' } },
+    // API Key field
+    { label: 'API Key', field: 'apiKey', type: 'password', showWhen: { field: 'role', value: 'apikey' } },
+    // TLS options
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
     { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
@@ -161,15 +187,35 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
     { label: 'Database/Service Name', field: 'database', type: 'text' },
     { label: 'Username', field: 'username', type: 'text' },
     { label: 'Password', field: 'password', type: 'password' },
+    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
+    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   mongoDatasource: [
     { label: 'Host', field: 'host', type: 'text' },
     { label: 'Port', field: 'port', type: 'number' },
     { label: 'Database', field: 'database', type: 'text' },
-    { label: 'Username (optional)', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
+    {
+      label: 'Authentication Type',
+      field: 'role',
+      type: 'select',
+      options: [
+        { value: 'none', label: 'No Authentication' },
+        { value: 'standard', label: 'Username/Password (SCRAM)' },
+        { value: 'x509', label: 'X.509 Certificate' },
+      ],
+    },
+    // Standard auth fields
+    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'standard' } },
+    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'standard' } },
+    { label: 'Auth Database', field: 'account', type: 'text', showWhen: { field: 'role', value: 'standard' } },
+    // X.509 Certificate fields
+    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'x509' } },
+    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'x509' } },
+    // TLS options (always shown)
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
+    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
   ],
   githubDatasource: [
     { label: 'Personal Access Token', field: 'token', type: 'password' },
