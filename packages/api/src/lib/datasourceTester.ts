@@ -950,8 +950,9 @@ async function testOracle(data: DataSourceData): Promise<TestResult> {
     const result = await connection.execute(
       'SELECT BANNER FROM v$version WHERE ROWNUM = 1'
     );
-    const rows = result.rows as Array<{ BANNER: string }> | undefined;
-    const version = rows?.[0]?.BANNER || 'Unknown';
+    // oracledb returns rows as arrays by default, e.g. [['Oracle Database 19c...']]
+    const rows = result.rows as Array<Array<string>> | undefined;
+    const version = rows?.[0]?.[0] || 'Unknown';
     await connection.close();
 
     return {
