@@ -12,6 +12,125 @@ interface FieldDefinition {
   showWhen?: { field: string & keyof DataSourceData; value: string };
 }
 
+// Shared component for rendering data source form fields
+interface DataSourceFieldsRendererProps {
+  fields: FieldDefinition[];
+  data: DataSourceData;
+  onDataChange: (field: keyof DataSourceData, value: string | number | boolean) => void;
+  showPasswords: Record<string, boolean>;
+  onTogglePasswordVisibility: (field: string) => void;
+  isEditMode?: boolean;
+  keyPrefix?: string;
+}
+
+function DataSourceFieldsRenderer({
+  fields,
+  data,
+  onDataChange,
+  showPasswords,
+  onTogglePasswordVisibility,
+  isEditMode = false,
+  keyPrefix = '',
+}: DataSourceFieldsRendererProps) {
+  return (
+    <>
+      {fields.map((fieldDef, index) => {
+        // Check conditional visibility
+        if (fieldDef.showWhen) {
+          const conditionValue = data[fieldDef.showWhen.field];
+          if (conditionValue !== fieldDef.showWhen.value) {
+            return null;
+          }
+        }
+
+        const fieldKey = `${keyPrefix}${fieldDef.field}-${index}`;
+        const isPasswordField = fieldDef.type === 'password';
+
+        return (
+          <div key={fieldKey}>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              {fieldDef.label}
+              {isEditMode && isPasswordField && (
+                <span className="text-xs font-normal text-slate-500 ml-2">
+                  (leave blank to keep existing)
+                </span>
+              )}
+            </label>
+            {fieldDef.type === 'select' ? (
+              <select
+                value={(data[fieldDef.field] as string) || ''}
+                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+              >
+                <option value="">Select {fieldDef.label}</option>
+                {fieldDef.options?.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            ) : fieldDef.type === 'checkbox' ? (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!data[fieldDef.field]}
+                  onChange={(e) => onDataChange(fieldDef.field, e.target.checked)}
+                  className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm text-slate-600">Enable</span>
+              </label>
+            ) : fieldDef.type === 'textarea' ? (
+              <textarea
+                value={(data[fieldDef.field] as string) || ''}
+                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
+                rows={4}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                placeholder={fieldDef.label}
+              />
+            ) : fieldDef.type === 'password' ? (
+              <div className="relative">
+                <input
+                  type={showPasswords[fieldDef.field] ? 'text' : 'password'}
+                  value={(data[fieldDef.field] as string) || ''}
+                  onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
+                  className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={isEditMode ? `Enter new ${fieldDef.label.toLowerCase()}` : fieldDef.label}
+                />
+                <button
+                  type="button"
+                  onClick={() => onTogglePasswordVisibility(fieldDef.field)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPasswords[fieldDef.field] ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            ) : fieldDef.type === 'number' ? (
+              <input
+                type="number"
+                value={(data[fieldDef.field] as number) || ''}
+                onChange={(e) => onDataChange(fieldDef.field, parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder={fieldDef.label}
+              />
+            ) : (
+              <input
+                type="text"
+                value={(data[fieldDef.field] as string) || ''}
+                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder={fieldDef.label}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+
 // Define which fields each data source type needs
 const datasourceFields: Record<string, FieldDefinition[]> = {
   httpBasicAuth: [
@@ -726,93 +845,14 @@ export function Datasources() {
               {currentFields.length > 0 && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">
                   <h3 className="text-sm font-medium text-slate-700">Connection Details</h3>
-                  {currentFields.map((fieldDef, index) => {
-                    // Check conditional visibility
-                    if (fieldDef.showWhen) {
-                      const conditionValue = newDataSource.data[fieldDef.showWhen.field];
-                      if (conditionValue !== fieldDef.showWhen.value) {
-                        return null;
-                      }
-                    }
-
-                    // Use index in key for fields that may appear multiple times with same field name
-                    const fieldKey = `${fieldDef.field}-${index}`;
-
-                    return (
-                      <div key={fieldKey}>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          {fieldDef.label}
-                        </label>
-                        {fieldDef.type === 'select' ? (
-                          <select
-                            value={(newDataSource.data[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                          >
-                            <option value="">Select {fieldDef.label}</option>
-                            {fieldDef.options?.map((opt) => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
-                            ))}
-                          </select>
-                        ) : fieldDef.type === 'checkbox' ? (
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!newDataSource.data[fieldDef.field]}
-                              onChange={(e) => updateDataSourceData(fieldDef.field, e.target.checked)}
-                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="text-sm text-slate-600">Enable</span>
-                          </label>
-                        ) : fieldDef.type === 'textarea' ? (
-                          <textarea
-                            value={(newDataSource.data[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                            rows={4}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                            placeholder={fieldDef.label}
-                          />
-                        ) : fieldDef.type === 'password' ? (
-                          <div className="relative">
-                            <input
-                              type={showPasswords[fieldDef.field] ? 'text' : 'password'}
-                              value={(newDataSource.data[fieldDef.field] as string) || ''}
-                              onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                              className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              placeholder={fieldDef.label}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => togglePasswordVisibility(fieldDef.field)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                            >
-                              {showPasswords[fieldDef.field] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        ) : fieldDef.type === 'number' ? (
-                          <input
-                            type="number"
-                            value={(newDataSource.data[fieldDef.field] as number) || ''}
-                            onChange={(e) => updateDataSourceData(fieldDef.field, parseInt(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            placeholder={fieldDef.label}
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={(newDataSource.data[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateDataSourceData(fieldDef.field, e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            placeholder={fieldDef.label}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                  <DataSourceFieldsRenderer
+                    fields={currentFields}
+                    data={newDataSource.data}
+                    onDataChange={updateDataSourceData}
+                    showPasswords={showPasswords}
+                    onTogglePasswordVisibility={togglePasswordVisibility}
+                    keyPrefix="create-"
+                  />
                 </div>
               )}
 
@@ -986,73 +1026,16 @@ export function Datasources() {
                   <div className="border-t border-slate-200 pt-4 space-y-4">
                     <h3 className="text-sm font-medium text-slate-700">
                       Update Connection Details
-                      <span className="text-xs font-normal text-slate-500 ml-2">
-                        (leave blank to keep existing values)
-                      </span>
                     </h3>
-                    {datasourceFields[editingDataSource.type].map((fieldDef) => (
-                      <div key={fieldDef.field}>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">
-                          {fieldDef.label}
-                        </label>
-                        {fieldDef.type === 'checkbox' ? (
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!editData[fieldDef.field]}
-                              onChange={(e) => updateEditData(fieldDef.field, e.target.checked)}
-                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className="text-sm text-slate-600">Enable</span>
-                          </label>
-                        ) : fieldDef.type === 'textarea' ? (
-                          <textarea
-                            value={(editData[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                            rows={4}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                            placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                          />
-                        ) : fieldDef.type === 'password' ? (
-                          <div className="relative">
-                            <input
-                              type={editShowPasswords[fieldDef.field] ? 'text' : 'password'}
-                              value={(editData[fieldDef.field] as string) || ''}
-                              onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                              className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                              placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => toggleEditPasswordVisibility(fieldDef.field)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                            >
-                              {editShowPasswords[fieldDef.field] ? (
-                                <EyeOff className="w-4 h-4" />
-                              ) : (
-                                <Eye className="w-4 h-4" />
-                              )}
-                            </button>
-                          </div>
-                        ) : fieldDef.type === 'number' ? (
-                          <input
-                            type="number"
-                            value={(editData[fieldDef.field] as number) || ''}
-                            onChange={(e) => updateEditData(fieldDef.field, parseInt(e.target.value) || 0)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                          />
-                        ) : (
-                          <input
-                            type="text"
-                            value={(editData[fieldDef.field] as string) || ''}
-                            onChange={(e) => updateEditData(fieldDef.field, e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                            placeholder={`Enter new ${fieldDef.label.toLowerCase()}`}
-                          />
-                        )}
-                      </div>
-                    ))}
+                    <DataSourceFieldsRenderer
+                      fields={datasourceFields[editingDataSource.type]}
+                      data={editData}
+                      onDataChange={updateEditData}
+                      showPasswords={editShowPasswords}
+                      onTogglePasswordVisibility={toggleEditPasswordVisibility}
+                      isEditMode={true}
+                      keyPrefix="edit-"
+                    />
                   </div>
                 )}
               </div>
