@@ -44,6 +44,13 @@ export interface DataSourceData {
   // Azure Entra ID
   tenantId?: string;
 
+  // SAML SSO
+  idpMetadataUrl?: string;
+  spEntityId?: string;
+
+  // OpenID Connect (OIDC)
+  issuerUrl?: string;
+
   // SSL/TLS options
   allowSelfSigned?: boolean;
   skipHostnameVerification?: boolean;

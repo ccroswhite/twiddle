@@ -284,14 +284,11 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'password', label: 'Password Only' },
         { value: 'acl', label: 'Username and Password' },
         { value: 'entra', label: 'Microsoft Entra ID' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
-    // Password-only auth
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
     // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
@@ -316,13 +313,10 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       field: 'role',
       type: 'select',
       options: [
-        { value: 'password', label: 'Password Only' },
         { value: 'acl', label: 'Username and Password' },
         { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
       ],
     },
-    // Password-only auth
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
     // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
@@ -344,14 +338,20 @@ const datasourceFields: Record<string, FieldDefinition[]> = {
       type: 'select',
       options: [
         { value: 'basic', label: 'Username and Password' },
-        { value: 'apikey', label: 'API Key' },
+        { value: 'saml', label: 'SAML SSO' },
+        { value: 'oidc', label: 'OpenID Connect (OIDC)' },
       ],
     },
-    // Basic auth fields
+    // Username and Password auth fields
     { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'basic' } },
     { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'basic' } },
-    // API Key field
-    { label: 'API Key', field: 'apiKey', type: 'password', showWhen: { field: 'role', value: 'apikey' } },
+    // SAML SSO fields
+    { label: 'IdP Metadata URL', field: 'idpMetadataUrl', type: 'text', showWhen: { field: 'role', value: 'saml' } },
+    { label: 'SP Entity ID', field: 'spEntityId', type: 'text', showWhen: { field: 'role', value: 'saml' } },
+    // OIDC fields
+    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'oidc' } },
+    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'oidc' } },
+    { label: 'Issuer URL', field: 'issuerUrl', type: 'text', showWhen: { field: 'role', value: 'oidc' } },
     // TLS options
     { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
     { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
