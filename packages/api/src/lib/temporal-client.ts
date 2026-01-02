@@ -466,3 +466,258 @@ export function getStatusDisplay(status: ExecutionStatus): { label: string; colo
             return { label: 'Unknown', color: 'gray' };
     }
 }
+
+// =============================================================================
+// Schedule Management
+// =============================================================================
+
+export interface ScheduleSpec {
+    /** Cron expression (e.g., "0 9 * * 1-5" for 9 AM weekdays) */
+    cron?: string;
+    /** Interval in seconds */
+    intervalSeconds?: number;
+}
+
+export interface ScheduleInfo {
+    scheduleId: string;
+    workflowType: string;
+    taskQueue: string;
+    spec: ScheduleSpec;
+    isPaused: boolean;
+    nextRunTime?: Date;
+    lastRunTime?: Date;
+    memo?: Record<string, unknown>;
+}
+
+/**
+ * Generate schedule ID from workflow ID
+ */
+export function getScheduleId(workflowId: string): string {
+    return `twiddle-${workflowId}`;
+}
+
+/**
+ * Create a Temporal Schedule for a workflow
+ */
+export async function createSchedule(
+    workflowId: string,
+    workflowType: string,
+    taskQueue: string,
+    spec: ScheduleSpec,
+    workflowArgs?: unknown[],
+    memo?: Record<string, unknown>,
+): Promise<void> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    // Build schedule spec
+    const scheduleSpec: { intervals?: { every: number }[]; cronExpressions?: string[] } = {};
+
+    if (spec.cron) {
+        scheduleSpec.cronExpressions = [spec.cron];
+    } else if (spec.intervalSeconds) {
+        scheduleSpec.intervals = [{ every: spec.intervalSeconds * 1000 }]; // milliseconds
+    }
+
+    try {
+        await client.schedule.create({
+            scheduleId,
+            spec: scheduleSpec,
+            action: {
+                type: 'startWorkflow',
+                workflowType,
+                taskQueue,
+                args: workflowArgs || [{}],
+            },
+            memo,
+        });
+        console.log(`Created schedule ${scheduleId} for workflow type ${workflowType}`);
+    } catch (error) {
+        // Check if schedule already exists
+        if ((error as Error).message?.includes('already exists')) {
+            console.log(`Schedule ${scheduleId} already exists, updating instead`);
+            await updateSchedule(workflowId, spec);
+        } else {
+            throw error;
+        }
+    }
+}
+
+/**
+ * Update an existing Temporal Schedule
+ */
+export async function updateSchedule(
+    workflowId: string,
+    spec: ScheduleSpec,
+): Promise<void> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    try {
+        const handle = client.schedule.getHandle(scheduleId);
+
+        await handle.update((previous) => {
+            // Build new spec based on schedule type
+            const newSpec: Record<string, unknown> = { ...previous.spec };
+
+            if (spec.cron) {
+                // Use cronExpressions for cron-based schedules
+                newSpec.cronExpressions = [spec.cron];
+                newSpec.intervals = undefined;
+            } else if (spec.intervalSeconds) {
+                // Use intervals for interval-based schedules
+                newSpec.intervals = [{ every: spec.intervalSeconds * 1000, offset: 0 }];
+                newSpec.cronExpressions = undefined;
+            }
+
+            return {
+                ...previous,
+                spec: newSpec,
+            };
+        });
+
+        console.log(`Updated schedule ${scheduleId}`);
+    } catch (error) {
+        console.error(`Failed to update schedule ${scheduleId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Delete a Temporal Schedule
+ */
+export async function deleteSchedule(workflowId: string): Promise<void> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    try {
+        const handle = client.schedule.getHandle(scheduleId);
+        await handle.delete();
+        console.log(`Deleted schedule ${scheduleId}`);
+    } catch (error) {
+        // Ignore if schedule doesn't exist
+        if ((error as Error).message?.includes('not found')) {
+            console.log(`Schedule ${scheduleId} not found, nothing to delete`);
+        } else {
+            console.error(`Failed to delete schedule ${scheduleId}:`, error);
+            throw error;
+        }
+    }
+}
+
+/**
+ * Pause a Temporal Schedule
+ */
+export async function pauseSchedule(workflowId: string): Promise<void> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    try {
+        const handle = client.schedule.getHandle(scheduleId);
+        await handle.pause('Paused by Twiddle');
+        console.log(`Paused schedule ${scheduleId}`);
+    } catch (error) {
+        console.error(`Failed to pause schedule ${scheduleId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Resume a Temporal Schedule
+ */
+export async function resumeSchedule(workflowId: string): Promise<void> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    try {
+        const handle = client.schedule.getHandle(scheduleId);
+        await handle.unpause();
+        console.log(`Resumed schedule ${scheduleId}`);
+    } catch (error) {
+        console.error(`Failed to resume schedule ${scheduleId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Get information about a specific schedule
+ */
+export async function getSchedule(workflowId: string): Promise<ScheduleInfo | null> {
+    const client = await getTemporalClient();
+    const scheduleId = getScheduleId(workflowId);
+
+    try {
+        const handle = client.schedule.getHandle(scheduleId);
+        const description = await handle.describe();
+
+        const spec: ScheduleSpec = {};
+        // Access spec at top level, use intervals array
+        if (description.spec.intervals?.length) {
+            spec.intervalSeconds = Math.floor(description.spec.intervals[0].every / 1000);
+        }
+        // Calendars represent cron-like schedules in description form
+
+        return {
+            scheduleId,
+            workflowType: description.action.workflowType || 'Unknown',
+            taskQueue: description.action.taskQueue || 'Unknown',
+            spec,
+            isPaused: description.state.paused,
+            nextRunTime: description.info.nextActionTimes?.[0],
+            lastRunTime: description.info.recentActions?.[0]?.takenAt,
+            memo: description.memo,
+        };
+    } catch (error) {
+        if ((error as Error).message?.includes('not found')) {
+            return null;
+        }
+        throw error;
+    }
+}
+
+/**
+ * List all Twiddle schedules
+ */
+export async function listSchedules(): Promise<ScheduleInfo[]> {
+    const client = await getTemporalClient();
+    const schedules: ScheduleInfo[] = [];
+
+    try {
+        for await (const schedule of client.schedule.list()) {
+            // Only include Twiddle schedules
+            if (!schedule.scheduleId.startsWith('twiddle-')) {
+                continue;
+            }
+
+            const spec: ScheduleSpec = {};
+            // ScheduleSummary uses intervals, not cronExpressions
+            if (schedule.spec?.intervals?.length) {
+                spec.intervalSeconds = Math.floor(schedule.spec.intervals[0].every / 1000);
+            }
+
+            schedules.push({
+                scheduleId: schedule.scheduleId,
+                workflowType: schedule.action?.workflowType || 'Unknown',
+                taskQueue: 'Unknown', // taskQueue not available in ScheduleSummary
+                spec,
+                isPaused: schedule.state?.paused || false,
+                nextRunTime: schedule.info?.nextActionTimes?.[0],
+                lastRunTime: schedule.info?.recentActions?.[0]?.takenAt,
+                memo: schedule.memo,
+            });
+        }
+
+        return schedules;
+    } catch (error) {
+        console.error('Failed to list schedules:', error);
+        throw error;
+    }
+}
+
+/**
+ * Check if a schedule exists for a workflow
+ */
+export async function scheduleExists(workflowId: string): Promise<boolean> {
+    const schedule = await getSchedule(workflowId);
+    return schedule !== null;
+}

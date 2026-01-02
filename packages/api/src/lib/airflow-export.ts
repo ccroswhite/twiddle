@@ -139,16 +139,71 @@ function generateRequirements(dag: AirflowDAG): string {
     // Base Airflow
     requirements.add('apache-airflow>=2.0.0');
 
-    // Check for provider packages
+    // Check for provider packages based on operator modules
     for (const task of dag.tasks) {
+        // HTTP
         if (task.operatorModule.includes('providers.http')) {
             requirements.add('apache-airflow-providers-http');
         }
+        // SSH
         if (task.operatorModule.includes('providers.ssh')) {
             requirements.add('apache-airflow-providers-ssh');
         }
+        // Slack
         if (task.operatorModule.includes('providers.slack')) {
             requirements.add('apache-airflow-providers-slack');
+        }
+        // PostgreSQL
+        if (task.operatorModule.includes('providers.postgres')) {
+            requirements.add('apache-airflow-providers-postgres');
+        }
+        // MySQL
+        if (task.operatorModule.includes('providers.mysql')) {
+            requirements.add('apache-airflow-providers-mysql');
+        }
+        // Microsoft SQL Server
+        if (task.operatorModule.includes('providers.microsoft.mssql')) {
+            requirements.add('apache-airflow-providers-microsoft-mssql');
+        }
+        // Snowflake
+        if (task.operatorModule.includes('providers.snowflake')) {
+            requirements.add('apache-airflow-providers-snowflake');
+        }
+        // Oracle
+        if (task.operatorModule.includes('providers.oracle')) {
+            requirements.add('apache-airflow-providers-oracle');
+        }
+        // Presto
+        if (task.operatorModule.includes('providers.presto')) {
+            requirements.add('apache-airflow-providers-presto');
+        }
+
+        // Python packages for databases without native operators
+        const callableName = task.kwargs.python_callable as string || '';
+
+        // Redis/Valkey
+        if (callableName.endsWith('_redis')) {
+            requirements.add('redis>=5.0.0');
+        }
+        // Cassandra
+        if (callableName.endsWith('_cassandra')) {
+            requirements.add('cassandra-driver>=3.29.0');
+        }
+        // MongoDB
+        if (callableName.endsWith('_mongodb')) {
+            requirements.add('pymongo>=4.6.0');
+        }
+        // OpenSearch
+        if (callableName.endsWith('_opensearch')) {
+            requirements.add('opensearch-py>=2.4.0');
+        }
+        // Elasticsearch
+        if (callableName.endsWith('_elasticsearch')) {
+            requirements.add('elasticsearch>=8.11.0');
+        }
+        // WinRM
+        if (callableName.endsWith('_winrm')) {
+            requirements.add('pywinrm>=0.4.3');
         }
     }
 

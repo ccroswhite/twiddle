@@ -26,7 +26,15 @@ export const NODE_TO_OPERATOR: Record<string, AirflowOperatorType> = {
         operator: 'PythonOperator',
         module: 'airflow.operators.python',
     },
+    'twiddle.code': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
     'twiddle.sshCommand': {
+        operator: 'SSHOperator',
+        module: 'airflow.providers.ssh.operators.ssh',
+    },
+    'twiddle.ssh': {
         operator: 'SSHOperator',
         module: 'airflow.providers.ssh.operators.ssh',
     },
@@ -39,11 +47,11 @@ export const NODE_TO_OPERATOR: Record<string, AirflowOperatorType> = {
         module: 'airflow.sensors.time_delta',
     },
     'twiddle.database': {
-        operator: 'PythonOperator', // Use Python for flexibility
+        operator: 'PythonOperator',
         module: 'airflow.operators.python',
     },
     'twiddle.s3': {
-        operator: 'PythonOperator', // Use Python for S3 operations
+        operator: 'PythonOperator',
         module: 'airflow.operators.python',
     },
     'twiddle.sendSlackMessage': {
@@ -56,6 +64,68 @@ export const NODE_TO_OPERATOR: Record<string, AirflowOperatorType> = {
     },
     'twiddle.conditional': {
         operator: 'BranchPythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.if': {
+        operator: 'BranchPythonOperator',
+        module: 'airflow.operators.python',
+    },
+    // Database-specific operators
+    'twiddle.postgresql': {
+        operator: 'PostgresOperator',
+        module: 'airflow.providers.postgres.operators.postgres',
+    },
+    'twiddle.mysql': {
+        operator: 'MySqlOperator',
+        module: 'airflow.providers.mysql.operators.mysql',
+    },
+    'twiddle.mssql': {
+        operator: 'MsSqlOperator',
+        module: 'airflow.providers.microsoft.mssql.operators.mssql',
+    },
+    'twiddle.snowflake': {
+        operator: 'SnowflakeOperator',
+        module: 'airflow.providers.snowflake.operators.snowflake',
+    },
+    'twiddle.oracle': {
+        operator: 'OracleOperator',
+        module: 'airflow.providers.oracle.operators.oracle',
+    },
+    // Databases without native operators - use PythonOperator
+    'twiddle.redis': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.valkey': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.cassandra': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.mongodb': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.opensearch': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.elasticsearch': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.prestodb': {
+        operator: 'PrestoCheckOperator',
+        module: 'airflow.providers.presto.operators.presto',
+    },
+    'twiddle.winrm': {
+        operator: 'PythonOperator',
+        module: 'airflow.operators.python',
+    },
+    'twiddle.setData': {
+        operator: 'PythonOperator',
         module: 'airflow.operators.python',
     },
 };
@@ -193,12 +263,14 @@ function buildOperatorKwargs(node: TwiddleNode): Record<string, unknown> {
             };
 
         case 'twiddle.pythonCode':
+        case 'twiddle.code':
             return {
                 python_callable: `_${toTaskId(node.name, node.id)}_callable`,
                 op_kwargs: params,
             };
 
         case 'twiddle.sshCommand':
+        case 'twiddle.ssh':
             return {
                 ssh_conn_id: 'ssh_default',
                 command: params.command as string || '',
@@ -224,9 +296,109 @@ function buildOperatorKwargs(node: TwiddleNode): Record<string, unknown> {
             };
 
         case 'twiddle.conditional':
+        case 'twiddle.if':
             return {
                 python_callable: `_${toTaskId(node.name, node.id)}_branch`,
                 provide_context: true,
+            };
+
+        // Database operators with native Airflow operators
+        case 'twiddle.postgresql':
+            return {
+                postgres_conn_id: 'postgres_default',
+                sql: params.query as string || '',
+            };
+
+        case 'twiddle.mysql':
+            return {
+                mysql_conn_id: 'mysql_default',
+                sql: params.query as string || '',
+            };
+
+        case 'twiddle.mssql':
+            return {
+                mssql_conn_id: 'mssql_default',
+                sql: params.query as string || '',
+            };
+
+        case 'twiddle.oracle':
+            return {
+                oracle_conn_id: 'oracle_default',
+                sql: params.query as string || '',
+            };
+
+        case 'twiddle.snowflake':
+            return {
+                snowflake_conn_id: 'snowflake_default',
+                sql: params.query as string || '',
+            };
+
+        case 'twiddle.prestodb':
+            return {
+                presto_conn_id: 'presto_default',
+                sql: params.query as string || '',
+            };
+
+        // Databases using PythonOperator with custom callables
+        case 'twiddle.redis':
+        case 'twiddle.valkey':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_redis`,
+                op_kwargs: {
+                    command: params.command || 'PING',
+                    args: params.args || [],
+                },
+            };
+
+        case 'twiddle.cassandra':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_cassandra`,
+                op_kwargs: {
+                    query: params.query || '',
+                },
+            };
+
+        case 'twiddle.mongodb':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_mongodb`,
+                op_kwargs: {
+                    collection: params.collection || '',
+                    operation: params.operation || 'find',
+                    query: params.query || {},
+                },
+            };
+
+        case 'twiddle.opensearch':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_opensearch`,
+                op_kwargs: {
+                    index: params.index || '',
+                    query: params.query || { query: { match_all: {} } },
+                },
+            };
+
+        case 'twiddle.elasticsearch':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_elasticsearch`,
+                op_kwargs: {
+                    index: params.index || '',
+                    query: params.query || { query: { match_all: {} } },
+                },
+            };
+
+        case 'twiddle.winrm':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_winrm`,
+                op_kwargs: {
+                    command: params.command || '',
+                    powershell: params.powershell !== false,
+                },
+            };
+
+        case 'twiddle.setData':
+            return {
+                python_callable: `_${toTaskId(node.name, node.id)}_setdata`,
+                op_kwargs: params,
             };
 
         default:

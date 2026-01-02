@@ -400,6 +400,510 @@ async def execute_mysql(input: ActivityInput) -> Dict[str, Any]:
         conn.close()
 `;
 
+    case 'twiddle.oracle':
+      return `
+async def execute_oracle(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on Oracle Database.
+    
+    Connection details should be provided via environment variables.
+    Uses oracledb in thin mode (no Oracle Client required).
+    """
+    import oracledb
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    host = get_env('ORACLE_HOST', 'localhost')
+    port = get_env('ORACLE_PORT', '1521')
+    user = get_env('ORACLE_USER')
+    password = get_env('ORACLE_PASSWORD')
+    service_name = get_env('ORACLE_SERVICE', 'ORCL')
+    
+    activity.logger.info(f"[{input.node_name}] Executing SQL on {host}:{port}/{service_name}")
+    
+    dsn = f"{host}:{port}/{service_name}"
+    
+    conn = oracledb.connect(user=user, password=password, dsn=dsn)
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        columns = [col[0] for col in cursor.description] if cursor.description else []
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return {
+            **input.input_data,
+            'sql_result': {
+                'rows': rows,
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        conn.close()
+`;
+
+    case 'twiddle.cassandra':
+      return `
+async def execute_cassandra(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute CQL query on Cassandra.
+    
+    Connection details should be provided via environment variables.
+    """
+    from cassandra.cluster import Cluster
+    from cassandra.auth import PlainTextAuthProvider
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    hosts = get_env('CASSANDRA_HOSTS', 'localhost').split(',')
+    port = int(get_env('CASSANDRA_PORT', '9042'))
+    username = get_env('CASSANDRA_USER')
+    password = get_env('CASSANDRA_PASSWORD')
+    keyspace = get_env('CASSANDRA_KEYSPACE')
+    
+    activity.logger.info(f"[{input.node_name}] Executing CQL on {hosts}")
+    
+    auth_provider = None
+    if username and password:
+        auth_provider = PlainTextAuthProvider(username=username, password=password)
+    
+    cluster = Cluster(hosts, port=port, auth_provider=auth_provider)
+    session = cluster.connect(keyspace) if keyspace else cluster.connect()
+    
+    try:
+        result = session.execute(query)
+        rows = [dict(row._asdict()) for row in result]
+        
+        return {
+            **input.input_data,
+            'cql_result': {
+                'rows': rows,
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        cluster.shutdown()
+`;
+
+    case 'twiddle.redis':
+      return `
+async def execute_redis(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute Redis command.
+    
+    Connection details should be provided via environment variables.
+    Supports ACL authentication (username + password).
+    """
+    import redis.asyncio as redis
+    
+    params = input.parameters
+    command = params.get('command', 'PING')
+    args = params.get('args', [])
+    
+    host = get_env('REDIS_HOST', 'localhost')
+    port = int(get_env('REDIS_PORT', '6379'))
+    username = get_env('REDIS_USER')
+    password = get_env('REDIS_PASSWORD')
+    db = int(get_env('REDIS_DB', '0'))
+    use_tls = get_env('REDIS_TLS', 'false').lower() == 'true'
+    
+    activity.logger.info(f"[{input.node_name}] Executing Redis command: {command}")
+    
+    client = redis.Redis(
+        host=host,
+        port=port,
+        username=username or None,
+        password=password or None,
+        db=db,
+        ssl=use_tls,
+        decode_responses=True
+    )
+    
+    try:
+        result = await client.execute_command(command, *args)
+        
+        return {
+            **input.input_data,
+            'redis_result': {
+                'response': result,
+                'success': True
+            }
+        }
+    finally:
+        await client.aclose()
+`;
+
+    case 'twiddle.valkey':
+      return `
+async def execute_valkey(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute Valkey command (Redis-compatible).
+    
+    Connection details should be provided via environment variables.
+    """
+    import redis.asyncio as redis
+    
+    params = input.parameters
+    command = params.get('command', 'PING')
+    args = params.get('args', [])
+    
+    host = get_env('VALKEY_HOST', 'localhost')
+    port = int(get_env('VALKEY_PORT', '6379'))
+    username = get_env('VALKEY_USER')
+    password = get_env('VALKEY_PASSWORD')
+    db = int(get_env('VALKEY_DB', '0'))
+    use_tls = get_env('VALKEY_TLS', 'false').lower() == 'true'
+    
+    activity.logger.info(f"[{input.node_name}] Executing Valkey command: {command}")
+    
+    client = redis.Redis(
+        host=host,
+        port=port,
+        username=username or None,
+        password=password or None,
+        db=db,
+        ssl=use_tls,
+        decode_responses=True
+    )
+    
+    try:
+        result = await client.execute_command(command, *args)
+        
+        return {
+            **input.input_data,
+            'valkey_result': {
+                'response': result,
+                'success': True
+            }
+        }
+    finally:
+        await client.aclose()
+`;
+
+    case 'twiddle.opensearch':
+      return `
+async def execute_opensearch(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute OpenSearch query.
+    
+    Connection details should be provided via environment variables.
+    """
+    from opensearchpy import OpenSearch
+    
+    params = input.parameters
+    index = params.get('index', '')
+    query = params.get('query', {'query': {'match_all': {}}})
+    
+    host = get_env('OPENSEARCH_HOST', 'localhost')
+    port = int(get_env('OPENSEARCH_PORT', '9200'))
+    username = get_env('OPENSEARCH_USER')
+    password = get_env('OPENSEARCH_PASSWORD')
+    use_tls = get_env('OPENSEARCH_TLS', 'false').lower() == 'true'
+    
+    activity.logger.info(f"[{input.node_name}] Querying OpenSearch index: {index}")
+    
+    client = OpenSearch(
+        hosts=[{'host': host, 'port': port}],
+        http_auth=(username, password) if username and password else None,
+        use_ssl=use_tls,
+        verify_certs=not get_env('OPENSEARCH_ALLOW_SELF_SIGNED', 'false').lower() == 'true'
+    )
+    
+    try:
+        if isinstance(query, str):
+            import json
+            query = json.loads(query)
+        
+        result = client.search(index=index, body=query)
+        
+        return {
+            **input.input_data,
+            'opensearch_result': {
+                'hits': result.get('hits', {}).get('hits', []),
+                'total': result.get('hits', {}).get('total', {}).get('value', 0),
+                'success': True
+            }
+        }
+    finally:
+        client.close()
+`;
+
+    case 'twiddle.elasticsearch':
+      return `
+async def execute_elasticsearch(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute Elasticsearch query.
+    
+    Connection details should be provided via environment variables.
+    """
+    from elasticsearch import Elasticsearch
+    
+    params = input.parameters
+    index = params.get('index', '')
+    query = params.get('query', {'query': {'match_all': {}}})
+    
+    host = get_env('ELASTICSEARCH_HOST', 'localhost')
+    port = int(get_env('ELASTICSEARCH_PORT', '9200'))
+    username = get_env('ELASTICSEARCH_USER')
+    password = get_env('ELASTICSEARCH_PASSWORD')
+    api_key = get_env('ELASTICSEARCH_API_KEY')
+    use_tls = get_env('ELASTICSEARCH_TLS', 'false').lower() == 'true'
+    
+    activity.logger.info(f"[{input.node_name}] Querying Elasticsearch index: {index}")
+    
+    if api_key:
+        client = Elasticsearch(
+            hosts=[f"{'https' if use_tls else 'http'}://{host}:{port}"],
+            api_key=api_key,
+            verify_certs=not get_env('ELASTICSEARCH_ALLOW_SELF_SIGNED', 'false').lower() == 'true'
+        )
+    else:
+        client = Elasticsearch(
+            hosts=[f"{'https' if use_tls else 'http'}://{host}:{port}"],
+            basic_auth=(username, password) if username and password else None,
+            verify_certs=not get_env('ELASTICSEARCH_ALLOW_SELF_SIGNED', 'false').lower() == 'true'
+        )
+    
+    try:
+        if isinstance(query, str):
+            import json
+            query = json.loads(query)
+        
+        result = client.search(index=index, body=query)
+        
+        return {
+            **input.input_data,
+            'elasticsearch_result': {
+                'hits': result.get('hits', {}).get('hits', []),
+                'total': result.get('hits', {}).get('total', {}).get('value', 0),
+                'success': True
+            }
+        }
+    finally:
+        client.close()
+`;
+
+    case 'twiddle.snowflake':
+      return `
+async def execute_snowflake(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on Snowflake.
+    
+    Connection details should be provided via environment variables.
+    """
+    import snowflake.connector
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    account = get_env('SNOWFLAKE_ACCOUNT')
+    user = get_env('SNOWFLAKE_USER')
+    password = get_env('SNOWFLAKE_PASSWORD')
+    warehouse = get_env('SNOWFLAKE_WAREHOUSE')
+    database = get_env('SNOWFLAKE_DATABASE')
+    schema = get_env('SNOWFLAKE_SCHEMA', 'PUBLIC')
+    role = get_env('SNOWFLAKE_ROLE')
+    
+    activity.logger.info(f"[{input.node_name}] Executing SQL on Snowflake {account}")
+    
+    conn = snowflake.connector.connect(
+        account=account,
+        user=user,
+        password=password,
+        warehouse=warehouse,
+        database=database,
+        schema=schema,
+        role=role or None
+    )
+    
+    try:
+        cursor = conn.cursor(snowflake.connector.DictCursor)
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        
+        return {
+            **input.input_data,
+            'sql_result': {
+                'rows': list(rows),
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        conn.close()
+`;
+
+    case 'twiddle.prestodb':
+      return `
+async def execute_prestodb(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute SQL query on PrestoDB/Trino.
+    
+    Connection details should be provided via environment variables.
+    """
+    from prestodb.dbapi import connect as presto_connect
+    from prestodb.auth import BasicAuthentication
+    
+    params = input.parameters
+    query = params.get('query', '')
+    
+    host = get_env('PRESTO_HOST', 'localhost')
+    port = int(get_env('PRESTO_PORT', '8080'))
+    user = get_env('PRESTO_USER', 'presto')
+    password = get_env('PRESTO_PASSWORD')
+    catalog = get_env('PRESTO_CATALOG', 'hive')
+    schema = get_env('PRESTO_SCHEMA', 'default')
+    
+    activity.logger.info(f"[{input.node_name}] Executing SQL on Presto {host}:{port}")
+    
+    auth = BasicAuthentication(user, password) if password else None
+    
+    conn = presto_connect(
+        host=host,
+        port=port,
+        user=user,
+        catalog=catalog,
+        schema=schema,
+        auth=auth
+    )
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        columns = [col[0] for col in cursor.description] if cursor.description else []
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        return {
+            **input.input_data,
+            'sql_result': {
+                'rows': rows,
+                'rowCount': len(rows),
+                'success': True
+            }
+        }
+    finally:
+        conn.close()
+`;
+
+    case 'twiddle.winrm':
+      return `
+async def execute_winrm(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute command on Windows via WinRM.
+    
+    Connection details should be provided via environment variables.
+    """
+    import winrm
+    
+    params = input.parameters
+    command = params.get('command', '')
+    use_powershell = params.get('powershell', True)
+    
+    host = get_env('WINRM_HOST')
+    username = get_env('WINRM_USER')
+    password = get_env('WINRM_PASSWORD')
+    use_https = get_env('WINRM_HTTPS', 'false').lower() == 'true'
+    
+    activity.logger.info(f"[{input.node_name}] Executing WinRM command on {host}")
+    
+    protocol = 'https' if use_https else 'http'
+    port = '5986' if use_https else '5985'
+    
+    session = winrm.Session(
+        f"{protocol}://{host}:{port}/wsman",
+        auth=(username, password),
+        transport='ntlm'
+    )
+    
+    if use_powershell:
+        result = session.run_ps(command)
+    else:
+        result = session.run_cmd(command)
+    
+    return {
+        **input.input_data,
+        'winrm_result': {
+            'stdout': result.std_out.decode('utf-8', errors='replace'),
+            'stderr': result.std_err.decode('utf-8', errors='replace'),
+            'exit_code': result.status_code,
+            'success': result.status_code == 0
+        }
+    }
+`;
+
+    case 'twiddle.mongodb':
+      return `
+async def execute_mongodb(input: ActivityInput) -> Dict[str, Any]:
+    """
+    Execute MongoDB query.
+    
+    Connection details should be provided via environment variables.
+    """
+    from pymongo import MongoClient
+    
+    params = input.parameters
+    collection_name = params.get('collection', '')
+    operation = params.get('operation', 'find')
+    query = params.get('query', {})
+    
+    host = get_env('MONGODB_HOST', 'localhost')
+    port = int(get_env('MONGODB_PORT', '27017'))
+    username = get_env('MONGODB_USER')
+    password = get_env('MONGODB_PASSWORD')
+    database = get_env('MONGODB_DATABASE', 'test')
+    auth_source = get_env('MONGODB_AUTH_SOURCE', 'admin')
+    
+    activity.logger.info(f"[{input.node_name}] Executing MongoDB {operation} on {collection_name}")
+    
+    if username and password:
+        uri = f"mongodb://{username}:{password}@{host}:{port}/{database}?authSource={auth_source}"
+    else:
+        uri = f"mongodb://{host}:{port}/{database}"
+    
+    client = MongoClient(uri)
+    db = client[database]
+    collection = db[collection_name]
+    
+    try:
+        if isinstance(query, str):
+            import json
+            query = json.loads(query)
+        
+        if operation == 'find':
+            result = list(collection.find(query))
+            # Convert ObjectId to string for serialization
+            for doc in result:
+                if '_id' in doc:
+                    doc['_id'] = str(doc['_id'])
+        elif operation == 'find_one':
+            result = collection.find_one(query)
+            if result and '_id' in result:
+                result['_id'] = str(result['_id'])
+        elif operation == 'count':
+            result = collection.count_documents(query)
+        elif operation == 'aggregate':
+            result = list(collection.aggregate(query))
+            for doc in result:
+                if '_id' in doc:
+                    doc['_id'] = str(doc['_id'])
+        else:
+            result = None
+        
+        return {
+            **input.input_data,
+            'mongodb_result': {
+                'data': result,
+                'success': True
+            }
+        }
+    finally:
+        client.close()
+`;
+
     default:
       const funcName = nodeType.split('.').pop()?.toLowerCase() || 'unknown';
       return `
@@ -995,6 +1499,16 @@ function generateRequirements(workflow: WorkflowData): string {
     requirements.push('', '# Oracle', 'oracledb>=2.0.0');
   }
 
+  // Add MongoDB dependencies
+  if (nodeTypes.has('twiddle.mongodb') || nodes.some(n => n.type.includes('credential.mongodbDatasource'))) {
+    requirements.push('', '# MongoDB', 'pymongo>=4.6.0');
+  }
+
+  // Add WinRM dependencies
+  if (nodeTypes.has('twiddle.winrm')) {
+    requirements.push('', '# WinRM', 'pywinrm>=0.4.3');
+  }
+
   return requirements.join('\n') + '\n';
 }
 
@@ -1201,20 +1715,132 @@ MSSQL_DB=mydb
 `;
   }
 
-  if (nodeTypes.has('twiddle.redis') || nodeTypes.has('twiddle.valkey') ||
-    nodes.some(n => n.type.includes('credential.redisDatasource') || n.type.includes('credential.valkeyDatasource'))) {
+  if (nodeTypes.has('twiddle.redis') || nodes.some(n => n.type.includes('credential.redisDatasource'))) {
     envContent += `
-# Redis/Valkey Configuration
+# Redis Configuration
 REDIS_HOST=localhost
 REDIS_PORT=6379
+REDIS_USER=
 REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_TLS=false
+`;
+  }
+
+  if (nodeTypes.has('twiddle.valkey') || nodes.some(n => n.type.includes('credential.valkeyDatasource'))) {
+    envContent += `
+# Valkey Configuration
+VALKEY_HOST=localhost
+VALKEY_PORT=6379
+VALKEY_USER=
+VALKEY_PASSWORD=
+VALKEY_DB=0
+VALKEY_TLS=false
+`;
+  }
+
+  if (nodeTypes.has('twiddle.oracle') || nodes.some(n => n.type.includes('credential.oracleDatasource'))) {
+    envContent += `
+# Oracle Configuration
+ORACLE_HOST=localhost
+ORACLE_PORT=1521
+ORACLE_USER=
+ORACLE_PASSWORD=
+ORACLE_SERVICE=ORCL
+`;
+  }
+
+  if (nodeTypes.has('twiddle.cassandra') || nodes.some(n => n.type.includes('credential.cassandraDatasource'))) {
+    envContent += `
+# Cassandra Configuration
+CASSANDRA_HOSTS=localhost
+CASSANDRA_PORT=9042
+CASSANDRA_USER=
+CASSANDRA_PASSWORD=
+CASSANDRA_KEYSPACE=
+`;
+  }
+
+  if (nodeTypes.has('twiddle.opensearch') || nodes.some(n => n.type.includes('credential.opensearchDatasource'))) {
+    envContent += `
+# OpenSearch Configuration
+OPENSEARCH_HOST=localhost
+OPENSEARCH_PORT=9200
+OPENSEARCH_USER=
+OPENSEARCH_PASSWORD=
+OPENSEARCH_TLS=false
+OPENSEARCH_ALLOW_SELF_SIGNED=false
+`;
+  }
+
+  if (nodeTypes.has('twiddle.elasticsearch') || nodes.some(n => n.type.includes('credential.elasticsearchDatasource'))) {
+    envContent += `
+# Elasticsearch Configuration
+ELASTICSEARCH_HOST=localhost
+ELASTICSEARCH_PORT=9200
+ELASTICSEARCH_USER=
+ELASTICSEARCH_PASSWORD=
+ELASTICSEARCH_API_KEY=
+ELASTICSEARCH_TLS=false
+ELASTICSEARCH_ALLOW_SELF_SIGNED=false
+`;
+  }
+
+  if (nodeTypes.has('twiddle.snowflake') || nodes.some(n => n.type.includes('credential.snowflakeDatasource'))) {
+    envContent += `
+# Snowflake Configuration
+SNOWFLAKE_ACCOUNT=
+SNOWFLAKE_USER=
+SNOWFLAKE_PASSWORD=
+SNOWFLAKE_WAREHOUSE=
+SNOWFLAKE_DATABASE=
+SNOWFLAKE_SCHEMA=PUBLIC
+SNOWFLAKE_ROLE=
+`;
+  }
+
+  if (nodeTypes.has('twiddle.prestodb') || nodes.some(n => n.type.includes('credential.prestodbDatasource'))) {
+    envContent += `
+# PrestoDB/Trino Configuration
+PRESTO_HOST=localhost
+PRESTO_PORT=8080
+PRESTO_USER=presto
+PRESTO_PASSWORD=
+PRESTO_CATALOG=hive
+PRESTO_SCHEMA=default
+`;
+  }
+
+  if (nodeTypes.has('twiddle.mongodb') || nodes.some(n => n.type.includes('credential.mongodbDatasource'))) {
+    envContent += `
+# MongoDB Configuration
+MONGODB_HOST=localhost
+MONGODB_PORT=27017
+MONGODB_USER=
+MONGODB_PASSWORD=
+MONGODB_DATABASE=test
+MONGODB_AUTH_SOURCE=admin
+`;
+  }
+
+  if (nodeTypes.has('twiddle.winrm')) {
+    envContent += `
+# WinRM Configuration
+WINRM_HOST=
+WINRM_USER=
+WINRM_PASSWORD=
+WINRM_HTTPS=false
 `;
   }
 
   if (nodeTypes.has('twiddle.ssh')) {
     envContent += `
 # SSH Configuration
-SSH_PRIVATE_KEY_PATH=/path/to/key
+SSH_HOST=
+SSH_PORT=22
+SSH_USERNAME=
+SSH_PASSWORD=
+SSH_PRIVATE_KEY_PATH=
 `;
   }
 

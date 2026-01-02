@@ -8,11 +8,53 @@ import { prisma } from '../../lib/prisma.js';
 import { generatePythonCode } from '../../lib/export/temporal-python/index.js';
 import { commitWorkflowToGitHub } from './helpers.js';
 import type { WorkflowCreateInput, WorkflowUpdateInput } from '@twiddle/shared';
+import {
+    createSchedule,
+    updateSchedule,
+    deleteSchedule,
+    pauseSchedule,
+    resumeSchedule,
+    scheduleExists,
+    type ScheduleSpec,
+} from '../../lib/temporal-client.js';
 
 // Lock timeout in milliseconds (2 minutes)
 const LOCK_TIMEOUT = 2 * 60 * 1000;
 // Request timeout in milliseconds (1 minute)
 const REQUEST_TIMEOUT = 1 * 60 * 1000;
+
+// Helper to convert workflow name to task queue
+function toTaskQueue(name: string): string {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .replace(/^(\d)/, '_$1') || 'workflow';
+}
+
+// Extract interval/cron from workflow nodes
+interface WorkflowNode {
+    type?: string;
+    parameters?: {
+        cron?: string;
+        interval?: number;
+    };
+}
+
+function extractScheduleSpec(nodes: WorkflowNode[]): ScheduleSpec | null {
+    const intervalNode = nodes.find((n) => n.type === 'twiddle.interval');
+    if (!intervalNode) return null;
+
+    const params = intervalNode.parameters || {};
+    if (params.cron) {
+        return { cron: params.cron };
+    }
+    if (params.interval) {
+        // Interval is in minutes, convert to seconds
+        return { intervalSeconds: params.interval * 60 };
+    }
+    return null;
+}
 
 export const crudRoutes: FastifyPluginAsync = async (app) => {
     // List all workflows (filtered by group membership if authenticated)
@@ -246,6 +288,32 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
             },
         });
 
+        // Sync schedule with Temporal if workflow has interval trigger
+        const workflowNodesForSchedule = nodes as WorkflowNode[] | undefined;
+        if (workflowNodesForSchedule) {
+            const scheduleSpec = extractScheduleSpec(workflowNodesForSchedule);
+            if (scheduleSpec) {
+                // Create schedule asynchronously - don't block workflow creation
+                void (async () => {
+                    try {
+                        const taskQueue = toTaskQueue(workflow.name);
+                        const workflowType = `${taskQueue.charAt(0).toUpperCase()}${taskQueue.slice(1)}Workflow`;
+                        await createSchedule(
+                            workflow.id,
+                            workflowType,
+                            taskQueue,
+                            scheduleSpec,
+                            [{}],
+                            { workflowId: workflow.id, workflowName: workflow.name }
+                        );
+                        console.log(`Created Temporal schedule for workflow ${workflow.id}`);
+                    } catch (error) {
+                        console.error(`Failed to create schedule for workflow ${workflow.id}:`, error);
+                    }
+                })();
+            }
+        }
+
         return reply.status(201).send(workflow);
     });
 
@@ -323,6 +391,54 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
                 }
             }
 
+            // Sync Temporal schedule if nodes changed or active status changed
+            void (async () => {
+                try {
+                    const updatedNodes = (workflow.nodes as WorkflowNode[]) || [];
+                    const scheduleSpec = extractScheduleSpec(updatedNodes);
+                    const hasSchedule = await scheduleExists(id);
+
+                    if (scheduleSpec) {
+                        // Workflow has interval trigger
+                        if (hasSchedule) {
+                            // Update existing schedule
+                            await updateSchedule(id, scheduleSpec);
+                            console.log(`Updated Temporal schedule for workflow ${id}`);
+                        } else {
+                            // Create new schedule
+                            const taskQueue = toTaskQueue(workflow.name);
+                            const workflowType = `${taskQueue.charAt(0).toUpperCase()}${taskQueue.slice(1)}Workflow`;
+                            await createSchedule(
+                                id,
+                                workflowType,
+                                taskQueue,
+                                scheduleSpec,
+                                [{}],
+                                { workflowId: id, workflowName: workflow.name }
+                            );
+                            console.log(`Created Temporal schedule for workflow ${id}`);
+                        }
+
+                        // Handle pause/resume based on active status
+                        if (active !== undefined) {
+                            if (active) {
+                                await resumeSchedule(id);
+                                console.log(`Resumed Temporal schedule for workflow ${id}`);
+                            } else {
+                                await pauseSchedule(id);
+                                console.log(`Paused Temporal schedule for workflow ${id}`);
+                            }
+                        }
+                    } else if (hasSchedule) {
+                        // Interval trigger removed - delete schedule
+                        await deleteSchedule(id);
+                        console.log(`Deleted Temporal schedule for workflow ${id} (interval trigger removed)`);
+                    }
+                } catch (error) {
+                    console.error(`Failed to sync schedule for workflow ${id}:`, error);
+                }
+            })();
+
             return workflow;
         },
     );
@@ -330,6 +446,17 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
     // Delete a workflow
     app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
         const { id } = request.params;
+
+        // Delete Temporal schedule if it exists (async, don't block)
+        void (async () => {
+            try {
+                await deleteSchedule(id);
+                console.log(`Deleted Temporal schedule for workflow ${id}`);
+            } catch (error) {
+                // Ignore errors - schedule may not exist
+                console.log(`No schedule to delete for workflow ${id}`);
+            }
+        })();
 
         await prisma.workflow.delete({
             where: { id },
