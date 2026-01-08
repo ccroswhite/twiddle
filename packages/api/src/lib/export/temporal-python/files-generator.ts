@@ -99,6 +99,7 @@ export function generateRequirements(workflow: WorkflowData): string {
  */
 export function generateReadme(workflow: WorkflowData): string {
     const workflowName = toPythonIdentifier(workflow.name);
+    const scheduleId = `${workflowName}-schedule`;
 
     return `# ${workflow.name}
 
@@ -175,6 +176,47 @@ cp .env.example .env
    python starter.py
    \`\`\`
 
+## Scheduling
+
+This workflow supports scheduled execution using Temporal's Schedule API.
+
+### Create or Update a Schedule
+
+\`\`\`bash
+# Create schedule using the default configuration from Twiddle
+python scheduler.py create
+
+# Override with a cron expression (runs every weekday at 9am)
+python scheduler.py create --cron "0 9 * * MON-FRI"
+
+# Override with an interval (runs every 30 minutes)
+python scheduler.py create --interval 30m
+
+# Create schedule in paused state
+python scheduler.py create --paused
+\`\`\`
+
+### Manage the Schedule
+
+\`\`\`bash
+# View schedule status
+python scheduler.py status
+
+# Pause scheduled execution
+python scheduler.py pause
+
+# Resume execution
+python scheduler.py resume
+
+# Trigger immediate execution
+python scheduler.py trigger
+
+# Delete the schedule
+python scheduler.py delete
+\`\`\`
+
+Schedule ID: \`${scheduleId}\`
+
 ## Files
 
 | File | Description |
@@ -183,6 +225,7 @@ cp .env.example .env
 | \`activities.py\` | Activity implementations |
 | \`worker.py\` | Worker that executes workflows |
 | \`starter.py\` | Script to start workflow executions |
+| \`scheduler.py\` | Manage scheduled workflow executions |
 | \`requirements.txt\` | Python dependencies |
 | \`Dockerfile\` | Docker image definition |
 | \`docker-compose.yml\` | Multi-container Docker setup |
