@@ -16,7 +16,7 @@
  */
 
 // Re-export types
-export type { WorkflowNode, WorkflowConnection, WorkflowData, GeneratedPythonCode } from './types.js';
+export type { WorkflowNode, WorkflowConnection, WorkflowData, WorkflowSchedule, GeneratedPythonCode } from './types.js';
 export { TRIGGER_NODE_TYPES, isActivityNode } from './types.js';
 
 // Re-export utilities
@@ -30,6 +30,7 @@ export { generateActivityExecution, generateWorkflowFile } from './workflow-gene
 export { generateActivitiesFile } from './activities-generator.js';
 export { generateWorkerFile } from './worker-generator.js';
 export { generateStarterFile } from './starter-generator.js';
+export { generateSchedulerFile } from './scheduler-generator.js';
 export {
     generateRequirements,
     generateReadme,
@@ -46,6 +47,7 @@ import { generateWorkflowFile } from './workflow-generator.js';
 import { generateActivitiesFile } from './activities-generator.js';
 import { generateWorkerFile } from './worker-generator.js';
 import { generateStarterFile } from './starter-generator.js';
+import { generateSchedulerFile } from './scheduler-generator.js';
 import {
     generateRequirements,
     generateReadme,
@@ -76,6 +78,7 @@ export function generatePythonExport(workflow: WorkflowData): Record<string, str
         'activities.py': generateActivitiesFile(workflow),
         'worker.py': generateWorkerFile(workflow),
         'starter.py': generateStarterFile(workflow),
+        'scheduler.py': generateSchedulerFile(workflow),
         'requirements.txt': generateRequirements(workflow),
         'Dockerfile': generateDockerfile(workflow),
         'docker-compose.yml': generateDockerCompose(workflow),

@@ -26,12 +26,30 @@ export interface WorkflowConnection {
     targetHandle?: string;
 }
 
+/**
+ * Workflow schedule configuration for Temporal Schedules.
+ */
+export interface WorkflowSchedule {
+    enabled: boolean;
+    mode: 'simple' | 'cron';
+    simple?: {
+        frequency: 'minutes' | 'hours' | 'daily' | 'weekly' | 'monthly';
+        interval?: number;
+        time?: string;
+        daysOfWeek?: number[];
+        dayOfMonth?: number;
+        timezone?: string;
+    };
+    cron?: string;
+}
+
 export interface WorkflowData {
     id: string;
     name: string;
     description?: string;
     nodes: WorkflowNode[];
     connections: WorkflowConnection[];
+    schedule?: WorkflowSchedule;
 }
 
 /**
