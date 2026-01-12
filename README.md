@@ -1,6 +1,6 @@
 # Twiddle
 
-A UI to create workflows that define units of execution on the Temporal platform.  This tools takes inspiration from n8n, to define constrained units of execution the execute as workers powered by [Temporal](https://temporal.io).
+A UI to create workflows that define units of execution on the Temporal platform.  This tools takes inspiration from n8n platform; three are constrained blocks of execution for specific functioinality that are constrained which are translate to units of executiion that execute as workers.  This is all powered by [Temporal](https://temporal.io).
 
 ## Features
 
