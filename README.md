@@ -1,6 +1,6 @@
 # Twiddle
 
-A workflow automation platform similar to n8n, powered by [Temporal](https://temporal.io) and [Apache Airflow](https://airflow.apache.org) for reliable workflow execution.
+A UI to create workflows that define units of execution on the Temporal platform.  This tools takes inspiration from n8n, to define constrained units of execution the execute as workers powered by [Temporal](https://temporal.io).
 
 ## Features
 
