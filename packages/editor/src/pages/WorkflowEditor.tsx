@@ -598,7 +598,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         }
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [id, isNew, openBrowser, location.key]); // showWorkflowBrowser intentionally omitted to avoid re-triggering
 
   async function loadGitHubStatus(workflowId: string) {
@@ -819,29 +819,29 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         setNodes((nds: Node[]) => nds.map((node) => {
           if (node.id === params.source) {
             // Source node publishes an activity
-            const params = (node.data.parameters || {}) as Record<string, any>;
-            const published = new Set<string>((params.publishedActivity as string[]) || []);
+            const nodeParams = (node.data.parameters || {}) as Record<string, any>;
+            const published = new Set<string>((nodeParams.publishedActivity as string[]) || []);
             published.add(`${node.id}-OK`);
 
             return {
               ...node,
               data: {
                 ...node.data,
-                parameters: { ...params, publishedActivity: Array.from(published) },
+                parameters: { ...nodeParams, publishedActivity: Array.from(published) },
               }
             };
           }
           if (node.id === params.target) {
             // Target node requires an activity
-            const params = (node.data.parameters || {}) as Record<string, any>;
-            const required = new Set<string>((params.requiredActivity as string[]) || []);
+            const nodeParams = (node.data.parameters || {}) as Record<string, any>;
+            const required = new Set<string>((nodeParams.requiredActivity as string[]) || []);
             required.add(`${params.source}-OK`);
 
             return {
               ...node,
               data: {
                 ...node.data,
-                parameters: { ...params, requiredActivity: Array.from(required) },
+                parameters: { ...nodeParams, requiredActivity: Array.from(required) },
               }
             };
           }
@@ -1109,7 +1109,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             onPaneClick={async (event: React.MouseEvent) => {
               if (pendingNode && reactFlowInstance.current) {
                 const { screenToFlowPosition } = reactFlowInstance.current;
-                let position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+                const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
                 // Snap to grid
                 position.x = Math.round(position.x / 20) * 20;

@@ -37,7 +37,6 @@ describe('DataSources API Routes (RBAC & Redaction)', () => {
 
     const mockAdminUser = { id: 'admin-1', email: 'admin@test.com', isAdmin: true, isActive: true };
     const mockRegularUserA = { id: 'user-a', email: 'usera@test.com', isAdmin: false, isActive: true };
-    const mockRegularUserB = { id: 'user-b', email: 'userb@test.com', isAdmin: false, isActive: true };
 
     const mockSession = (user: any) => {
         vi.mocked(prisma.session.findUnique).mockResolvedValue({

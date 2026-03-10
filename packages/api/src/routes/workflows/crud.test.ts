@@ -27,7 +27,7 @@ describe('Workflows CRUD API Routes', () => {
         // CRUD logic relies on session user auth decorating the request
         // We mock that simply with a preHandler for these isolating unit tests
         app.decorateRequest('user', null);
-        app.addHook('preHandler', async (request) => {
+        app.addHook('preHandler', async (request: any) => {
             const authHeader = request.headers['authorization'];
             if (authHeader === 'user-a') {
                 (request as any).user = { id: 'user-a' };

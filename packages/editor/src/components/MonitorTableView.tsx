@@ -46,8 +46,8 @@ export function MonitorTableView({ nodes }: MonitorTableViewProps) {
 
                             // Mocking statuses for now since we are in editor mode mostly
                             // In a real execution view, this would map to actual run states
-                            let statusIcon = <Clock className="w-3.5 h-3.5 text-slate-400" />;
-                            let statusText = "Wait Condition";
+                            const statusIcon = <Clock className="w-3.5 h-3.5 text-slate-400" />;
+                            const statusText = "Wait Condition";
 
                             return (
                                 <tr key={node.id} className="hover:bg-blue-50/50 cursor-default">

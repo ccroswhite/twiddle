@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
-import { X, Zap, Clock, RefreshCw, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { X, Zap } from 'lucide-react';
 import { useReactFlow, type Node } from '@xyflow/react';
 import { isActivityNode, getNodeDisplayName } from '@/utils/nodeConfig';
 import { nodeParameterEditors } from '@/components/nodeParameterEditors';
 import { workflowsApi } from '@/lib/api';
+import { NodeGeneralTab } from './properties/node/NodeGeneralTab';
+import { NodeSchedulingTab } from './properties/node/NodeSchedulingTab';
+import { NodeRequiredActivityTab } from './properties/node/NodeRequiredActivityTab';
+import { NodePublishedActivityTab } from './properties/node/NodePublishedActivityTab';
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -298,294 +302,46 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 bg-slate-50">
         {activeTab === 'general' && (
-          <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Node Name
-              </label>
-              {nodeType === 'twiddle.embeddedWorkflow' ? (
-                <div className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-600">
-                  {label}
-                </div>
-              ) : (
-                <input
-                  type="text"
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                />
-              )}
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Node Type
-              </label>
-              <div className="px-2 py-1.5 bg-slate-50 border border-slate-200 rounded text-sm text-slate-600 font-mono">
-                {nodeType}
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">Parameters</h3>
-              {renderParameterEditor()}
-            </div>
-          </div>
+          <NodeGeneralTab
+            label={label}
+            setLabel={setLabel}
+            nodeType={nodeType}
+            renderParameterEditor={renderParameterEditor}
+          />
         )}
 
         {activeTab === 'scheduling' && isActivityNode(nodeType) && (
-          <div className="space-y-4">
-            {/* Timeout Settings */}
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-                <Clock className="w-4 h-4 text-slate-500" />
-                Timeouts
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Start-to-Close Timeout (sec)
-                </label>
-                <input
-                  type="number"
-                  value={(parameters.startToCloseTimeout as number) || 300}
-                  onChange={(e) => updateParameter('startToCloseTimeout', parseInt(e.target.value) || 300)}
-                  className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                  min={1}
-                />
-                <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
-                  Max time per execution attempt
-                </p>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Schedule-to-Close Timeout (sec)
-                </label>
-                <input
-                  type="number"
-                  value={(parameters.scheduleToCloseTimeout as number) || 0}
-                  onChange={(e) => updateParameter('scheduleToCloseTimeout', parseInt(e.target.value) || 0)}
-                  className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                  min={0}
-                />
-                <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wide">
-                  Total time including retries (0 = unlimited)
-                </p>
-              </div>
-            </div>
-
-            {/* Retry Settings */}
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-                <RefreshCw className="w-4 h-4 text-slate-500" />
-                Retry Policy
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  id="retryOnFail"
-                  checked={(parameters.retryOnFail as boolean) ?? true}
-                  onChange={(e) => updateParameter('retryOnFail', e.target.checked)}
-                  className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                />
-                <label htmlFor="retryOnFail" className="text-[13px] font-medium text-slate-700">
-                  Retry on failure
-                </label>
-              </div>
-
-              {(parameters.retryOnFail ?? true) && (
-                <div className="grid grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Max Attempts</label>
-                    <input
-                      type="number"
-                      value={(parameters.maxRetries as number) || 3}
-                      onChange={(e) => updateParameter('maxRetries', parseInt(e.target.value) || 3)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                      min={1} max={100}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Initial Interval (s)</label>
-                    <input
-                      type="number"
-                      value={(parameters.retryInterval as number) || 1}
-                      onChange={(e) => updateParameter('retryInterval', parseInt(e.target.value) || 1)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                      min={1}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Backoff Coefficient</label>
-                    <input
-                      type="number"
-                      value={(parameters.backoffCoefficient as number) || 2}
-                      onChange={(e) => updateParameter('backoffCoefficient', parseFloat(e.target.value) || 2)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm"
-                      min={1} step={0.1}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-                <AlertTriangle className="w-4 h-4 text-slate-500" />
-                Error Handling
-              </div>
-              <div className="flex items-start gap-2 mt-2">
-                <input
-                  type="checkbox"
-                  id="continueOnFail"
-                  checked={(parameters.continueOnFail as boolean) ?? false}
-                  onChange={(e) => updateParameter('continueOnFail', e.target.checked)}
-                  className="mt-1 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                />
-                <div>
-                  <label htmlFor="continueOnFail" className="text-[13px] font-medium text-slate-700 block">
-                    Continue workflow on failure
-                  </label>
-                  <div className="text-[11px] text-slate-500 mt-1 leading-snug">
-                    If enabled, the workflow will continue to the next step even if this job fails after all retries exhaust.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <NodeSchedulingTab
+            parameters={parameters}
+            updateParameter={updateParameter}
+          />
         )}
 
         {activeTab === 'requiredActivity' && (
-          <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Required Activity</h3>
-              <p className="text-[11px] text-slate-500 mb-3 leading-snug">
-                Define strictly required activity completions. This node will not execute until all required activities have been published as complete successfully.
-              </p>
-
-              <div className="space-y-2">
-                {((parameters.requiredActivity as string[]) || []).map((req, idx) => {
-                  // Collect ALL published activities across the entire graph and global state
-                  const allNodes = getNodes();
-                  const allPublished = new Set<string>(globalActivities);
-                  allNodes.forEach((n: any) => {
-                    const pub = (n.data.parameters as Record<string, any>)?.publishedActivity as string[] | undefined;
-                    if (pub && Array.isArray(pub)) {
-                      pub.forEach(p => allPublished.add(p));
-                    }
-                    // Also implicitly add NodeID-OK for every explicit node just in case
-                    allPublished.add(`${n.id}-OK`);
-                  });
-                  const availableActivities = Array.from(allPublished);
-
-                  return (
-                    <div key={idx} className="flex items-center gap-2">
-                      <select
-                        value={req || ''}
-                        onChange={(e) => {
-                          const newReqs = [...((parameters.requiredActivity as string[]) || [])];
-                          newReqs[idx] = e.target.value;
-                          updateParameter('requiredActivity', newReqs.filter(Boolean));
-                        }}
-                        className="flex-1 px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm font-mono bg-slate-50"
-                      >
-                        <option value="">Select a published activity...</option>
-                        {availableActivities.map(activity => (
-                          <option key={activity} value={activity}>{activity}</option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => {
-                          const newReqs = [...((parameters.requiredActivity as string[]) || [])];
-                          newReqs.splice(idx, 1);
-                          updateParameter('requiredActivity', newReqs);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-
-                <button
-                  onClick={() => {
-                    const newReqs = [...((parameters.requiredActivity as string[]) || []), ''];
-                    updateParameter('requiredActivity', newReqs);
-                  }}
-                  className="flex items-center gap-1.5 text-[12px] font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 px-2 py-1.5 rounded transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Required Activity
-                </button>
-              </div>
-            </div>
-          </div>
+          <NodeRequiredActivityTab
+            parameters={parameters}
+            updateParameter={updateParameter}
+            availableActivities={(function () {
+              const allNodes = getNodes();
+              const allPublished = new Set<string>(globalActivities);
+              allNodes.forEach((n: any) => {
+                const pub = (n.data.parameters as Record<string, any>)?.publishedActivity as string[] | undefined;
+                if (pub && Array.isArray(pub)) {
+                  pub.forEach(p => allPublished.add(p));
+                }
+                allPublished.add(`${n.id}-OK`);
+              });
+              return Array.from(allPublished);
+            })()}
+          />
         )}
 
         {activeTab === 'publishedActivity' && (
-          <div className="space-y-4">
-            <div className="bg-white border border-slate-200 rounded-sm p-3 shadow-sm">
-              <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Published Activity</h3>
-              <p className="text-[11px] text-slate-500 mb-3 leading-snug">
-                Define activity states to publish upon successful completion. These can be required by other activities down the graph.
-              </p>
-
-              <div className="space-y-2">
-                {((parameters.publishedActivity as string[]) || []).map((pub, idx) => (
-                  <div key={idx} className="flex flex-col gap-2 bg-slate-50 p-2 rounded border border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={pub}
-                        onChange={(e) => {
-                          const newPubs = [...((parameters.publishedActivity as string[]) || [])];
-                          newPubs[idx] = e.target.value;
-                          updateParameter('publishedActivity', newPubs.filter(Boolean));
-                        }}
-                        className="flex-1 px-2 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 text-sm font-mono bg-slate-50"
-                        placeholder={`e.g. ${(node as any).id || 'NodeID'}-OK`}
-                      />
-                      <button
-                        onClick={() => {
-                          const newPubs = [...((parameters.publishedActivity as string[]) || [])];
-                          newPubs.splice(idx, 1);
-                          updateParameter('publishedActivity', newPubs);
-                        }}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-100 rounded"
-                        title="Delete Published Activity"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {/* Helper to set default event name if empty */}
-                    {!pub && (
-                      <button
-                        onClick={() => {
-                          const newPubs = [...((parameters.publishedActivity as string[]) || [])];
-                          newPubs[idx] = `${(node as any).id}-OK`;
-                          updateParameter('publishedActivity', newPubs);
-                        }}
-                        className="text-[10px] text-left text-primary-600 hover:text-primary-700 font-medium"
-                      >
-                        Use default: {(node as any).id}-OK
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <button
-                  onClick={() => {
-                    const newPubs = [...((parameters.publishedActivity as string[]) || []), ''];
-                    updateParameter('publishedActivity', newPubs);
-                  }}
-                  className="flex items-center gap-1.5 text-[12px] font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 px-2 py-1.5 rounded transition-colors"
-                >
-                  <Plus className="w-3 h-3" />
-                  Add Published Activity
-                </button>
-              </div>
-            </div>
-          </div>
+          <NodePublishedActivityTab
+            parameters={parameters}
+            updateParameter={updateParameter}
+            nodeId={node.id}
+          />
         )}
       </div>
 

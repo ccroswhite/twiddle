@@ -12,7 +12,7 @@ interface MenuPosition {
 /**
  * Workflow context menu state - uses generic to support any workflow-like object
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 interface WorkflowMenu extends MenuPosition {
     workflow: any;
 }
