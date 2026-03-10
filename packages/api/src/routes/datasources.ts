@@ -41,7 +41,7 @@ async function getUserGroupIds(userId: string): Promise<string[]> {
 // Check if user can access a data source (owner, admin, in shared group, or legacy data source)
 async function canAccessDataSource(
   user: { id: string; isAdmin: boolean },
-  dataSource: { createdById: string | null; groups?: { groupId: string }[] }
+  dataSource: { createdById: string | null; permissions?: { groupId: string | null; userId: string | null; permission: string }[] }
 ): Promise<boolean> {
   // Admins can access all data sources
   if (user.isAdmin) return true;
@@ -52,16 +52,22 @@ async function canAccessDataSource(
   // Legacy data sources (no owner) are accessible to all authenticated users
   if (dataSource.createdById === null) return true;
 
-  // If shared with any groups, check membership
-  if (dataSource.groups && dataSource.groups.length > 0) {
-    const groupIds = dataSource.groups.map(g => g.groupId);
-    const membership = await prisma.groupMember.findFirst({
-      where: {
-        userId: user.id,
-        groupId: { in: groupIds }
-      },
-    });
-    return !!membership;
+  // If shared with permissions, check membership
+  if (dataSource.permissions && dataSource.permissions.length > 0) {
+    // Direct user assignment
+    if (dataSource.permissions.some(p => p.userId === user.id)) return true;
+
+    // Group assignment
+    const groupIds = dataSource.permissions.filter(p => p.groupId).map(p => p.groupId as string);
+    if (groupIds.length > 0) {
+      const membership = await prisma.groupMember.findFirst({
+        where: {
+          userId: user.id,
+          groupId: { in: groupIds }
+        },
+      });
+      return !!membership;
+    }
   }
 
   return false;
@@ -89,7 +95,8 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       : {
         OR: [
           { createdById: user.id },
-          { groups: { some: { groupId: { in: groupIds } } } },
+          { permissions: { some: { groupId: { in: groupIds } } } },
+          { permissions: { some: { userId: user.id } } },
           { createdById: null }, // Legacy data sources with no owner
         ],
       };
@@ -103,14 +110,11 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
         createdAt: true,
         updatedAt: true,
         createdById: true,
-        groups: {
+        permissions: {
           select: {
-            group: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            permission: true,
+            user: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } },
           },
         },
       },
@@ -125,7 +129,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       createdAt: ds.createdAt,
       updatedAt: ds.updatedAt,
       createdById: ds.createdById,
-      groups: ds.groups.map(g => g.group),
+      permissions: ds.permissions,
+      groups: ds.permissions.filter((p: any) => p.group).map((p: any) => p.group),
+      users: ds.permissions.filter((p: any) => p.user).map((p: any) => p.user),
       isOwner: ds.createdById === user.id || (ds.createdById === null && user.isAdmin),
     }));
   });
@@ -148,15 +154,13 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
         createdAt: true,
         updatedAt: true,
         createdById: true,
-        groups: {
+        permissions: {
           select: {
             groupId: true,
-            group: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            userId: true,
+            permission: true,
+            user: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } },
           },
         },
       },
@@ -179,7 +183,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       createdAt: dataSource.createdAt,
       updatedAt: dataSource.updatedAt,
       createdById: dataSource.createdById,
-      groups: dataSource.groups.map(g => g.group),
+      permissions: dataSource.permissions,
+      groups: dataSource.permissions.filter((p: any) => p.group).map((p: any) => p.group),
+      users: dataSource.permissions.filter((p: any) => p.user).map((p: any) => p.user),
       isOwner: dataSource.createdById === user.id || (dataSource.createdById === null && user.isAdmin),
     };
   });
@@ -196,14 +202,11 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
     const dataSource = await prisma.dataSource.findUnique({
       where: { id },
       include: {
-        groups: {
+        permissions: {
           select: {
-            group: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            permission: true,
+            user: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } },
           },
         },
       },
@@ -237,7 +240,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       createdAt: dataSource.createdAt,
       updatedAt: dataSource.updatedAt,
       createdById: dataSource.createdById,
-      groups: dataSource.groups.map(g => g.group),
+      permissions: dataSource.permissions,
+      groups: dataSource.permissions.filter((p: any) => p.group).map((p: any) => p.group),
+      users: dataSource.permissions.filter((p: any) => p.user).map((p: any) => p.user),
       isOwner: true,
     };
   });
@@ -260,15 +265,15 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Create data source with group associations
+    // Create data source with permissions associations
     const dataSource = await prisma.dataSource.create({
       data: {
         name,
         type,
         data: data as object,
         createdById: user.id,
-        groups: groupIds && groupIds.length > 0 ? {
-          create: groupIds.map(groupId => ({ groupId }))
+        permissions: groupIds && groupIds.length > 0 ? {
+          create: groupIds.map(groupId => ({ groupId, permission: 'READ' }))
         } : undefined,
       },
       select: {
@@ -278,14 +283,11 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
         createdAt: true,
         updatedAt: true,
         createdById: true,
-        groups: {
+        permissions: {
           select: {
-            group: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            permission: true,
+            user: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } },
           },
         },
       },
@@ -298,7 +300,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       createdAt: dataSource.createdAt,
       updatedAt: dataSource.updatedAt,
       createdById: dataSource.createdById,
-      groups: dataSource.groups.map(g => g.group),
+      permissions: dataSource.permissions,
+      groups: dataSource.permissions.filter((p: any) => p.group).map((p: any) => p.group),
+      users: dataSource.permissions.filter((p: any) => p.user).map((p: any) => p.user),
       isOwner: true,
     });
   });
@@ -318,7 +322,8 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       where: { id },
       select: {
         createdById: true,
-        groups: { select: { groupId: true } },
+        data: true,
+        permissions: { select: { groupId: true, userId: true, permission: true } },
       },
     });
 
@@ -347,16 +352,16 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Update data source and group associations
+    // Update data source and permissions
     const dataSource = await prisma.dataSource.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
-        ...(data !== undefined && { data: data as object }),
+        ...(data !== undefined && { data: { ...(existing.data as object), ...(data as object) } }),
         ...(groupIds !== undefined && {
-          groups: {
+          permissions: {
             deleteMany: {},
-            create: groupIds.map(groupId => ({ groupId })),
+            create: groupIds.map(groupId => ({ groupId, permission: 'READ' })),
           },
         }),
       },
@@ -367,14 +372,11 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
         createdAt: true,
         updatedAt: true,
         createdById: true,
-        groups: {
+        permissions: {
           select: {
-            group: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+            permission: true,
+            user: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } },
           },
         },
       },
@@ -387,7 +389,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       createdAt: dataSource.createdAt,
       updatedAt: dataSource.updatedAt,
       createdById: dataSource.createdById,
-      groups: dataSource.groups.map(g => g.group),
+      permissions: dataSource.permissions,
+      groups: dataSource.permissions.filter((p: any) => p.group).map((p: any) => p.group),
+      users: dataSource.permissions.filter((p: any) => p.user).map((p: any) => p.user),
       isOwner: dataSource.createdById === user.id || (dataSource.createdById === null && user.isAdmin),
     };
   });
@@ -436,7 +440,7 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
     const dataSource = await prisma.dataSource.findUnique({
       where: { id },
       include: {
-        groups: { select: { groupId: true } },
+        permissions: { select: { groupId: true, userId: true, permission: true } },
       },
     });
 

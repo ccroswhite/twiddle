@@ -12,41 +12,42 @@ datasource db {
 // ============================================================================
 
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
+  id            String    @id @default(cuid())
+  email         String    @unique
   name          String?
-  password      String?  // Hashed password for local auth (null for SSO users)
-  provider      String   @default("local") // local, azure-entra
-  providerId    String?  // External provider user ID
+  password      String? // Hashed password for local auth (null for SSO users)
+  provider      String    @default("local") // local, azure-entra
+  providerId    String? // External provider user ID
   avatarUrl     String?
-  isAdmin       Boolean  @default(false)
-  isActive      Boolean  @default(true)
-  emailVerified Boolean  @default(false)
+  isAdmin       Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
   lastLoginAt   DateTime?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
-  updatedAt     DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   // Password reset
   resetToken       String?
   resetTokenExpiry DateTime?
 
   // Sessions for local auth
-  sessions      Session[]
-  
+  sessions Session[]
+
   // Group memberships
   groupMemberships GroupMember[]
-  
+
   // Folders created by this user
-  folders       Folder[]
-  
+  folders Folder[]
+
   // Folder permissions granted to this user
   folderPermissions FolderPermission[]
-  
+
   // Workflows created by this user
-  workflows     Workflow[]
-  createdVersions WorkflowVersion[]
-  dataSources   DataSource[]
+  workflows             Workflow[]
+  createdVersions       WorkflowVersion[]
+  dataSources           DataSource[]
+  dataSourcePermissions DataSourcePermission[]
 
   // SDLC Promotions
   requestedPromotions PromotionRequest[] @relation("RequestedPromotions")
@@ -55,11 +56,9 @@ model User {
   // Workflow Locks
   workflowLocks WorkflowLock[]
   lockRequests  WorkflowLock[] @relation("LockRequests")
-  
+
   // Workflow Executions
   startedExecutions WorkflowExecution[]
-
-
 
   @@unique([provider, providerId])
   @@index([email])
@@ -68,15 +67,15 @@ model User {
 
 // Session for local authentication
 model Session {
-  id           String   @id @default(cuid())
-  userId       String
-  token        String   @unique
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  ipAddress    String?
-  userAgent    String?
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ipAddress String?
+  userAgent String?
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([userId])
@@ -93,19 +92,19 @@ model Group {
   createdById String?
 
   // Members of this group
-  members     GroupMember[]
-  
+  members GroupMember[]
+
   // Folders owned by this group
-  folders     Folder[]
-  
+  folders Folder[]
+
   // Folder permissions granted to this group
   folderPermissions FolderPermission[]
-  
+
   // Workflows in this group (legacy - prefer folder-based organization)
-  workflows   Workflow[]
-  
+  workflows Workflow[]
+
   // Data sources accessible to this group
-  dataSourceGroups DataSourceGroup[]
+  dataSourcePermissions DataSourcePermission[]
 
   @@index([name])
   @@index([isDefault])
@@ -131,10 +130,10 @@ model GroupMember {
 // ============================================================================
 
 enum Environment {
-  DV  // Development
-  UT  // User Testing
-  LT  // Load Testing
-  PD  // Production
+  DV // Development
+  UT // User Testing
+  LT // Load Testing
+  PD // Production
 }
 
 // ============================================================================
@@ -142,32 +141,32 @@ enum Environment {
 // ============================================================================
 
 model Folder {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  color       String?  // Optional color for folder icon
-  
+  color       String? // Optional color for folder icon
+
   // Parent folder for nested structure (null = root level)
-  parentId    String?
-  parent      Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Folder[] @relation("FolderHierarchy")
-  
+  parentId String?
+  parent   Folder?  @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Folder[] @relation("FolderHierarchy")
+
   // Owner - the user who created the folder
   createdById String?
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
   // Legacy group field (deprecated, use permissions instead)
-  groupId     String?
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
   // Permissions for this folder
   permissions FolderPermission[]
-  
+
   // Workflows in this folder
-  workflows   Workflow[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  workflows Workflow[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([parentId])
   @@index([groupId])
@@ -176,29 +175,29 @@ model Folder {
 
 // Permission levels for folder access
 enum FolderPermissionLevel {
-  READ   // Can view workflows in folder
-  WRITE  // Can create/edit/delete workflows in folder
-  ADMIN  // Can manage folder permissions and delete folder
+  READ // Can view workflows in folder
+  WRITE // Can create/edit/delete workflows in folder
+  ADMIN // Can manage folder permissions and delete folder
 }
 
 // Folder permissions - grants access to users or groups
 model FolderPermission {
-  id          String   @id @default(cuid())
-  folderId    String
-  folder      Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  folderId String
+  folder   Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
   // Either userId OR groupId must be set (not both)
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  groupId     String?
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  
-  permission  FolderPermissionLevel
-  
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  permission FolderPermissionLevel
+
   createdAt   DateTime @default(now())
   createdById String?
-  
+
   @@unique([folderId, userId])
   @@unique([folderId, groupId])
   @@index([folderId])
@@ -211,67 +210,70 @@ model FolderPermission {
 // ============================================================================
 
 model Workflow {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  
+
   // Version number - auto-increments on each save
-  version     Int      @default(1)
-  
+  version Int @default(1)
+
   // Environment/Stage - workflows progress through DV -> UT -> LT -> PD
-  environment Environment @default(DV)
-  promotedAt  DateTime?   // When last promoted
-  promotedById String?    // Who promoted it
-  
+  environment  Environment @default(DV)
+  promotedAt   DateTime? // When last promoted
+  promotedById String? // Who promoted it
+
   // Visual workflow definition (for the editor)
-  nodes       Json     @default("[]")
-  connections Json     @default("[]")
-  settings    Json     @default("{}")
-  
+  nodes       Json @default("[]")
+  connections Json @default("[]")
+  settings    Json @default("{}")
+
   // Generated Python code (for execution)
-  pythonWorkflow   String?  @db.Text  // workflow.py content
-  pythonActivities String?  @db.Text  // activities.py content
+  pythonWorkflow     String? @db.Text // workflow.py content
+  pythonActivities   String? @db.Text // activities.py content
   pythonRequirements String? @db.Text // requirements.txt content
-  
+
   // Workflow properties (global variables)
-  properties  Json?    @default("[]")
-  
+  properties Json? @default("[]")
+
   // Workflow schedule (when to run)
-  schedule    Json?
-  
+  schedule Json?
+
   // GitHub integration
-  githubRepo       String?  // GitHub repository URL (e.g., owner/repo)
-  githubBranch     String?  @default("main") // Branch to commit to
-  githubPath       String?  // Path within repo for workflow files
-  localPath        String?  // Local filesystem path for the cloned repo
+  githubRepo         String? // GitHub repository URL (e.g., owner/repo)
+  githubBranch       String? @default("main") // Branch to commit to
+  githubPath         String? // Path within repo for workflow files
+  localPath          String? // Local filesystem path for the cloned repo
   githubCredentialId String? // Reference to GitHub credential
-  lastCommitSha    String?  // Last commit SHA for tracking
-  
-  active      Boolean  @default(false)
-  tags        String[] @default([])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  lastCommitSha      String? // Last commit SHA for tracking
+
+  active    Boolean  @default(false)
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Owner (unchanged - workflow keeps its own owner)
   createdById String?
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
   // Folder - workflow inherits group permissions from folder
-  folderId    String?
-  folder      Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  
+  folderId String?
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
   // Legacy direct group assignment (deprecated - use folder.groupId instead)
-  groupId     String?
-  group       Group?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   // SDLC
   promotionRequests PromotionRequest[]
-  
+
   // Locking
   lock WorkflowLock?
-  
+
   // Executions
   executions WorkflowExecution[]
+
+  // Versions
+  versions WorkflowVersion[]
 
   @@index([active])
   @@index([environment])
@@ -279,23 +281,20 @@ model Workflow {
   @@index([groupId])
   @@index([createdById])
   @@index([folderId])
-  
-  // Versions
-  versions WorkflowVersion[]
 }
 
 model WorkflowVersion {
-  id          String   @id @default(cuid())
-  workflowId  String
-  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  
-  version     Int
-  
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  version Int
+
   // Snapshot data
-  nodes       Json     @default("[]")
-  connections Json     @default("[]")
-  settings    Json     @default("{}")
-  
+  nodes       Json @default("[]")
+  connections Json @default("[]")
+  settings    Json @default("{}")
+
   createdAt   DateTime @default(now())
   createdById String?
   createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -305,39 +304,54 @@ model WorkflowVersion {
 }
 
 model DataSource {
-  id          String   @id @default(cuid())
-  name        String
-  type        String
-  data        Json     @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+  id        String   @id @default(cuid())
+  name      String
+  type      String
+  data      Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Owner
   createdById String?
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  
-  // Many-to-many with groups
-  groups      DataSourceGroup[]
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  // RBAC permissions for this data source
+  permissions DataSourcePermission[]
 
   @@unique([name, type])
   @@index([type])
   @@index([createdById])
-  
   // Keep old table name for migration
   @@map("Credential")
 }
 
-model DataSourceGroup {
+// Permission levels for data source access
+enum DataSourcePermissionLevel {
+  READ // Can use the data source in workflows (credentials are redacted)
+  WRITE // Can edit/override the data source credentials/settings
+  ADMIN // Can manage permissions and delete the data source
+}
+
+model DataSourcePermission {
   id           String     @id @default(cuid())
   dataSourceId String
-  groupId      String
-  createdAt    DateTime   @default(now())
-  
   dataSource   DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
-  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  permission DataSourcePermissionLevel @default(READ)
+
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  @@unique([dataSourceId, userId])
   @@unique([dataSourceId, groupId])
   @@index([dataSourceId])
+  @@index([userId])
   @@index([groupId])
 }
 
@@ -346,32 +360,32 @@ model DataSourceGroup {
 // ============================================================================
 
 model PromotionRequest {
-  id        String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Relations
   workflowId String
   workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  
+
   // Promotion Details
-  fromEnv    Environment
-  toEnv      Environment
-  
+  fromEnv Environment
+  toEnv   Environment
+
   // Actors
   requesterId String
-  requester   User     @relation("RequestedPromotions", fields: [requesterId], references: [id])
-  
-  reviewerId  String?
-  reviewer    User?    @relation("ReviewedPromotions", fields: [reviewerId], references: [id])
-  
+  requester   User   @relation("RequestedPromotions", fields: [requesterId], references: [id])
+
+  reviewerId String?
+  reviewer   User?   @relation("ReviewedPromotions", fields: [reviewerId], references: [id])
+
   // State
-  status     PromotionStatus @default(PENDING)
-  
+  status PromotionStatus @default(PENDING)
+
   // Metadata
   requestNotes String?
   reviewNotes  String?
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([workflowId])
   @@index([status])
@@ -386,20 +400,20 @@ enum PromotionStatus {
 }
 
 model WorkflowLock {
-  id        String   @id @default(cuid())
-  
-  workflowId String  @unique 
-  workflow  Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id String @id @default(cuid())
+
+  workflowId String   @unique
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   updatedAt DateTime @updatedAt // Used as heartbeat timestamp to track active sessions
   createdAt DateTime @default(now())
 
   // Takeover Request
   requestingUserId String?
-  requestingUser   User?   @relation("LockRequests", fields: [requestingUserId], references: [id])
+  requestingUser   User?     @relation("LockRequests", fields: [requestingUserId], references: [id])
   requestingAt     DateTime?
 
   @@index([userId])
@@ -411,44 +425,44 @@ model WorkflowLock {
 // ============================================================================
 
 model WorkflowExecution {
-  id        String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Workflow being executed
   workflowId String
   workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  
+
   // Temporal identifiers
   temporalWorkflowId String?
   temporalRunId      String?
-  
+
   // Execution status
-  status     String   @default("pending") // pending, running, completed, failed, cancelled
-  mode       String   @default("manual")  // manual, trigger, webhook, scheduled, retry
-  
+  status String @default("pending") // pending, running, completed, failed, cancelled
+  mode   String @default("manual") // manual, trigger, webhook, scheduled, retry
+
   // Timing
-  startedAt  DateTime @default(now())
+  startedAt  DateTime  @default(now())
   finishedAt DateTime?
-  
+
   // Input/Output data
   inputData  Json?
   outputData Json?
-  
+
   // Error info (if failed)
   errorMessage String?
-  
+
   // Retry tracking
-  retryOf    String?  // ID of original execution if this is a retry
-  retriedBy  String?  // ID of retry execution if this was retried
-  
+  retryOf   String? // ID of original execution if this is a retry
+  retriedBy String? // ID of retry execution if this was retried
+
   // Who started it
   startedById String?
-  startedBy   User?    @relation(fields: [startedById], references: [id], onDelete: SetNull)
-  
+  startedBy   User?   @relation(fields: [startedById], references: [id], onDelete: SetNull)
+
   // Events for this execution (activity logs)
-  events     ExecutionEvent[]
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  events ExecutionEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([workflowId])
   @@index([status])
@@ -458,37 +472,37 @@ model WorkflowExecution {
 }
 
 model ExecutionEvent {
-  id          String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Parent execution
   executionId String
   execution   WorkflowExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  
+
   // Event type
-  event       String   // ACTIVITY_STARTED, ACTIVITY_COMPLETED, ACTIVITY_FAILED, ACTIVITY_RETRY, ACTIVITY_HEARTBEAT
-  
+  event String // ACTIVITY_STARTED, ACTIVITY_COMPLETED, ACTIVITY_FAILED, ACTIVITY_RETRY, ACTIVITY_HEARTBEAT
+
   // Node info
-  nodeId      String
-  nodeName    String
-  nodeType    String
-  
+  nodeId   String
+  nodeName String
+  nodeType String
+
   // Attempt tracking
   attemptNumber Int @default(1)
-  
+
   // Timing
-  timestamp   DateTime @default(now())
-  durationMs  Float?   // Duration in milliseconds (for COMPLETED events)
-  
+  timestamp  DateTime @default(now())
+  durationMs Float? // Duration in milliseconds (for COMPLETED events)
+
   // Data summaries (truncated for storage)
   inputSummary  Json?
   outputSummary Json?
-  
+
   // Error info (for FAILED events)
   errorMessage String?
   errorType    String?
   errorStack   String? @db.Text
-  
-  createdAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   @@index([executionId])
   @@index([nodeId])

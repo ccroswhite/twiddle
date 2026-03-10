@@ -111,6 +111,51 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
         return workflows;
     });
 
+    // List all published activities across accessible workflows
+    app.get('/published-activities', async (request, _reply) => {
+        const userId = (request as { user?: { id: string } }).user?.id;
+
+        let whereClause: Prisma.WorkflowWhereInput = {};
+
+        if (userId) {
+            const memberships = await prisma.groupMember.findMany({
+                where: { userId },
+                select: { groupId: true },
+            });
+            const userGroupIds = memberships.map((m: typeof memberships[number]) => m.groupId);
+
+            whereClause = {
+                OR: [
+                    { groupId: { in: userGroupIds } },
+                    { createdById: userId },
+                    { groupId: null },
+                ],
+            };
+        }
+
+        const workflows = await prisma.workflow.findMany({
+            where: whereClause,
+            select: { nodes: true },
+        });
+
+        const allPublished = new Set<string>();
+
+        for (const wf of workflows) {
+            const nodes = (wf.nodes as any[]) || [];
+            for (const n of nodes) {
+                const pub = n.data?.parameters?.publishedActivity as string[] | undefined;
+                if (pub && Array.isArray(pub)) {
+                    pub.forEach(p => allPublished.add(p));
+                }
+                if (n.id) {
+                    allPublished.add(`${n.id}-OK`);
+                }
+            }
+        }
+
+        return Array.from(allPublished).sort();
+    });
+
     // Get a single workflow with locking logic
     app.get<{ Params: { id: string } }>('/:id', async (request, reply) => {
         const { id } = request.params;

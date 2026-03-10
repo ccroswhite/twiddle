@@ -3,6 +3,7 @@ import { X, Zap, Clock, RefreshCw, AlertTriangle, Plus, Trash2 } from 'lucide-re
 import { useReactFlow, type Node } from '@xyflow/react';
 import { isActivityNode, getNodeDisplayName } from '@/utils/nodeConfig';
 import { nodeParameterEditors } from '@/components/nodeParameterEditors';
+import { workflowsApi } from '@/lib/api';
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -15,6 +16,19 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
   const [label, setLabel] = useState('');
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [activeTab, setActiveTab] = useState<'general' | 'scheduling' | 'requiredActivity' | 'publishedActivity'>('general');
+  const [globalActivities, setGlobalActivities] = useState<string[]>([]);
+
+  useEffect(() => {
+    async function fetchActivities() {
+      try {
+        const acts = await workflowsApi.getPublishedActivities();
+        setGlobalActivities(acts as string[]);
+      } catch (err) {
+        console.error('Failed to fetch published activities:', err);
+      }
+    }
+    fetchActivities();
+  }, []);
 
   const tabs = [
     { id: 'general', label: 'General' },
@@ -450,9 +464,9 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
 
               <div className="space-y-2">
                 {((parameters.requiredActivity as string[]) || []).map((req, idx) => {
-                  // Collect ALL published activities across the entire graph
+                  // Collect ALL published activities across the entire graph and global state
                   const allNodes = getNodes();
-                  const allPublished = new Set<string>();
+                  const allPublished = new Set<string>(globalActivities);
                   allNodes.forEach((n: any) => {
                     const pub = (n.data.parameters as Record<string, any>)?.publishedActivity as string[] | undefined;
                     if (pub && Array.isArray(pub)) {

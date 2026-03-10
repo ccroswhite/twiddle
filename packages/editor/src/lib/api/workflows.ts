@@ -3,6 +3,7 @@ import type { WorkflowCreateInput, WorkflowUpdateInput } from '@twiddle/shared';
 
 export const workflowsApi = {
     list: () => request('/workflows'),
+    getPublishedActivities: () => request('/workflows/published-activities'),
     get: (id: string) => request(`/workflows/${id}`),
     create: (data: WorkflowCreateInput) =>
         request('/workflows', {

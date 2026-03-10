@@ -131,7 +131,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
         _count: {
           select: {
             workflows: true,
-            dataSourceGroups: true,
+            dataSourcePermissions: true,
           },
         },
       },
@@ -144,7 +144,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
     return {
       ...group,
       workflowCount: group._count.workflows,
-      dataSourceCount: group._count.dataSourceGroups,
+      dataSourceCount: group._count.dataSourcePermissions,
     };
   });
 
