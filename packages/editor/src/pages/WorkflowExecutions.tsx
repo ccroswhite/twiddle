@@ -28,6 +28,7 @@ import {
     workflowsApi,
     type ExecutionInfo,
     type ExecutionTimeline,
+    type TimelineEvent,
     type Workflow,
 } from '@/lib/api';
 
@@ -94,7 +95,7 @@ export function WorkflowExecutions() {
     async function loadWorkflows() {
         setLoadingWorkflows(true);
         try {
-            const result = await workflowsApi.list();
+            const result = await (workflowsApi.list as any)();
             setWorkflows(result);
         } catch (err) {
             console.error('Failed to load workflows:', err);
@@ -455,14 +456,16 @@ function ExecutionCard({ execution, onClick }: ExecutionCardProps) {
         TIMED_OUT: <Clock className="w-4 h-4 text-red-500" />,
     }[execution.status] || <Clock className="w-4 h-4 text-slate-400" />;
 
-    const statusColor = {
+    const statusColor: Record<string, string> = {
         RUNNING: 'bg-blue-50 text-blue-700 border-blue-200',
         COMPLETED: 'bg-green-50 text-green-700 border-green-200',
         FAILED: 'bg-red-50 text-red-700 border-red-200',
         CANCELED: 'bg-orange-50 text-orange-700 border-orange-200',
         TERMINATED: 'bg-orange-50 text-orange-700 border-orange-200',
         TIMED_OUT: 'bg-red-50 text-red-700 border-red-200',
-    }[execution.status] || 'bg-slate-50 text-slate-700 border-slate-200';
+    };
+
+    const currentColor = statusColor[execution.status] || 'bg-slate-50 text-slate-700 border-slate-200';
 
     function formatDuration(ms?: number): string {
         if (!ms) return '-';
@@ -477,7 +480,7 @@ function ExecutionCard({ execution, onClick }: ExecutionCardProps) {
             className="w-full flex items-center justify-between p-4 bg-white rounded-lg border border-slate-200 hover:border-primary-300 hover:shadow-sm transition-all group"
         >
             <div className="flex items-center gap-4">
-                <div className={`flex items-center gap-2 px-2.5 py-1 rounded-full border ${statusColor}`}>
+                <div className={`flex items-center gap-2 px-2.5 py-1 rounded-full border ${currentColor}`}>
                     {statusIcon}
                     <span className="text-sm font-medium">{execution.statusDisplay.label}</span>
                 </div>
@@ -528,7 +531,7 @@ function TimelineView({ execution, timeline, loading }: TimelineViewProps) {
     }
 
     const maxOffset = Math.max(
-        ...timeline.events.map(e => e.endOffsetMs || e.offsetMs),
+        ...timeline.events.map((e: TimelineEvent) => e.endOffsetMs || e.offsetMs),
         timeline.totalDurationMs || 1000
     );
 
@@ -573,19 +576,20 @@ function TimelineView({ execution, timeline, loading }: TimelineViewProps) {
                     <h3 className="text-sm font-semibold text-slate-700 mb-4">Activity Timeline</h3>
 
                     <div className="space-y-3">
-                        {timeline.events.map((event) => {
+                        {timeline.events.map((event: TimelineEvent) => {
                             const startPercent = (event.offsetMs / maxOffset) * 100;
                             const widthPercent = event.endOffsetMs
                                 ? ((event.endOffsetMs - event.offsetMs) / maxOffset) * 100
                                 : 2;
 
-                            const bgColor = {
+                            const colors: Record<string, string> = {
                                 green: 'bg-green-500',
                                 red: 'bg-red-500',
                                 blue: 'bg-blue-500',
                                 orange: 'bg-orange-500',
                                 gray: 'bg-slate-300',
-                            }[event.color] || 'bg-slate-300';
+                            };
+                            const bgTimelineColor = colors[event.color] || 'bg-slate-300';
 
                             return (
                                 <div key={event.id} className="flex items-center gap-4">
@@ -602,7 +606,7 @@ function TimelineView({ execution, timeline, loading }: TimelineViewProps) {
                                     {/* Timeline Bar */}
                                     <div className="flex-1 relative h-8 bg-slate-100 rounded overflow-hidden">
                                         <div
-                                            className={`absolute h-full ${bgColor} rounded transition-all`}
+                                            className={`absolute h-full ${bgTimelineColor} rounded transition-all`}
                                             style={{
                                                 left: `${startPercent}%`,
                                                 width: `${Math.max(widthPercent, 1)}%`,

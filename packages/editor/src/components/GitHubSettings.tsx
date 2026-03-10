@@ -46,13 +46,13 @@ export function GitHubSettings({ workflowId, workflowName, onClose }: GitHubSett
   async function loadData() {
     try {
       setLoading(true);
-      
+
       // Load GitHub status
       const statusData = await githubApi.getStatus(workflowId);
       setStatus(statusData);
 
       // Load GitHub credentials
-      const allCreds = await credentialsApi.list();
+      const allCreds = await (credentialsApi.list as any)();
       const githubCreds = allCreds.filter((c: Credential) => c.type === 'github');
       setCredentials(githubCreds);
 
@@ -250,21 +250,19 @@ export function GitHubSettings({ workflowId, workflowName, onClose }: GitHubSett
                 <div className="flex gap-2 mb-2">
                   <button
                     onClick={() => setRepoMode('new')}
-                    className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                      repoMode === 'new'
+                    className={`px-3 py-1 text-sm rounded-lg transition-colors ${repoMode === 'new'
                         ? 'bg-primary-100 text-primary-700'
                         : 'text-slate-600 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Create New
                   </button>
                   <button
                     onClick={() => setRepoMode('existing')}
-                    className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                      repoMode === 'existing'
+                    className={`px-3 py-1 text-sm rounded-lg transition-colors ${repoMode === 'existing'
                         ? 'bg-primary-100 text-primary-700'
                         : 'text-slate-600 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     Use Existing
                   </button>

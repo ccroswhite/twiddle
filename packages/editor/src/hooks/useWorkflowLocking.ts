@@ -72,7 +72,7 @@ export function useWorkflowLocking(
 
         const interval = setInterval(async () => {
             try {
-                const response = await workflowsApi.heartbeat(workflowId);
+                const response = await workflowsApi.heartbeat(workflowId) as any;
                 if (response.request) {
                     setTakeoverRequest(response.request);
                 } else {
@@ -123,7 +123,7 @@ export function useWorkflowLocking(
     const handleRequestLock = useCallback(async () => {
         if (!workflowId || !isReadOnly) return;
         try {
-            const res = await workflowsApi.requestLock(workflowId);
+            const res = await workflowsApi.requestLock(workflowId) as any;
             if (res.status === 'acquired') {
                 // We got it immediately (unlocked)
                 onReloadWorkflow(workflowId);

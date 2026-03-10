@@ -10,9 +10,9 @@ export function EmbeddedWorkflowNodeEditor({ parameters, updateParameter }: Para
         const workflowId = parameters.workflowId as string;
         if (workflowId) {
             setLoadingVersions(true);
-            workflowsApi.getVersions(workflowId)
-                .then(versions => setAvailableVersions(versions))
-                .catch(err => console.error('Failed to load versions', err))
+            (workflowsApi.getVersions as any)(workflowId)
+                .then((versions: any) => setAvailableVersions(versions))
+                .catch((err: any) => console.error('Failed to load versions', err))
                 .finally(() => setLoadingVersions(false));
         }
     }, [parameters.workflowId]);

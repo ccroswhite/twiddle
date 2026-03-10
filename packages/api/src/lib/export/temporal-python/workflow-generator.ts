@@ -46,34 +46,71 @@ export function generateActivityExecution(node: WorkflowNode, index: number): st
         schedule_to_close_timeout=timedelta(seconds=${scheduleToCloseTimeout}),`;
     }
 
+    const requiredEvents = (node.parameters?.requiredActivity as string[]) || [];
+    const publishedEvents = (node.parameters?.publishedActivity as string[]) || [];
+
+    // The function header
+    let activityCall = `
+        async def execute_activity_task_${index}():
+            nonlocal result
+            try:
+                workflow.logger.info(f"ActivityStarted: workflow_name='{workflowName}' activity_name='{nodeName}'")`;
+
+    // Wait condition logic
+    if (requiredEvents.length > 0) {
+        activityCall += `
+                # Wait for required activities
+                workflow.logger.info(f"ActivityWaiting: workflow_name='{workflowName}' activity_name='{nodeName}' waiting_for={${JSON.stringify(requiredEvents)}}")
+                await workflow.wait_condition(
+                    lambda: all(self._events.get(req, False) for req in ${JSON.stringify(requiredEvents)})
+                )`;
+    }
+
     // Generate the activity call
     const parametersDict = toPythonValue(node.parameters || {});
 
-    let activityCall = `
-        # Activity ${index + 1}: ${nodeName}
-        try:
-            ${nodeVarName} = await workflow.execute_activity(
-                ${funcName},
-                ActivityInput(
-                    node_id="${node.id}",
-                    node_name="${nodeName}",
-                    node_type="${node.type}",
-                    parameters=${parametersDict},
-                    input_data=result,
-                ),${timeoutCode}${retryPolicyCode}
-            )
-            result = ${nodeVarName}`;
+    activityCall += `
+                # Execute Activity: ${nodeName}
+                ${nodeVarName} = await workflow.execute_activity(
+                    ${funcName},
+                    ActivityInput(
+                        node_id="${node.id}",
+                        node_name="${nodeName}",
+                        node_type="${node.type}",
+                        parameters=${parametersDict},
+                        input_data=result,
+                    ),${timeoutCode}${retryPolicyCode}
+                )`;
 
+    // Update result thread-safely (in Temporal Python this is deterministic)
     if (continueOnFail) {
         activityCall += `
-        except Exception as e:
-            workflow.logger.warning(f"Activity '${nodeName}' failed but continuing: {e}")
-            # Continue with previous result`;
+                result = ${nodeVarName}
+                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
+            except Exception as e:
+                workflow.logger.warning(f"ActivityFailed (Continuing): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
+                self._events["${nodeName}-FAIL"] = True
+                # Continue with previous result`;
     } else {
         activityCall += `
-        except Exception as e:
-            workflow.logger.error(f"Activity '${nodeName}' failed: {e}")
-            raise`;
+                result = ${nodeVarName}
+                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
+            except Exception as e:
+                workflow.logger.error(f"ActivityFailed (Fatal): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
+                self._events["${nodeName}-FAIL"] = True
+                raise`;
+    }
+
+    // Publish logic runs whether success or failure if continueOnFail = true, but let's do success only for now
+    if (publishedEvents.length > 0) {
+        activityCall += `
+            finally:
+                # Publish completion events if successful (or if continuing on fail, we still run finally block)
+                # However, typically a true success publishes the OK state.
+                # To perfectly mimic Control-M, we publish the explicitly requested states:
+                ${publishedEvents.map(e => `
+                self._events["${e}"] = True
+                workflow.logger.info(f"SignalPublished: workflow_name='{workflowName}' activity_name='{nodeName}' signal_name='${e}'")`).join('')}`;
     }
 
     return activityCall;
@@ -129,23 +166,38 @@ class ${workflowClassName}:
     execution from the last completed activity.
     """
     
+    def __init__(self) -> None:
+        self._events: Dict[str, bool] = {}
+
+    @workflow.signal
+    def set_event(self, event_name: str) -> None:
+        """Allow external workflows/users to trigger dependencies."""
+        workflow.logger.info(f"SignalReceived: workflow_name='${workflowName}' signal_name='{event_name}'")
+        self._events[event_name] = True
+
     @workflow.run
     async def run(self, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Execute the workflow.
-        
-        Args:
-            input_data: Optional input data to pass to the first activity
-            
-        Returns:
-            The result from the final activity
+        Execute the workflow DAG using asyncio.gather for parallel node execution
+        while respecting wait_condition dependencies.
         """
         result = input_data or {}
         
-        workflow.logger.info(f"Starting workflow with input: {result}")
-${nodeExecutions || '        # No activities to execute\n        pass'}
+        workflow.logger.info(f"WorkflowStarted: workflow_name='${workflowName}' input={result}")
         
-        workflow.logger.info(f"Workflow completed with result: {result}")
+        # Define execution wrappers for each node
+${nodeExecutions || '        # No activities to execute'}
+
+        # Launch all node tasks concurrently so wait_condition functions correctly
+        import asyncio
+        tasks = [
+${activityNodes.map((_, idx) => `            asyncio.create_task(execute_activity_task_${idx}()),`).join('\n')}
+        ]
+        
+        if tasks:
+            await asyncio.gather(*tasks)
+        
+        workflow.logger.info(f"WorkflowCompleted: workflow_name='${workflowName}' result={result}")
         return result
 `;
 }

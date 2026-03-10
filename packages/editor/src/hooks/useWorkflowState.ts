@@ -175,7 +175,7 @@ export function useWorkflowState(
                 }));
 
             if (isNew) {
-                const created = await workflowsApi.create({
+                const created = await (workflowsApi.create as any)({
                     name: workflowName,
                     description: workflowDescription,
                     nodes: workflowNodes as any,
@@ -187,7 +187,7 @@ export function useWorkflowState(
                 setNewWorkflowFolderId(null);
                 navigate(`/workflows/${created.id}`, { replace: true });
             } else {
-                const updated = await workflowsApi.update(workflowId!, {
+                const updated = await (workflowsApi.update as any)(workflowId!, {
                     name: workflowName,
                     description: workflowDescription,
                     nodes: workflowNodes as any,

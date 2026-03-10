@@ -108,11 +108,13 @@ export interface Workflow {
   settings: WorkflowSettings;
   active: boolean;
   tags?: string[];
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
   createdBy?: string;
   properties?: WorkflowProperty[];
   schedule?: WorkflowSchedule;
+  environment?: WorkflowEnvironment;
+  folderId?: string | null;
 }
 
 export interface WorkflowCreateInput {

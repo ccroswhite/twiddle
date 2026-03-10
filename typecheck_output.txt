@@ -1,0 +1,51 @@
+
+> twiddle@0.2.0 typecheck /Users/chrisc/src/twiddle
+> turbo run typecheck
+
+• Packages in scope: @twiddle/api, @twiddle/editor, @twiddle/nodes, @twiddle/shared, @twiddle/workflows
+• Running typecheck in 5 packages
+• Remote caching disabled
+@twiddle/shared:typecheck: cache hit, replaying logs 97fd9c2afb297ee7
+@twiddle/shared:typecheck: 
+@twiddle/shared:typecheck: > @twiddle/shared@0.2.0 typecheck /Users/chrisc/src/twiddle/packages/shared
+@twiddle/shared:typecheck: > tsc --noEmit
+@twiddle/shared:typecheck: 
+@twiddle/shared:build: cache hit, replaying logs 35f88f8520f29d07
+@twiddle/shared:build: 
+@twiddle/shared:build: > @twiddle/shared@0.2.0 build /Users/chrisc/src/twiddle/packages/shared
+@twiddle/shared:build: > tsc
+@twiddle/shared:build: 
+@twiddle/nodes:typecheck: cache hit, replaying logs e94b27b7466e3026
+@twiddle/nodes:typecheck: 
+@twiddle/nodes:typecheck: > @twiddle/nodes@0.2.0 typecheck /Users/chrisc/src/twiddle/packages/nodes
+@twiddle/nodes:typecheck: > tsc --noEmit
+@twiddle/nodes:typecheck: 
+@twiddle/workflows:typecheck: cache hit, replaying logs 925312d1746c44c2
+@twiddle/workflows:typecheck: 
+@twiddle/workflows:typecheck: > @twiddle/workflows@0.2.0 typecheck /Users/chrisc/src/twiddle/packages/workflows
+@twiddle/workflows:typecheck: > tsc --noEmit
+@twiddle/workflows:typecheck: 
+@twiddle/editor:typecheck: cache miss, executing 883103d1fb4643a2
+@twiddle/nodes:build: cache hit, replaying logs 3c26e013061533dd
+@twiddle/nodes:build: 
+@twiddle/nodes:build: > @twiddle/nodes@0.2.0 build /Users/chrisc/src/twiddle/packages/nodes
+@twiddle/nodes:build: > tsc
+@twiddle/nodes:build: 
+@twiddle/api:typecheck: cache miss, executing 51b97974950a8285
+@twiddle/editor:typecheck: 
+@twiddle/editor:typecheck: > @twiddle/editor@0.2.0 typecheck /Users/chrisc/src/twiddle/packages/editor
+@twiddle/editor:typecheck: > tsc --noEmit
+@twiddle/editor:typecheck: 
+@twiddle/api:typecheck: 
+@twiddle/api:typecheck: > @twiddle/api@0.2.0 typecheck /Users/chrisc/src/twiddle/packages/api
+@twiddle/api:typecheck: > tsc --noEmit
+@twiddle/api:typecheck: 
+@twiddle/editor:typecheck: src/components/nodeEditors/EmbeddedWorkflowNodeEditor.tsx(15,24): error TS7006: Parameter 'err' implicitly has an 'any' type.
+@twiddle/editor:typecheck:  ELIFECYCLE  Command failed with exit code 2.
+
+ Tasks:    6 successful, 7 total
+Cached:    5 cached, 7 total
+  Time:    2.278s 
+Failed:    @twiddle/editor#typecheck
+
+ ELIFECYCLE  Command failed with exit code 2.

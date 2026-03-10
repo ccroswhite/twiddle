@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { createPortal } from 'react-dom';
 import { Handle, Position, useReactFlow, Node as FlowNode } from '@xyflow/react';
-import { Settings, Copy, Trash2, Zap, Maximize2, Minimize2, Layers } from 'lucide-react';
+import { Settings, Copy, Trash2, Maximize2, Minimize2, Layers } from 'lucide-react';
 import {
   getNodeIcon,
   getNodeColor,
@@ -143,10 +143,10 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                     <Handle
                       key={`input-${handle.handle}`}
                       type="target"
-                      position={Position.Left}
+                      position={Position.Top}
                       id={handle.handle}
                       className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
-                      style={{ top: `${position}%` }}
+                      style={{ left: `${position}%` }}
                       title={handle.label}
                     />
                   );
@@ -161,10 +161,10 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                     <Handle
                       key={`output-${handle.handle}`}
                       type="source"
-                      position={Position.Right}
+                      position={Position.Bottom}
                       id={handle.handle}
                       className="!bg-violet-400 !w-3 !h-3 pointer-events-auto"
-                      style={{ top: `${position}%` }}
+                      style={{ left: `${position}%` }}
                       title={handle.label}
                     />
                   );
@@ -252,11 +252,13 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   return (
     <>
       <div
-        className={`bg-white rounded shadow-sm border min-w-[80px] relative ${selected ? 'border-primary-500' : 'border-slate-200'
+        className={`bg-white rounded-sm shadow-sm flex items-stretch overflow-hidden border min-w-[140px] relative ${selected ? 'border-primary-500 ring-1 ring-primary-500' : 'border-slate-300'
           } ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
         style={embeddedDimensions ? { minHeight: embeddedDimensions.nodeHeight } : undefined}
         onContextMenu={handleContextMenu}
       >
+        {/* Control-M style left status strip */}
+        <div className={`${bgColor} w-1.5 shrink-0`} />
         {/* Dynamic handles for collapsed embedded workflows */}
         {isEmbeddedWorkflowNode && !isExpanded && embeddedDimensions ? (() => {
           const { inputHandles, outputHandles, paddingTop, nodeHeight } = embeddedDimensions;
@@ -274,10 +276,10 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                   <Handle
                     key={`input-${handle.handle}`}
                     type="target"
-                    position={Position.Left}
+                    position={Position.Top}
                     id={handle.handle}
                     className="!bg-violet-500 !w-2.5 !h-2.5"
-                    style={{ top: inputOffset }}
+                    style={{ left: inputOffset }}
                     title={handle.label || handle.handle}
                   />
                 );
@@ -293,10 +295,10 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
                   <Handle
                     key={`output-${handle.handle}`}
                     type="source"
-                    position={Position.Right}
+                    position={Position.Bottom}
                     id={handle.handle}
                     className="!bg-violet-500 !w-2.5 !h-2.5"
-                    style={{ top: outputOffset }}
+                    style={{ left: outputOffset }}
                     title={handle.label || handle.handle}
                   />
                 );
@@ -310,7 +312,7 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
             {data.nodeType !== 'twiddle.manualTrigger' && (
               <Handle
                 type="target"
-                position={Position.Left}
+                position={Position.Top}
                 className="!bg-slate-400 !w-2 !h-2"
               />
             )}
@@ -320,23 +322,23 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
               <>
                 <Handle
                   type="source"
-                  position={Position.Right}
+                  position={Position.Bottom}
                   id="true"
                   className="!bg-green-500 !w-2 !h-2"
-                  style={{ top: '30%' }}
+                  style={{ left: '30%' }}
                 />
                 <Handle
                   type="source"
-                  position={Position.Right}
+                  position={Position.Bottom}
                   id="false"
                   className="!bg-red-500 !w-2 !h-2"
-                  style={{ top: '70%' }}
+                  style={{ left: '70%' }}
                 />
               </>
             ) : (
               <Handle
                 type="source"
-                position={Position.Right}
+                position={Position.Bottom}
                 className="!bg-slate-400 !w-2 !h-2"
               />
             )}
@@ -344,29 +346,33 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
         )}
 
         {/* Node Content */}
-        <div className="flex items-center gap-1.5 p-1.5">
-          <div className={`${bgColor} p-1 rounded`}>
-            <Icon className="w-3 h-3 text-white" />
+        <div className="flex flex-col p-2 min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Icon className={`w-3.5 h-3.5 text-slate-600`} />
+            <div className="font-bold text-xs text-slate-900 truncate" title={data.label}>{data.label}</div>
           </div>
-          <div className="min-w-0">
-            <div className="font-medium text-xs text-slate-900">{data.label}</div>
+          <div className="flex items-center gap-1">
             {!isCredential && !isEmbeddedWorkflowNode && (
-              <div className="flex items-center gap-1">
+              <>
                 {isActivityNode(data.nodeType) ? (
-                  <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-amber-600 bg-amber-50 px-1 rounded">
-                    <Zap className="w-2 h-2" />
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600">
                     Activity
                   </span>
                 ) : (
-                  <span className="text-[9px] font-medium text-blue-600 bg-blue-50 px-1 rounded">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600">
                     Trigger
                   </span>
                 )}
-              </div>
+              </>
             )}
             {isEmbeddedWorkflowNode && !isExpanded && (
-              <span className="text-[9px] font-medium text-violet-600 bg-violet-50 px-1 rounded">
-                Embedded Workflow
+              <span className="text-[10px] uppercase font-bold tracking-wider text-violet-600">
+                Embedded
+              </span>
+            )}
+            {isCredential && (
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600">
+                Credential
               </span>
             )}
           </div>

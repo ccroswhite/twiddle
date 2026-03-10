@@ -387,7 +387,7 @@ export function WorkflowBrowser() {
                                     )}
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                    <EnvironmentBadge environment={workflow.environment} />
+                                    <EnvironmentBadge environment={workflow.environment || 'DV'} />
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();

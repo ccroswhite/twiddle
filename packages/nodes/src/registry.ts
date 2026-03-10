@@ -1,15 +1,10 @@
 import type { NodeDefinition, NodeTypeInfo } from '@twiddle/shared';
 import {
-  WebhookNode,
   HttpRequestNode,
-  RespondToWebhookNode,
-  HtmlExtractNode,
   CodeNode,
   IfNode,
   WinRMNode,
   SSHNode,
-  ReportNode,
-  SlackNode,
   EmbeddedWorkflowNode,
   // Database nodes
   MSSqlNode,
@@ -23,23 +18,17 @@ import {
   ElasticsearchNode,
   SnowflakeNode,
   PrestoDBNode,
-  GraphQLNode,
 } from './definitions/index.js';
 
 const nodeRegistry = new Map<string, NodeDefinition>();
 
 // Register all built-in nodes
 const builtInNodes: NodeDefinition[] = [
-  WebhookNode,
   HttpRequestNode,
-  RespondToWebhookNode,
-  HtmlExtractNode,
   CodeNode,
   IfNode,
   WinRMNode,
   SSHNode,
-  ReportNode,
-  SlackNode,
   EmbeddedWorkflowNode,
   // Database nodes
   MSSqlNode,
@@ -53,7 +42,6 @@ const builtInNodes: NodeDefinition[] = [
   ElasticsearchNode,
   SnowflakeNode,
   PrestoDBNode,
-  GraphQLNode,
 ];
 
 for (const node of builtInNodes) {

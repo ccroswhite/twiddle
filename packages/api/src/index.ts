@@ -20,11 +20,14 @@ import { githubRoutes } from './routes/github.js';
 import { settingsRoutes } from './routes/settings.js';
 import { folderRoutes } from './routes/folders.js';
 import { getAuthConfig, optionalAuthMiddleware } from './lib/auth.js';
+import { registerAllTesters } from './lib/datasources/testers/index.js';
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 
 async function main() {
+  registerAllTesters();
+
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || 'info',

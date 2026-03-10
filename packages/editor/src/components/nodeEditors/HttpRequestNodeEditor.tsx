@@ -1,4 +1,5 @@
 import type { ParameterEditorProps } from './types';
+import { CredentialDropdown } from './CredentialDropdown';
 
 export function HttpRequestNodeEditor({ parameters, updateParameter }: ParameterEditorProps) {
     return (
@@ -30,6 +31,16 @@ export function HttpRequestNodeEditor({ parameters, updateParameter }: Parameter
                     <option value="DELETE">DELETE</option>
                     <option value="PATCH">PATCH</option>
                 </select>
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Credential (Optional)
+                </label>
+                <CredentialDropdown
+                    value={(parameters.credentialId as string) || ''}
+                    onChange={(value) => updateParameter('credentialId', value)}
+                    allowedTypes={['Bearer', 'Basic', 'OAuth2', 'http', 'api']}
+                />
             </div>
             <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">

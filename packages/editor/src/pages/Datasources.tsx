@@ -1,442 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Database, X, Eye, EyeOff, Users, Share2, Pencil } from 'lucide-react';
+import { Plus, Trash2, Database, X, Users, Share2, Pencil } from 'lucide-react';
 import { datasourcesApi, groupsApi, type DataSourceWithAccess, type Group, type DataSourceData } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Field definition with support for select and conditional visibility
-interface FieldDefinition {
-  label: string;
-  field: string & keyof DataSourceData;
-  type: 'text' | 'password' | 'textarea' | 'number' | 'checkbox' | 'select';
-  options?: { value: string; label: string }[];
-  showWhen?: { field: string & keyof DataSourceData; value: string };
-}
+import { DynamicDataSourceForm } from '../components/datasources/registry';
 
-// Shared component for rendering data source form fields
-interface DataSourceFieldsRendererProps {
-  fields: FieldDefinition[];
-  data: DataSourceData;
-  onDataChange: (field: keyof DataSourceData, value: string | number | boolean) => void;
-  showPasswords: Record<string, boolean>;
-  onTogglePasswordVisibility: (field: string) => void;
-  isEditMode?: boolean;
-  keyPrefix?: string;
-}
-
-function DataSourceFieldsRenderer({
-  fields,
-  data,
-  onDataChange,
-  showPasswords,
-  onTogglePasswordVisibility,
-  isEditMode = false,
-  keyPrefix = '',
-}: DataSourceFieldsRendererProps) {
-  return (
-    <>
-      {fields.map((fieldDef, index) => {
-        // Check conditional visibility
-        if (fieldDef.showWhen) {
-          const conditionValue = data[fieldDef.showWhen.field];
-          if (conditionValue !== fieldDef.showWhen.value) {
-            return null;
-          }
-        }
-
-        const fieldKey = `${keyPrefix}${fieldDef.field}-${index}`;
-        const isPasswordField = fieldDef.type === 'password';
-
-        return (
-          <div key={fieldKey}>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              {fieldDef.label}
-              {isEditMode && isPasswordField && (
-                <span className="text-xs font-normal text-slate-500 ml-2">
-                  (leave blank to keep existing)
-                </span>
-              )}
-            </label>
-            {fieldDef.type === 'select' ? (
-              <select
-                value={(data[fieldDef.field] as string) || ''}
-                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-              >
-                <option value="">Select {fieldDef.label}</option>
-                {fieldDef.options?.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            ) : fieldDef.type === 'checkbox' ? (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!data[fieldDef.field]}
-                  onChange={(e) => onDataChange(fieldDef.field, e.target.checked)}
-                  className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm text-slate-600">Enable</span>
-              </label>
-            ) : fieldDef.type === 'textarea' ? (
-              <textarea
-                value={(data[fieldDef.field] as string) || ''}
-                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
-                rows={4}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
-                placeholder={fieldDef.label}
-              />
-            ) : fieldDef.type === 'password' ? (
-              <div className="relative">
-                <input
-                  type={showPasswords[fieldDef.field] ? 'text' : 'password'}
-                  value={(data[fieldDef.field] as string) || ''}
-                  onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
-                  className="w-full px-3 py-2 pr-10 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder={isEditMode ? `Enter new ${fieldDef.label.toLowerCase()}` : fieldDef.label}
-                />
-                <button
-                  type="button"
-                  onClick={() => onTogglePasswordVisibility(fieldDef.field)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPasswords[fieldDef.field] ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            ) : fieldDef.type === 'number' ? (
-              <input
-                type="number"
-                value={(data[fieldDef.field] as number) || ''}
-                onChange={(e) => onDataChange(fieldDef.field, parseInt(e.target.value) || 0)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder={fieldDef.label}
-              />
-            ) : (
-              <input
-                type="text"
-                value={(data[fieldDef.field] as string) || ''}
-                onChange={(e) => onDataChange(fieldDef.field, e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder={fieldDef.label}
-              />
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-
-// Define which fields each data source type needs
-const datasourceFields: Record<string, FieldDefinition[]> = {
-  httpBasicAuth: [
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-  ],
-  httpBearerToken: [
-    { label: 'Token', field: 'token', type: 'password' },
-  ],
-  apiKey: [
-    { label: 'API Key', field: 'apiKey', type: 'password' },
-  ],
-  oauth2: [
-    { label: 'Client ID', field: 'clientId', type: 'text' },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password' },
-    { label: 'Access Token', field: 'accessToken', type: 'password' },
-    { label: 'Refresh Token', field: 'refreshToken', type: 'password' },
-  ],
-  winrmDatasource: [
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-    { label: 'Domain', field: 'domain', type: 'text' },
-    { label: 'Use HTTPS', field: 'useHttps', type: 'checkbox' },
-  ],
-  sshDatasource: [
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
-    { label: 'Private Key', field: 'privateKey', type: 'textarea' },
-    { label: 'Passphrase (optional)', field: 'passphrase', type: 'password' },
-  ],
-  mssqlDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Database', field: 'database', type: 'text' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'sql', label: 'Username and Password' },
-        { value: 'windows', label: 'Windows/AD Authentication' },
-        { value: 'entra', label: 'Microsoft Entra ID' },
-      ],
-    },
-    // Username and Password Auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'sql' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'sql' } },
-    // Windows Auth fields
-    { label: 'Domain', field: 'domain', type: 'text', showWhen: { field: 'role', value: 'windows' } },
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'windows' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'windows' } },
-    // Entra ID Auth fields
-    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
-    // TLS options (always shown)
-    { label: 'Encrypt Connection', field: 'useTls', type: 'checkbox' },
-    { label: 'Trust Server Certificate', field: 'allowSelfSigned', type: 'checkbox' },
-  ],
-  postgresqlDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Database', field: 'database', type: 'text' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'password', label: 'Username and Password' },
-        { value: 'entra', label: 'Microsoft Entra ID' },
-        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
-    // Entra ID Auth fields
-    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
-    // mTLS auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  mysqlDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Database', field: 'database', type: 'text' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'password', label: 'Username and Password' },
-        { value: 'entra', label: 'Microsoft Entra ID' },
-        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
-    // Entra ID Auth fields
-    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
-    // mTLS auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  cassandraDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'password', label: 'Username and Password' },
-        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'password' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'password' } },
-    // mTLS auth fields
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  redisDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'acl', label: 'Username and Password' },
-        { value: 'entra', label: 'Microsoft Entra ID' },
-        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
-    // Entra ID Auth fields
-    { label: 'Tenant ID', field: 'tenantId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'entra' } },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'entra' } },
-    // mTLS auth fields
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  valkeyDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'acl', label: 'Username and Password' },
-        { value: 'mtls', label: 'Mutual TLS (Client Certificate)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'acl' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'acl' } },
-    // mTLS auth fields
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    { label: 'CA Certificate (PEM)', field: 'tlsCa', type: 'textarea', showWhen: { field: 'role', value: 'mtls' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  opensearchDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'basic', label: 'Username and Password' },
-        { value: 'saml', label: 'SAML SSO' },
-        { value: 'oidc', label: 'OpenID Connect (OIDC)' },
-      ],
-    },
-    // Username and Password auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'basic' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'basic' } },
-    // SAML SSO fields
-    { label: 'IdP Metadata URL', field: 'idpMetadataUrl', type: 'text', showWhen: { field: 'role', value: 'saml' } },
-    { label: 'SP Entity ID', field: 'spEntityId', type: 'text', showWhen: { field: 'role', value: 'saml' } },
-    // OIDC fields
-    { label: 'Client ID', field: 'clientId', type: 'text', showWhen: { field: 'role', value: 'oidc' } },
-    { label: 'Client Secret', field: 'clientSecret', type: 'password', showWhen: { field: 'role', value: 'oidc' } },
-    { label: 'Issuer URL', field: 'issuerUrl', type: 'text', showWhen: { field: 'role', value: 'oidc' } },
-    // TLS options
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  elasticsearchDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'basic', label: 'Username and Password' },
-        { value: 'apikey', label: 'API Key' },
-      ],
-    },
-    // Basic auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'basic' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'basic' } },
-    // API Key field
-    { label: 'API Key', field: 'apiKey', type: 'password', showWhen: { field: 'role', value: 'apikey' } },
-    // TLS options
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  snowflakeDatasource: [
-    { label: 'Account', field: 'account', type: 'text' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-    { label: 'Warehouse', field: 'warehouse', type: 'text' },
-    { label: 'Database', field: 'database', type: 'text' },
-    { label: 'Role (optional)', field: 'role', type: 'text' },
-  ],
-  prestodbDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  oracleDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Database/Service Name', field: 'database', type: 'text' },
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password', field: 'password', type: 'password' },
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  mongoDatasource: [
-    { label: 'Host', field: 'host', type: 'text' },
-    { label: 'Port', field: 'port', type: 'number' },
-    { label: 'Database', field: 'database', type: 'text' },
-    {
-      label: 'Authentication Type',
-      field: 'role',
-      type: 'select',
-      options: [
-        { value: 'none', label: 'No Authentication' },
-        { value: 'standard', label: 'Username/Password (SCRAM)' },
-        { value: 'x509', label: 'X.509 Certificate' },
-      ],
-    },
-    // Standard auth fields
-    { label: 'Username', field: 'username', type: 'text', showWhen: { field: 'role', value: 'standard' } },
-    { label: 'Password', field: 'password', type: 'password', showWhen: { field: 'role', value: 'standard' } },
-    { label: 'Auth Database', field: 'account', type: 'text', showWhen: { field: 'role', value: 'standard' } },
-    // X.509 Certificate fields
-    { label: 'Client Certificate (PEM)', field: 'tlsCert', type: 'textarea', showWhen: { field: 'role', value: 'x509' } },
-    { label: 'Client Key (PEM)', field: 'tlsKey', type: 'textarea', showWhen: { field: 'role', value: 'x509' } },
-    // TLS options (always shown)
-    { label: 'Use TLS', field: 'useTls', type: 'checkbox' },
-    { label: 'Allow Self-Signed Certificates', field: 'allowSelfSigned', type: 'checkbox' },
-    { label: 'Skip Hostname Verification', field: 'skipHostnameVerification', type: 'checkbox' },
-  ],
-  githubDatasource: [
-    { label: 'Personal Access Token', field: 'token', type: 'password' },
-  ],
-};
-
+// Remove the obsolete fields calculation 
 export function Datasources() {
   useAuth(); // Ensure user is authenticated
   const [dataSources, setDataSources] = useState<DataSourceWithAccess[]>([]);
@@ -495,7 +65,7 @@ export function Datasources() {
   async function loadDataSources() {
     try {
       setLoading(true);
-      const data = await datasourcesApi.list();
+      const data = await datasourcesApi.list() as DataSourceWithAccess[];
       setDataSources(data);
     } catch (err) {
       setError((err as Error).message);
@@ -564,7 +134,7 @@ export function Datasources() {
 
     // Fetch full data source details for editing
     try {
-      const fullData = await datasourcesApi.getForEdit(dataSource.id);
+      const fullData = await datasourcesApi.getForEdit(dataSource.id) as any;
       setEditData(fullData.data as DataSourceData);
     } catch (err) {
       console.error('Failed to fetch data source for editing:', err);
@@ -612,7 +182,7 @@ export function Datasources() {
       const result = await datasourcesApi.testUnsaved(
         newDataSource.type,
         newDataSource.data as Record<string, unknown>
-      );
+      ) as any;
       console.log('Test result:', result);
       setTestResult(result);
     } catch (err) {
@@ -622,9 +192,6 @@ export function Datasources() {
       setTesting(false);
     }
   }
-
-  // Get fields for the selected credential type
-  const currentFields = newDataSource.type ? datasourceFields[newDataSource.type] || [] : [];
 
   if (loading) {
     return (
@@ -855,16 +422,16 @@ export function Datasources() {
               </div>
 
               {/* Dynamic fields based on credential type */}
-              {currentFields.length > 0 && (
+              {newDataSource.type && (
                 <div className="border-t border-slate-200 pt-4 space-y-4">
                   <h3 className="text-sm font-medium text-slate-700">Connection Details</h3>
-                  <DataSourceFieldsRenderer
-                    fields={currentFields}
+                  <DynamicDataSourceForm
+                    type={newDataSource.type}
                     data={newDataSource.data}
                     onDataChange={updateDataSourceData}
                     showPasswords={showPasswords}
                     onTogglePasswordVisibility={togglePasswordVisibility}
-                    keyPrefix="create-"
+                    isEditMode={false}
                   />
                 </div>
               )}
@@ -1035,19 +602,18 @@ export function Datasources() {
                 </div>
 
                 {/* Dynamic credential fields based on type */}
-                {datasourceFields[editingDataSource.type] && (
+                {editingDataSource.type && (
                   <div className="border-t border-slate-200 pt-4 space-y-4">
                     <h3 className="text-sm font-medium text-slate-700">
                       Update Connection Details
                     </h3>
-                    <DataSourceFieldsRenderer
-                      fields={datasourceFields[editingDataSource.type]}
+                    <DynamicDataSourceForm
+                      type={editingDataSource.type}
                       data={editData}
                       onDataChange={updateEditData}
                       showPasswords={editShowPasswords}
                       onTogglePasswordVisibility={toggleEditPasswordVisibility}
                       isEditMode={true}
-                      keyPrefix="edit-"
                     />
                   </div>
                 )}

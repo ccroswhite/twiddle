@@ -1,4 +1,5 @@
 import type { ParameterEditorProps } from './types';
+import { CredentialDropdown } from './CredentialDropdown';
 
 export function DatabaseNodeEditor({ parameters, updateParameter }: ParameterEditorProps) {
     return (
@@ -18,12 +19,10 @@ export function DatabaseNodeEditor({ parameters, updateParameter }: ParameterEdi
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                     Credential
                 </label>
-                <input
-                    type="text"
+                <CredentialDropdown
                     value={(parameters.credentialId as string) || ''}
-                    onChange={(e) => updateParameter('credentialId', e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Credential ID"
+                    onChange={(value) => updateParameter('credentialId', value)}
+                    allowedTypes={['postgresql', 'mysql', 'mssql', 'oracle']}
                 />
             </div>
         </div>

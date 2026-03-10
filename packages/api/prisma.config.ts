@@ -2,14 +2,12 @@ import path from 'node:path';
 import { defineConfig } from 'prisma/config';
 import dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from the workspace root
+dotenv.config({ path: path.join(import.meta.dirname, '../../.env') });
 
 export default defineConfig({
     schema: path.join(import.meta.dirname, 'prisma', 'schema.prisma'),
-    migrate: {
-        schema: path.join(import.meta.dirname, 'prisma', 'schema.prisma'),
-        url: process.env.DATABASE_URL,
-        seed: 'tsx prisma/seed.ts',
-    },
+    datasource: {
+        url: process.env.DATABASE_URL
+    }
 });

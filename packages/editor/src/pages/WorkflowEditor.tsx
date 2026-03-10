@@ -16,7 +16,8 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Clock, Copy, Lock, Trash2 } from 'lucide-react';
-import { workflowsApi, nodesApi, githubApi, credentialsApi, foldersApi, type Workflow, type Folder as FolderType, type FolderPermission, type FolderPermissionLevel, type NodeTypeInfo } from '@/lib/api';
+import dagre from 'dagre';
+import { workflowsApi, nodesApi, githubApi, credentialsApi, type Workflow, type NodeTypeInfo } from '@/lib/api';
 import { WorkflowNode } from '@/components/WorkflowNode';
 import { NodePanel } from '@/components/NodePanel';
 import { NodePropertiesPanel } from '@/components/NodePropertiesPanel';
@@ -24,11 +25,12 @@ import { WorkflowPropertiesPanel, WorkflowProperty, WorkflowSchedule } from '@/c
 import { GitHubSettings } from '@/components/GitHubSettings';
 import { RightPanel } from '@/components/RightPanel';
 import { EditorToolbar } from '@/components/EditorToolbar';
+import { MonitorTableView } from '@/components/MonitorTableView';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { CodeViewerModal } from '@/components/CodeViewerModal';
-import { VersionHistoryModal, type WorkflowVersion } from '@/components/VersionHistoryModal';
+import { VersionHistoryModal } from '@/components/VersionHistoryModal';
 import { FolderPermissionsModal } from '@/components/FolderPermissionsModal';
 import { ReadOnlyBanner, TakeoverRequestModal, RequestingAccessBanner } from '@/components/editor';
 import { generatePropertyId } from '@/utils/workflowUtils';
@@ -40,7 +42,9 @@ import { useUndoHistory } from '@/hooks/useUndoHistory';
 import { useWorkflowLocking } from '@/hooks/useWorkflowLocking';
 import { useContextMenus } from '@/hooks/useContextMenus';
 import { useWorkflowState } from '@/hooks/useWorkflowState';
-
+import { useWorkflowPermissions } from '@/hooks/useWorkflowPermissions';
+import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
+import { useWorkflowExport } from '@/hooks/useWorkflowExport';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -99,7 +103,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   } = workflowBrowser;
 
   const [deletingWorkflow, setDeletingWorkflow] = useState<Workflow | null>(null);
-  const [versionHistoryWorkflow, setVersionHistoryWorkflow] = useState<Workflow | null>(null);
 
   // Locking hook - manages heartbeat, takeover requests, unlock on unmount
   const {
@@ -112,25 +115,31 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     updateLockState,
   } = useWorkflowLocking(id, isNew, (wfId) => loadWorkflow(wfId));
 
-  // Folder permissions state
-  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  // Folder permissions state via hook
+  const {
+    showPermissionsModal,
+    setShowPermissionsModal,
+    permissionsFolder,
+    setPermissionsFolder,
+    folderPermissions,
+    loadingPermissions,
+    handleAddPermission,
+    handleUpdatePermission,
+    handleDeletePermission,
+  } = useWorkflowPermissions();
+
   const [showPromotionModal, setShowPromotionModal] = useState(false);
-  const [permissionsFolder, setPermissionsFolder] = useState<FolderType | null>(null);
-  const [folderPermissions, setFolderPermissions] = useState<FolderPermission[]>([]);
-  const [loadingPermissions] = useState(false);
   const [availableUsers] = useState<{ id: string; email: string; name?: string }[]>([]);
   const [availableGroups] = useState<{ id: string; name: string }[]>([]);
-
-  // Version History state
-  const [showVersionHistory, setShowVersionHistory] = useState(false);
-  const [versions, setVersions] = useState<WorkflowVersion[]>([]);
-  const [loadingVersions, setLoadingVersions] = useState(false);
 
   // Pending node being dragged to place
   const [pendingNode, setPendingNode] = useState<{
     type: NodeTypeInfo;
     screenPos: { x: number; y: number };
   } | null>(null);
+
+  // Export hook
+  const { handleExport } = useWorkflowExport(id, isNew);
 
   // Context menus hook - manages selection, pane, and workflow context menus
   const {
@@ -172,6 +181,29 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const handleOpenProperties = useCallback((nodeId: string) => {
     handleOpenPropertiesRef.current?.(nodeId);
   }, []);
+
+  // Version History state via hook (Moved below handleOpenProperties)
+  const {
+    showVersionHistory,
+    setShowVersionHistory,
+    versionHistoryWorkflow,
+    versions,
+    loadingVersions,
+    openVersionHistory,
+    handleOpenVersion,
+    handleRestoreVersion,
+  } = useWorkflowVersions(
+    id,
+    navigate,
+    loadWorkflow,
+    setWorkflowName,
+    setWorkflowDescription,
+    setNodes,
+    setEdges,
+    updateLockState,
+    handleOpenProperties,
+    closeWorkflowBrowser
+  );
 
   // Callback for toggling expand state of embedded workflow nodes
   const handleToggleExpandRef = useRef<(nodeId: string) => void>(undefined);
@@ -584,7 +616,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       const nodeTypes = await nodesApi.list();
 
       // Load credentials and convert them to node types
-      const credentials = await credentialsApi.list();
+      const credentials = await (credentialsApi.list as any)();
       const credentialNodes: NodeTypeInfo[] = credentials.map((cred: { id: string; name: string; type: string }) => ({
         type: `credential.${cred.type}.${cred.id}`,
         displayName: cred.name,
@@ -593,7 +625,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       }));
 
       // Load workflows and convert them to node types for the "Existing Workflow" category
-      const workflows = await workflowsApi.list();
+      const workflows = await (workflowsApi.list as any)();
       const workflowNodes: NodeTypeInfo[] = workflows.map((workflow: Workflow) => ({
         type: `workflow.${workflow.id}`,
         displayName: workflow.name,
@@ -779,9 +811,98 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   }
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds: Edge[]) => addEdge(params, eds)),
-    [setEdges],
+    (params: Connection) => {
+      setEdges((eds: Edge[]) => addEdge(params, eds));
+
+      // Auto-populate Required/Published Activities
+      if (params.source && params.target) {
+        setNodes((nds: Node[]) => nds.map((node) => {
+          if (node.id === params.source) {
+            // Source node publishes an activity
+            const params = (node.data.parameters || {}) as Record<string, any>;
+            const published = new Set<string>((params.publishedActivity as string[]) || []);
+            published.add(`${node.id}-OK`);
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: { ...params, publishedActivity: Array.from(published) },
+              }
+            };
+          }
+          if (node.id === params.target) {
+            // Target node requires an activity
+            const params = (node.data.parameters || {}) as Record<string, any>;
+            const required = new Set<string>((params.requiredActivity as string[]) || []);
+            required.add(`${params.source}-OK`);
+
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                parameters: { ...params, requiredActivity: Array.from(required) },
+              }
+            };
+          }
+          return node;
+        }));
+      }
+    },
+    [setEdges, setNodes],
   );
+
+  const onAutoLayout = useCallback(() => {
+    const dagreGraph = new dagre.graphlib.Graph();
+    dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+    // Direction TOP to BOTTOM. Node dimensions roughly 160x60
+    dagreGraph.setGraph({ rankdir: 'TB', nodesep: 50, ranksep: 50 });
+
+    nodes.forEach((node) => {
+      // Use React Flow's automatically measured dimensions if available, 
+      // otherwise fallback to estimated dimensions for the new dense node style
+      const width = node.measured?.width || 300;
+      const height = node.measured?.height || 100;
+      dagreGraph.setNode(node.id, { width, height });
+    });
+
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target);
+    });
+
+    dagre.layout(dagreGraph);
+
+    setNodes((nds) =>
+      nds.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id);
+
+        // Dagre's position calculation gives the center point of the node.
+        // React Flow sets positions from the top-left anchor.
+        // We must subtract half the width and height to align them correctly.
+        const width = node.measured?.width || 300;
+        const height = node.measured?.height || 100;
+
+        const newNode = {
+          ...node,
+          position: {
+            x: nodeWithPosition.x - (width / 2),
+            y: nodeWithPosition.y - (height / 2),
+          },
+        };
+
+        return newNode;
+      })
+    );
+
+    // Fit view slightly after layout completes using a small timeout
+    setTimeout(() => {
+      if (reactFlowInstance.current) {
+        reactFlowInstance.current.fitView({ padding: 0.2, duration: 800 });
+      }
+    }, 50);
+
+  }, [nodes, edges, setNodes]);
 
   const onNodesDelete = useCallback((deletedNodes: Node[]) => {
     // Close properties panel if the selected node was deleted
@@ -866,116 +987,15 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     navigate('/workflows');
   }
 
-  // Folder permissions handlers
-  async function handleAddPermission(type: 'user' | 'group', targetId: string, level: FolderPermissionLevel) {
-    if (!permissionsFolder || !targetId) return;
-    try {
-      const permission = await foldersApi.addPermission(permissionsFolder.id, {
-        userId: type === 'user' ? targetId : undefined,
-        groupId: type === 'group' ? targetId : undefined,
-        permission: level,
-      });
-      setFolderPermissions(prev => [...prev, permission]);
-    } catch (err) {
-      alert(`Failed to add permission: ${(err as Error).message}`);
-    }
-  }
 
-  async function handleUpdatePermission(permissionId: string, level: FolderPermissionLevel) {
-    if (!permissionsFolder) return;
-    try {
-      const updated = await foldersApi.updatePermission(permissionsFolder.id, permissionId, {
-        permission: level,
-      });
-      setFolderPermissions(prev =>
-        prev.map(p => p.id === permissionId ? updated : p)
-      );
-    } catch (err) {
-      alert(`Failed to update permission: ${(err as Error).message}`);
-    }
-  }
 
-  async function handleDeletePermission(permissionId: string) {
-    if (!permissionsFolder) return;
-    try {
-      await foldersApi.deletePermission(permissionsFolder.id, permissionId);
-      setFolderPermissions(prev => prev.filter(p => p.id !== permissionId));
-    } catch (err) {
-      alert(`Failed to delete permission: ${(err as Error).message}`);
-    }
-  }
 
-  // Version History handlers
-  async function handleOpenVersion(version: WorkflowVersion) {
-    if (!versionHistoryWorkflow) return;
 
-    // Close modal
-    setShowVersionHistory(false);
-    closeWorkflowBrowser();
 
-    // Fetch full version data
-    const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, version.id);
 
-    // Navigate if needed
-    if (id !== versionHistoryWorkflow.id) {
-      navigate(`/workflows/${versionHistoryWorkflow.id}`);
-    }
 
-    // Convert to React Flow nodes
-    const flowNodes: Node[] = (versionData.nodes as any[]).map((node: any) => ({
-      id: node.id,
-      type: 'workflowNode',
-      position: node.position,
-      data: {
-        label: node.name,
-        nodeType: node.type,
-        parameters: node.parameters,
-        onOpenProperties: handleOpenProperties,
-      },
-    })).map(n => ({ ...n, draggable: false, selectable: true }));
 
-    const flowEdges: Edge[] = (versionData.connections as any[]).map((conn: any, index: number) => ({
-      id: `e${index}`,
-      source: conn.sourceNodeId,
-      target: conn.targetNodeId,
-      sourceHandle: conn.sourceOutput === 'main' ? null : (conn.sourceOutput ?? null),
-      targetHandle: conn.targetInput === 'main' ? null : (conn.targetInput ?? null),
-      animated: false,
-      deletable: false
-    }));
 
-    setNodes(flowNodes);
-    setEdges(flowEdges);
-    setWorkflowName(`${versionHistoryWorkflow.name} (v${version.version})`);
-    setWorkflowDescription(versionHistoryWorkflow.description || '');
-    updateLockState({ isReadOnly: true, lockedBy: null });
-  }
-
-  async function handleRestoreVersion(version: WorkflowVersion) {
-    if (!versionHistoryWorkflow) return;
-
-    if (!confirm(`Are you sure you want to restore Version ${version.version}? This will become the new HEAD.`)) return;
-
-    // Fetch version
-    const versionData = await workflowsApi.getVersion(versionHistoryWorkflow.id, version.id);
-
-    // Save as new update
-    await workflowsApi.update(versionHistoryWorkflow.id, {
-      name: versionHistoryWorkflow.name,
-      description: versionHistoryWorkflow.description,
-      nodes: versionData.nodes as any,
-      connections: versionData.connections as any,
-      settings: versionData.settings as any
-    });
-
-    alert(`Restored version ${version.version} successfully.`);
-    setShowVersionHistory(false);
-
-    // Reload if current
-    if (id === versionHistoryWorkflow.id) {
-      loadWorkflow(id);
-    }
-  }
 
   async function handleDeleteWorkflow(workflow: Workflow) {
     try {
@@ -992,28 +1012,6 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     }
   }
 
-
-  async function handleExport(format: 'temporal' | 'airflow' | 'ir') {
-    if (isNew) {
-      alert('Please save the workflow first');
-      return;
-    }
-    try {
-      switch (format) {
-        case 'temporal':
-          await workflowsApi.exportPython(id!);
-          break;
-        case 'airflow':
-          await workflowsApi.exportAirflow(id!);
-          break;
-        case 'ir':
-          await workflowsApi.exportIR(id!);
-          break;
-      }
-    } catch (err) {
-      alert((err as Error).message);
-    }
-  }
 
   return (
     <div className="h-full flex flex-col" style={{ '--header-height': '57px' } as React.CSSProperties}>
@@ -1038,7 +1036,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             // Load Airflow code on demand
             setLoadingAirflowCode(true);
             try {
-              const result = await workflowsApi.exportAirflowJson(id);
+              const result = await (workflowsApi.exportAirflowJson as any)(id);
               setAirflowCode(result.files);
             } catch (err) {
               console.error('Failed to load Airflow code', err);
@@ -1051,6 +1049,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         onGitHubSettings={() => setShowGitHubSettings(true)}
         onProperties={() => setShowPropertiesPanel(true)}
         onExecutions={() => navigate(`/executions?workflow=${id}`)}
+        onAutoLayout={onAutoLayout}
         onSave={handleSave}
       />
 
@@ -1059,99 +1058,125 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         <ReadOnlyBanner lockedBy={lockedBy} />
       )}
 
-      {/* Canvas */}
-      <div
-        className="flex-1"
-        onMouseMove={(e: React.MouseEvent) => {
-          if (pendingNode) {
-            setPendingNode({
-              ...pendingNode,
-              screenPos: { x: e.clientX, y: e.clientY }
-            });
-          }
-        }}
-      >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={isReadOnly ? undefined : onNodesChange}
-          onEdgesChange={isReadOnly ? undefined : onEdgesChange}
-          onConnect={isReadOnly ? undefined : onConnect}
-          onNodesDelete={isReadOnly ? undefined : onNodesDelete}
-          onInit={(instance: any) => { reactFlowInstance.current = instance; }}
-          nodeTypes={nodeTypes}
-          deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
-          nodesDraggable={!isReadOnly}
-          nodesConnectable={!isReadOnly}
-          elementsSelectable={true}
-          elevateNodesOnSelect={false}
-          snapToGrid={true}
-          snapGrid={[20, 20]}
-          fitView
-          selectionOnDrag={true}
-          selectionMode={SelectionMode.Partial}
-          panOnDrag={true}
-          selectNodesOnDrag={true}
-          onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
-          onEdgeContextMenu={!isReadOnly ? handleEdgeContextMenu : undefined}
-          onPaneContextMenu={handlePaneContextMenu}
-          onPaneMouseMove={(event: React.MouseEvent) => {
+      {/* Split Pane: Canvas & List View */}
+      <div className="flex-1 flex flex-col min-h-0 bg-slate-50">
+        {/* Top Pane: Canvas */}
+        <div
+          className="flex-1 min-h-0 relative shadow-inner"
+          onMouseMove={(e: React.MouseEvent) => {
             if (pendingNode) {
-              // Update screen position for preview
               setPendingNode({
                 ...pendingNode,
-                screenPos: { x: event.clientX, y: event.clientY }
+                screenPos: { x: e.clientX, y: e.clientY }
               });
             }
           }}
-          onPaneClick={async (event: React.MouseEvent) => {
-            if (pendingNode && reactFlowInstance.current) {
-              const { screenToFlowPosition } = reactFlowInstance.current;
-              let position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        >
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={isReadOnly ? undefined : onNodesChange}
+            onEdgesChange={isReadOnly ? undefined : onEdgesChange}
+            onConnect={isReadOnly ? undefined : onConnect}
+            onNodesDelete={isReadOnly ? undefined : onNodesDelete}
+            onInit={(instance: any) => { reactFlowInstance.current = instance; }}
+            nodeTypes={nodeTypes}
+            defaultEdgeOptions={{ type: 'smoothstep' }}
+            deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
+            nodesDraggable={!isReadOnly}
+            nodesConnectable={!isReadOnly}
+            elementsSelectable={true}
+            elevateNodesOnSelect={false}
+            snapToGrid={true}
+            snapGrid={[20, 20]}
+            fitView
+            selectionOnDrag={true}
+            selectionMode={SelectionMode.Partial}
+            panOnDrag={true}
+            selectNodesOnDrag={true}
+            onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
+            onEdgeContextMenu={!isReadOnly ? handleEdgeContextMenu : undefined}
+            onPaneContextMenu={handlePaneContextMenu}
+            onPaneMouseMove={(event: React.MouseEvent) => {
+              if (pendingNode) {
+                // Update screen position for preview
+                setPendingNode({
+                  ...pendingNode,
+                  screenPos: { x: event.clientX, y: event.clientY }
+                });
+              }
+            }}
+            onPaneClick={async (event: React.MouseEvent) => {
+              if (pendingNode && reactFlowInstance.current) {
+                const { screenToFlowPosition } = reactFlowInstance.current;
+                let position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-              // Snap to grid
-              position.x = Math.round(position.x / 20) * 20;
-              position.y = Math.round(position.y / 20) * 20;
+                // Snap to grid
+                position.x = Math.round(position.x / 20) * 20;
+                position.y = Math.round(position.y / 20) * 20;
 
-              // Check if this is a workflow type (for embedded workflows)
-              const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
+                // Check if this is a workflow type (for embedded workflows)
+                const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
 
-              if (isWorkflowType) {
-                // Fetch workflow data and create embedded workflow node
-                const workflowId = pendingNode.type.type.replace('workflow.', '');
-                try {
-                  const workflow = await workflowsApi.get(workflowId) as {
-                    id: string;
-                    name: string;
-                    description?: string;
-                    version: number;
-                    nodes: any[];
-                    connections: any[];
-                  };
+                if (isWorkflowType) {
+                  // Fetch workflow data and create embedded workflow node
+                  const workflowId = pendingNode.type.type.replace('workflow.', '');
+                  try {
+                    const workflow = await workflowsApi.get(workflowId) as {
+                      id: string;
+                      name: string;
+                      description?: string;
+                      version: number;
+                      nodes: any[];
+                      connections: any[];
+                    };
 
-                  const { inputHandles, outputHandles } = calculateEdgeHandles(
-                    workflow.nodes,
-                    workflow.connections
-                  );
+                    const { inputHandles, outputHandles } = calculateEdgeHandles(
+                      workflow.nodes,
+                      workflow.connections
+                    );
 
+                    const newNode: Node = {
+                      id: `node_${Date.now()}`,
+                      type: 'workflowNode',
+                      position,
+                      zIndex: 100,
+                      data: {
+                        label: workflow.name,
+                        nodeType: 'twiddle.embeddedWorkflow',
+                        parameters: {
+                          workflowId: workflow.id,
+                          workflowName: workflow.name,
+                          workflowVersion: workflow.version,
+                          isExpanded: 'false',
+                          embeddedNodes: JSON.stringify(workflow.nodes),
+                          embeddedConnections: JSON.stringify(workflow.connections),
+                          inputHandles: JSON.stringify(inputHandles),
+                          outputHandles: JSON.stringify(outputHandles),
+                        },
+                        onOpenProperties: handleOpenProperties,
+                        onToggleExpand: handleToggleExpand,
+                      },
+                    };
+
+                    setNodes((nds: Node[]) => [...nds, newNode]);
+                    setPendingNode(null);
+                  } catch (err) {
+                    console.error('Failed to create embedded workflow node:', err);
+                    alert('Failed to load workflow for embedding');
+                    setPendingNode(null);
+                  }
+                } else {
+                  // Create regular node
                   const newNode: Node = {
                     id: `node_${Date.now()}`,
                     type: 'workflowNode',
                     position,
                     zIndex: 100,
                     data: {
-                      label: workflow.name,
-                      nodeType: 'twiddle.embeddedWorkflow',
-                      parameters: {
-                        workflowId: workflow.id,
-                        workflowName: workflow.name,
-                        workflowVersion: workflow.version,
-                        isExpanded: 'false',
-                        embeddedNodes: JSON.stringify(workflow.nodes),
-                        embeddedConnections: JSON.stringify(workflow.connections),
-                        inputHandles: JSON.stringify(inputHandles),
-                        outputHandles: JSON.stringify(outputHandles),
-                      },
+                      label: pendingNode.type.displayName,
+                      nodeType: pendingNode.type.type,
+                      parameters: {},
                       onOpenProperties: handleOpenProperties,
                       onToggleExpand: handleToggleExpand,
                     },
@@ -1159,89 +1184,72 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
                   setNodes((nds: Node[]) => [...nds, newNode]);
                   setPendingNode(null);
-                } catch (err) {
-                  console.error('Failed to create embedded workflow node:', err);
-                  alert('Failed to load workflow for embedding');
-                  setPendingNode(null);
                 }
-              } else {
-                // Create regular node
-                const newNode: Node = {
-                  id: `node_${Date.now()}`,
-                  type: 'workflowNode',
-                  position,
-                  zIndex: 100,
-                  data: {
-                    label: pendingNode.type.displayName,
-                    nodeType: pendingNode.type.type,
-                    parameters: {},
-                    onOpenProperties: handleOpenProperties,
-                    onToggleExpand: handleToggleExpand,
-                  },
-                };
-
-                setNodes((nds: Node[]) => [...nds, newNode]);
-                setPendingNode(null);
               }
-            }
-          }}
-        >
-          <Controls />
-          <MiniMap />
-          <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
-        </ReactFlow>
-
-        {/* Visual preview of pending node - outside ReactFlow for proper positioning */}
-        {pendingNode && (
-          <div
-            className="pointer-events-none fixed"
-            style={{
-              left: pendingNode.screenPos.x,
-              top: pendingNode.screenPos.y,
-              transform: 'translate(-50%, -50%)',
-              zIndex: 1000,
             }}
           >
-            <div className="bg-white/90 rounded shadow-lg border-2 border-primary-500 border-dashed px-4 py-2">
-              <div className="font-medium text-sm text-slate-700">{pendingNode.type.displayName}</div>
-              <div className="text-xs text-slate-500">Click to place</div>
-            </div>
-          </div>
-        )}
+            <Controls />
+            <MiniMap />
+            <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
+          </ReactFlow>
 
-        {/* Selection Context Menu */}
-        {selectionContextMenu && (
-          <div
-            ref={selectionContextMenuRef}
-            className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 min-w-[160px]"
-            style={{
-              left: selectionContextMenu.x,
-              top: selectionContextMenu.y,
-            }}
-          >
-            <button
-              onClick={handleCopyAndPaste}
-              className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
-            >
-              <Copy className="w-4 h-4" />
-              Copy
-            </button>
-            <div className="border-t border-slate-200 my-1" />
-            <button
-              onClick={() => {
-                const selectedNodes = nodes.filter((n: Node) => n.selected);
-                const selectedNodeIds = new Set(selectedNodes.map((n: Node) => n.id));
-                setNodes(nodes.filter((n: Node) => !n.selected));
-                setEdges(edges.filter((e: Edge) => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target) && !e.selected));
-                setSelectionContextMenu(null);
+          {/* Visual preview of pending node - outside ReactFlow for proper positioning */}
+          {pendingNode && (
+            <div
+              className="pointer-events-none fixed"
+              style={{
+                left: pendingNode.screenPos.x,
+                top: pendingNode.screenPos.y,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 1000,
               }}
-              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
             >
-              <Trash2 className="w-4 h-4" />
-              Delete
-            </button>
-          </div>
-        )}
+              <div className="bg-white/90 rounded shadow-lg border-2 border-primary-500 border-dashed px-4 py-2">
+                <div className="font-medium text-sm text-slate-700">{pendingNode.type.displayName}</div>
+                <div className="text-xs text-slate-500">Click to place</div>
+              </div>
+            </div>
+          )}
+
+          {/* Selection Context Menu */}
+          {selectionContextMenu && (
+            <div
+              ref={selectionContextMenuRef}
+              className="fixed bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-50 min-w-[160px]"
+              style={{
+                left: selectionContextMenu.x,
+                top: selectionContextMenu.y,
+              }}
+            >
+              <button
+                onClick={handleCopyAndPaste}
+                className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Copy
+              </button>
+              <div className="border-t border-slate-200 my-1" />
+              <button
+                onClick={() => {
+                  const selectedNodes = nodes.filter((n: Node) => n.selected);
+                  const selectedNodeIds = new Set(selectedNodes.map((n: Node) => n.id));
+                  setNodes(nodes.filter((n: Node) => !n.selected));
+                  setEdges(edges.filter((e: Edge) => !selectedNodeIds.has(e.source) && !selectedNodeIds.has(e.target) && !e.selected));
+                  setSelectionContextMenu(null);
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Pane: Monitor / List View */}
+        <div className="h-64 shrink-0 bg-white border-t-2 border-slate-300 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-10 transition-all duration-300">
+          <MonitorTableView nodes={nodes} />
+        </div>
       </div>
 
       {/* Version History Modal */}
@@ -1346,19 +1354,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 setWorkflowContextMenu(null);
                 // Reuse Version History Logic
                 const workflow = workflowContextMenu.workflow;
-                setVersionHistoryWorkflow(workflow);
-                setLoadingVersions(true);
-                setShowVersionHistory(true);
-                try {
-                  const list = await workflowsApi.getVersions(workflow.id);
-                  // Map null to undefined for createdBy to match WorkflowVersion type
-                  setVersions(list.map((v) => ({
-                    ...v,
-                    createdBy: v.createdBy || undefined,
-                  })));
-                } finally {
-                  setLoadingVersions(false);
-                }
+                await openVersionHistory(workflow);
               }}
               className="w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 flex items-center gap-2"
             >
@@ -1392,7 +1388,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       {/* Folder Permissions Modal */}
       {showPermissionsModal && permissionsFolder && (
         <FolderPermissionsModal
-          folder={permissionsFolder}
+          folder={permissionsFolder as any}
           permissions={folderPermissions}
           loading={loadingPermissions}
           availableUsers={availableUsers}

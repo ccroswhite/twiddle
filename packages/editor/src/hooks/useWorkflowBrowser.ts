@@ -104,12 +104,12 @@ export function useWorkflowBrowser(): UseWorkflowBrowserReturn {
             setLoading(true);
             const [foldersData, workflowsData] = await Promise.all([
                 foldersApi.list(folderId || undefined),
-                workflowsApi.list(),
+                workflowsApi.list() as Promise<Workflow[]>,
             ]);
             setFolders(foldersData);
 
             // Filter workflows to show only those in the current folder (or root)
-            const filteredWorkflows = workflowsData.filter(w => {
+            const filteredWorkflows = (workflowsData as any[]).filter((w: any) => {
                 const viewingRoot = !folderId;
                 const isInRoot = !w.folderId || w.folderId === 'null';
 

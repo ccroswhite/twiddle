@@ -406,7 +406,7 @@ export function WorkflowBrowserPanel({
                                             )}
                                         </div>
                                         <div className="flex items-center gap-1">
-                                            <EnvironmentBadge environment={workflow.environment} />
+                                            <EnvironmentBadge environment={workflow.environment || 'DV'} />
                                             {onVersionHistory && (
                                                 <button
                                                     onClick={(e) => {
