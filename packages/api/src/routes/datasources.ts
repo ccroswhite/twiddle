@@ -222,13 +222,15 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ error: 'Only the owner can edit this data source' });
     }
 
-    // Filter out password-type fields from data
+
     const rawData = dataSource.data as Record<string, unknown>;
     const passwordFields = ['password', 'clientSecret', 'apiKey', 'token', 'accessToken', 'refreshToken', 'passphrase', 'privateKey', 'tlsKey'];
-    const filteredData: Record<string, unknown> = {};
+    const safeData: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rawData)) {
-      if (!passwordFields.includes(key)) {
-        filteredData[key] = value;
+      if (passwordFields.includes(key)) {
+        safeData[key] = ''; // Explicitly return empty string for frontend fields
+      } else {
+        safeData[key] = value;
       }
     }
 
@@ -236,7 +238,7 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       id: dataSource.id,
       name: dataSource.name,
       type: dataSource.type,
-      data: filteredData,
+      data: safeData,
       createdAt: dataSource.createdAt,
       updatedAt: dataSource.updatedAt,
       createdById: dataSource.createdById,
