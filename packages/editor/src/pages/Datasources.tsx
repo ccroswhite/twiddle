@@ -13,7 +13,9 @@ export function Datasources() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [newDataSource, setNewDataSource] = useState<{ name: string; type: string; data: DataSourceData; groupIds: string[] }>({ name: '', type: '', data: {}, groupIds: [] });
+  const [newDataSource, setNewDataSource] = useState<{
+    name: string; type: string; data: DataSourceData; groupPermissions: { groupId: string; permission: 'READ' | 'WRITE' | 'ADMIN' }[]
+  }>({ name: '', type: '', data: {}, groupPermissions: [] });
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [testResult, setTestResult] = useState<{ success: boolean; message: string; details?: Record<string, unknown> } | null>(null);
   const [showTestDetails, setShowTestDetails] = useState(false);
@@ -24,14 +26,14 @@ export function Datasources() {
 
   // For editing credential
   const [editingDataSource, setEditingDataSource] = useState<DataSourceWithAccess | null>(null);
-  const [editGroupIds, setEditGroupIds] = useState<string[]>([]);
+  const [editGroupPermissions, setEditGroupPermissions] = useState<{ groupId: string; permission: 'READ' | 'WRITE' | 'ADMIN' }[]>([]);
   const [editName, setEditName] = useState<string>('');
   const [editData, setEditData] = useState<DataSourceData>({});
   const [editShowPasswords, setEditShowPasswords] = useState<Record<string, boolean>>({});
 
   // For sharing data source
   const [sharingDataSource, setSharingDataSource] = useState<DataSourceWithAccess | null>(null);
-  const [shareGroupIds, setShareGroupIds] = useState<string[]>([]);
+  const [shareGroupPermissions, setShareGroupPermissions] = useState<{ groupId: string; permission: 'READ' | 'WRITE' | 'ADMIN' }[]>([]);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; dataSource: DataSourceWithAccess } | null>(null);
@@ -80,10 +82,10 @@ export function Datasources() {
         name: newDataSource.name,
         type: newDataSource.type,
         data: newDataSource.data as Record<string, unknown>,
-        groupIds: newDataSource.groupIds.length > 0 ? newDataSource.groupIds : undefined,
+        groupPermissions: newDataSource.groupPermissions,
       });
       setShowCreate(false);
-      setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
+      setNewDataSource({ name: '', type: '', data: {}, groupPermissions: [] });
       setShowPasswords({});
       setTestResult(null);
       loadDataSources();
@@ -102,7 +104,7 @@ export function Datasources() {
       await datasourcesApi.update(editingDataSource.id, {
         name: editName,
         ...(hasDataChanges && { data: editData as Record<string, unknown> }),
-        groupIds: editGroupIds,
+        groupPermissions: editGroupPermissions,
       });
       loadDataSources();
       setEditingDataSource(null);
@@ -117,7 +119,7 @@ export function Datasources() {
     try {
       await datasourcesApi.update(sharingDataSource.id, {
         name: sharingDataSource.name,
-        groupIds: shareGroupIds,
+        groupPermissions: shareGroupPermissions,
       });
       loadDataSources();
       setSharingDataSource(null);
@@ -128,7 +130,7 @@ export function Datasources() {
 
   async function openEditModal(dataSource: DataSourceWithAccess) {
     setEditingDataSource(dataSource);
-    setEditGroupIds(dataSource.groups.map(g => g.id));
+    setEditGroupPermissions(dataSource.permissions || []);
     setEditName(dataSource.name);
     setEditShowPasswords({});
 
@@ -257,7 +259,7 @@ export function Datasources() {
                     <button
                       onClick={() => {
                         setSharingDataSource(dataSource);
-                        setShareGroupIds(dataSource.groups.map(g => g.id));
+                        setShareGroupPermissions(dataSource.permissions || []);
                       }}
                       className="p-1.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
                       title="Share with group"
@@ -278,10 +280,10 @@ export function Datasources() {
               </div>
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Updated {new Date(dataSource.updatedAt).toLocaleDateString()}</span>
-                {dataSource.groups.length > 0 && (
-                  <span className="flex items-center gap-1 text-primary-600">
-                    <Users className="w-3 h-3" />
-                    {dataSource.groups.map(g => g.name).join(', ')}
+                {dataSource.permissions && dataSource.permissions.length > 0 && (
+                  <span className="flex items-center gap-1">
+                    <Users className="w-3.5 h-3.5" />
+                    {dataSource.permissions.map(p => p.group.name).join(', ')}
                   </span>
                 )}
                 {!dataSource.isOwner && (
@@ -334,7 +336,7 @@ export function Datasources() {
             // Close modal when clicking backdrop
             if (e.target === e.currentTarget) {
               setShowCreate(false);
-              setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
+              setNewDataSource({ name: '', type: '', data: {}, groupPermissions: [] });
               setShowPasswords({});
               setTestResult(null);
             }
@@ -346,7 +348,7 @@ export function Datasources() {
               <button
                 onClick={() => {
                   setShowCreate(false);
-                  setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
+                  setNewDataSource({ name: '', type: '', data: {}, groupPermissions: [] });
                   setShowPasswords({});
                   setTestResult(null);
                 }}
@@ -385,6 +387,10 @@ export function Datasources() {
                   <option value="elasticsearchDatasource">Elasticsearch</option>
                   <option value="snowflakeDatasource">Snowflake</option>
                   <option value="prestodbDatasource">PrestoDB</option>
+                  <option value="oauth2">OAuth2 / OIDC</option>
+                  <option value="sshDatasource">SSH</option>
+                  <option value="winrmDatasource">WinRM</option>
+                  <option value="githubDatasource">GitHub</option>
                 </select>
               </div>
 
@@ -397,23 +403,53 @@ export function Datasources() {
                   {userGroups.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
                   ) : (
-                    userGroups.map((group) => (
-                      <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newDataSource.groupIds.includes(group.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setNewDataSource({ ...newDataSource, groupIds: [...newDataSource.groupIds, group.id] });
-                            } else {
-                              setNewDataSource({ ...newDataSource, groupIds: newDataSource.groupIds.filter(id => id !== group.id) });
-                            }
-                          }}
-                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="text-sm text-slate-700">{group.name}</span>
-                      </label>
-                    ))
+                    userGroups.map((group) => {
+                      const existingPerm = newDataSource.groupPermissions.find(p => p.groupId === group.id);
+                      return (
+                        <div key={group.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
+                          <label className="flex items-center gap-2 flex-grow cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={existingPerm !== undefined}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setNewDataSource({
+                                    ...newDataSource,
+                                    groupPermissions: [...newDataSource.groupPermissions, { groupId: group.id, permission: 'READ' }]
+                                  });
+                                } else {
+                                  setNewDataSource({
+                                    ...newDataSource,
+                                    groupPermissions: newDataSource.groupPermissions.filter(p => p.groupId !== group.id)
+                                  });
+                                }
+                              }}
+                              className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className="text-sm text-slate-700">{group.name}</span>
+                          </label>
+                          {existingPerm && (
+                            <select
+                              value={existingPerm.permission}
+                              onChange={(e) => {
+                                const level = e.target.value as 'READ' | 'WRITE' | 'ADMIN';
+                                setNewDataSource({
+                                  ...newDataSource,
+                                  groupPermissions: newDataSource.groupPermissions.map(p =>
+                                    p.groupId === group.id ? { ...p, permission: level } : p
+                                  )
+                                });
+                              }}
+                              className="px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                            >
+                              <option value="READ">Read</option>
+                              <option value="WRITE">Write</option>
+                              <option value="ADMIN">Admin</option>
+                            </select>
+                          )}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
@@ -499,7 +535,7 @@ export function Datasources() {
                 <button
                   onClick={() => {
                     setShowCreate(false);
-                    setNewDataSource({ name: '', type: '', data: {}, groupIds: [] });
+                    setNewDataSource({ name: '', type: '', data: {}, groupPermissions: [] });
                     setShowPasswords({});
                     setTestResult(null);
                   }}
@@ -517,7 +553,7 @@ export function Datasources() {
               </div>
             </div>
           </div>
-        </div>
+        </div >
       )
       }
 
@@ -577,23 +613,44 @@ export function Datasources() {
                     {userGroups.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
                     ) : (
-                      userGroups.map((group) => (
-                        <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={editGroupIds.includes(group.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setEditGroupIds([...editGroupIds, group.id]);
-                              } else {
-                                setEditGroupIds(editGroupIds.filter(id => id !== group.id));
-                              }
-                            }}
-                            className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-slate-700">{group.name}</span>
-                        </label>
-                      ))
+                      userGroups.map((group) => {
+                        const existingPerm = editGroupPermissions.find(p => p.groupId === group.id);
+                        return (
+                          <div key={group.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
+                            <label className="flex items-center gap-2 flex-grow cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={existingPerm !== undefined}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setEditGroupPermissions([...editGroupPermissions, { groupId: group.id, permission: 'READ' }]);
+                                  } else {
+                                    setEditGroupPermissions(editGroupPermissions.filter(p => p.groupId !== group.id));
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-slate-700">{group.name}</span>
+                            </label>
+                            {existingPerm && (
+                              <select
+                                value={existingPerm.permission}
+                                onChange={(e) => {
+                                  const level = e.target.value as 'READ' | 'WRITE' | 'ADMIN';
+                                  setEditGroupPermissions(editGroupPermissions.map(p =>
+                                    p.groupId === group.id ? { ...p, permission: level } : p
+                                  ));
+                                }}
+                                className="px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              >
+                                <option value="READ">Read</option>
+                                <option value="WRITE">Write</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -643,105 +700,128 @@ export function Datasources() {
       }
 
       {/* Share Connection Modal */}
-      {sharingDataSource && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSharingDataSource(null);
-            }
-          }}
-        >
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Share Connection</h2>
-              <button
-                onClick={() => setSharingDataSource(null)}
-                className="p-1 text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {
+        sharingDataSource && (
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setSharingDataSource(null);
+              }
+            }}
+          >
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Share Connection</h2>
+                <button
+                  onClick={() => setSharingDataSource(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <div className="space-y-4">
-              {/* Data Source Name (read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Data Source</label>
-                <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
-                  <Database className="w-5 h-5 text-slate-500" />
-                  <div>
-                    <div className="font-medium text-slate-900">{sharingDataSource.name}</div>
-                    <div className="text-sm text-slate-500">{sharingDataSource.type}</div>
+              <div className="space-y-4">
+                {/* Data Source Name (read-only) */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data Source</label>
+                  <div className="flex items-center gap-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg">
+                    <Database className="w-5 h-5 text-slate-500" />
+                    <div>
+                      <div className="font-medium text-slate-900">{sharingDataSource.name}</div>
+                      <div className="text-sm text-slate-500">{sharingDataSource.type}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Current Sharing Status */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
-                <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
-                  {sharingDataSource.groups.length > 0 ? (
-                    <span className="flex items-center gap-2 text-primary-600">
-                      <Users className="w-4 h-4" />
-                      Shared with {sharingDataSource.groups.map(g => g.name).join(', ')}
-                    </span>
-                  ) : (
-                    <span className="text-slate-500">Private - only you can access</span>
-                  )}
+                {/* Current Sharing Status */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Current Status</label>
+                  <div className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm">
+                    {sharingDataSource.permissions && sharingDataSource.permissions.length > 0 ? (
+                      <span className="flex items-center gap-2 text-primary-600">
+                        <Users className="w-4 h-4" />
+                        Shared with {sharingDataSource.permissions.map(p => p.group.name).join(', ')}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Private - only you can access</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Share with Groups */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Share with Groups
+                  </label>
+                  <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
+                    {userGroups.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
+                    ) : (
+                      userGroups.map((group) => {
+                        const existingPerm = shareGroupPermissions.find(p => p.groupId === group.id);
+                        return (
+                          <div key={group.id} className="flex items-center gap-3 px-3 py-2 hover:bg-slate-50">
+                            <label className="flex items-center gap-2 flex-grow cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={existingPerm !== undefined}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setShareGroupPermissions([...shareGroupPermissions, { groupId: group.id, permission: 'READ' }]);
+                                  } else {
+                                    setShareGroupPermissions(shareGroupPermissions.filter(p => p.groupId !== group.id));
+                                  }
+                                }}
+                                className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className="text-sm text-slate-700">{group.name}</span>
+                            </label>
+                            {existingPerm && (
+                              <select
+                                value={existingPerm.permission}
+                                onChange={(e) => {
+                                  const level = e.target.value as 'READ' | 'WRITE' | 'ADMIN';
+                                  setShareGroupPermissions(shareGroupPermissions.map(p =>
+                                    p.groupId === group.id ? { ...p, permission: level } : p
+                                  ));
+                                }}
+                                className="px-2 py-1 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              >
+                                <option value="READ">Read</option>
+                                <option value="WRITE">Write</option>
+                                <option value="ADMIN">Admin</option>
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    All members of selected groups will be able to use this data source.
+                  </p>
                 </div>
               </div>
 
-              {/* Share with Groups */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Share with Groups
-                </label>
-                <div className="border border-slate-200 rounded-lg max-h-40 overflow-y-auto">
-                  {userGroups.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-slate-500">No groups available</div>
-                  ) : (
-                    userGroups.map((group) => (
-                      <label key={group.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={shareGroupIds.includes(group.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setShareGroupIds([...shareGroupIds, group.id]);
-                            } else {
-                              setShareGroupIds(shareGroupIds.filter(id => id !== group.id));
-                            }
-                          }}
-                          className="rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="text-sm text-slate-700">{group.name}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  All members of selected groups will be able to use this data source.
-                </p>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setSharingDataSource(null)}
+                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateSharing}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  Save Sharing
+                </button>
               </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setSharingDataSource(null)}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateSharing}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              >
-                Save Sharing
-              </button>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </div >
   );
 }

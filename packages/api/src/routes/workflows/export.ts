@@ -11,6 +11,7 @@ import { create as createTar } from 'tar';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { canAccessWorkflow } from '../../lib/permissions.js';
 
 /**
  * Create a safe directory name from workflow metadata
@@ -104,6 +105,11 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
             return reply.status(404).send({ error: 'Workflow not found' });
         }
 
+        const user = (request as { user?: { id: string } }).user || null;
+        if (!(await canAccessWorkflow(user, id, 'OPERATOR'))) {
+            return reply.status(403).send({ error: 'Operator access required to export executable code' });
+        }
+
         // Generate Python files
         const files = generatePythonExport({
             id: workflow.id,
@@ -159,6 +165,11 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
             return reply.status(404).send({ error: 'Workflow not found' });
         }
 
+        const user = (request as { user?: { id: string } }).user || null;
+        if (!(await canAccessWorkflow(user, id, 'OPERATOR'))) {
+            return reply.status(403).send({ error: 'Operator access required to export executable code' });
+        }
+
         // Generate Airflow files
         const files = generateAirflowExport({
             id: workflow.id,
@@ -211,6 +222,11 @@ export const exportRoutes: FastifyPluginAsync = async (app) => {
 
         if (!workflow) {
             return reply.status(404).send({ error: 'Workflow not found' });
+        }
+
+        const user = (request as { user?: { id: string } }).user || null;
+        if (!(await canAccessWorkflow(user, id, 'READ'))) {
+            return reply.status(403).send({ error: 'Read access required to export IR' });
         }
 
         // Convert to IR format

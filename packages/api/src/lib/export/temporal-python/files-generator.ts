@@ -25,6 +25,9 @@ export function generateRequirements(workflow: WorkflowData): string {
         '',
         '# Utilities',
         'python-dotenv>=1.0.0',
+        '',
+        '# Observability',
+        'prometheus_client>=0.20.0',
     ];
 
     // Add SSH dependencies

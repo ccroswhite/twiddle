@@ -1,20 +1,18 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { prisma, disconnectDatabase } from '../src/lib/prisma';
 import { workflowRoutes } from '../src/routes/workflows';
 import { optionalAuthMiddleware } from '../src/lib/auth';
 
 describe('Workflow Versioning Integration', () => {
     let app: FastifyInstance;
-    let prisma: PrismaClient;
     let user: any;
     let workflowId: string;
     let cookie: string;
 
     beforeAll(async () => {
         app = Fastify();
-        prisma = new PrismaClient();
 
         app.decorateRequest('user', null);
         app.addHook('preHandler', async (req, reply) => {
@@ -44,7 +42,7 @@ describe('Workflow Versioning Integration', () => {
     afterAll(async () => {
         if (workflowId) await prisma.workflow.deleteMany({ where: { id: workflowId } });
         if (user) await prisma.user.delete({ where: { id: user.id } });
-        await prisma.$disconnect();
+        await disconnectDatabase();
         await app.close();
     });
 

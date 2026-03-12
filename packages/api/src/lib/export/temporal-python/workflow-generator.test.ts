@@ -93,8 +93,43 @@ describe('Temporal Python Workflow Generator', () => {
 
         // Assert that the exception block catches and continues
         expect(result).toContain('except Exception as e:');
-        expect(result).toContain('self._events["Flaky API-FAIL"] = True');
+        expect(result).toContain('self._events["node-1-FAIL"] = True');
         expect(result).toContain('workflow.logger.warning(f"ActivityFailed (Continuing)');
         expect(result).not.toContain('raise');
+    });
+
+    it('handles explicit fail requirements gracefully without continueOnFail', () => {
+        const workflow: WorkflowData = {
+            id: 'wf-4',
+            name: 'Handled Fail Workflow',
+            nodes: [
+                {
+                    id: 'node-1',
+                    type: 'twiddle.api',
+                    name: 'Flaky API',
+                    position: { x: 0, y: 0 },
+                    parameters: {}
+                },
+                {
+                    id: 'node-2',
+                    type: 'twiddle.script',
+                    name: 'Recovery Script',
+                    position: { x: 0, y: 1 },
+                    parameters: {
+                        requiredActivity: ['node-1-FAIL']
+                    }
+                }
+            ],
+            connections: []
+        };
+
+        const result = generateWorkflowFile(workflow);
+
+        // Assert that the exception block for node-1 catches and continues because it is explicitly handled
+        expect(result).toContain('self._events["node-1-FAIL"] = True');
+        expect(result).toContain('workflow.logger.warning(f"ActivityFailed (Handled)');
+
+        // Ensure that the node-2 generation didn't get swallowed and exists
+        expect(result).toContain('node_1_result = await workflow.execute_activity(');
     });
 });

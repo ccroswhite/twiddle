@@ -1,16 +1,21 @@
 import { request } from './request';
 import type { DataSourceCreateInput, DataSourceUpdateInput } from '@twiddle/shared';
 
+export interface DataSourcePermissionMap {
+    groupId: string;
+    permission: 'READ' | 'WRITE' | 'ADMIN';
+}
+
 export const datasourcesApi = {
     list: () => request('/datasources'),
     get: (id: string) => request(`/datasources/${id}`),
     getForEdit: (id: string) => request(`/datasources/${id}/edit`),
-    create: (data: DataSourceCreateInput & { groupIds?: string[] }) =>
+    create: (data: DataSourceCreateInput & { groupPermissions?: DataSourcePermissionMap[] }) =>
         request('/datasources', {
             method: 'POST',
             body: JSON.stringify(data),
         }),
-    update: (id: string, data: DataSourceUpdateInput & { groupIds?: string[] }) =>
+    update: (id: string, data: DataSourceUpdateInput & { groupPermissions?: DataSourcePermissionMap[] }) =>
         request(`/datasources/${id}`, {
             method: 'PUT',
             body: JSON.stringify(data),

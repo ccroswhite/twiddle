@@ -269,82 +269,95 @@ export function WorkflowBrowserPanel({
                 )}
 
                 {/* Folders */}
-                {!loading && folders.length > 0 && (
+                {!loading && (
                     <div className="mb-4">
                         <h3 className="text-xs font-medium text-slate-500 uppercase mb-2">Folders</h3>
-                        <div className="space-y-1">
-                            {folders.map((folder) => (
-                                <div
-                                    key={folder.id}
-                                    className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${dragOverFolderId === folder.id
-                                        ? 'bg-primary-100 ring-2 ring-primary-500'
-                                        : 'hover:bg-slate-100'
-                                        }`}
-                                    onClick={() => {
-                                        if (editingFolderId !== folder.id) {
-                                            onNavigateToFolder(folder);
-                                        }
-                                    }}
-                                    onDragOver={(e) => onDragOver(e, folder.id)}
-                                    onDragLeave={onDragLeave}
-                                    onDrop={(e) => onDrop(e, folder.id)}
+                        {folders.length === 0 ? (
+                            <div className="text-center py-4 bg-slate-50 border border-slate-200 border-dashed rounded-lg">
+                                <Folder className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                                <p className="text-xs text-slate-500 mb-2">No nested folders</p>
+                                <button
+                                    onClick={() => setShowNewFolderInput(true)}
+                                    className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline"
                                 >
-                                    <FolderOpen className="w-5 h-5 text-amber-500" />
-                                    {editingFolderId === folder.id ? (
-                                        <input
-                                            type="text"
-                                            value={editingFolderName}
-                                            onChange={(e) => setEditingFolderName(e.target.value)}
-                                            onKeyDown={(e) => handleFolderKeyDown(e, folder.id)}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="flex-1 px-2 py-0.5 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            autoFocus
-                                        />
-                                    ) : (
-                                        <span className="flex-1 text-slate-700">{folder.name}</span>
-                                    )}
-                                    {folder.group && (
-                                        <span className="text-xs text-slate-400 flex items-center gap-1">
-                                            <Users className="w-3 h-3" />
-                                            {folder.group.name}
-                                        </span>
-                                    )}
-                                    <div className="hidden group-hover:flex items-center gap-1">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onOpenPermissions(folder);
-                                            }}
-                                            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
-                                            title="Permissions"
-                                        >
-                                            <Shield className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setEditingFolderId(folder.id);
-                                                setEditingFolderName(folder.name);
-                                            }}
-                                            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
-                                            title="Rename"
-                                        >
-                                            <Pencil className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDeleteFolder(folder.id);
-                                            }}
-                                            className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                    + Create Folder
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                {folders.map((folder) => (
+                                    <div
+                                        key={folder.id}
+                                        className={`group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${dragOverFolderId === folder.id
+                                            ? 'bg-primary-100 ring-2 ring-primary-500'
+                                            : 'hover:bg-slate-100'
+                                            }`}
+                                        onClick={() => {
+                                            if (editingFolderId !== folder.id) {
+                                                onNavigateToFolder(folder);
+                                            }
+                                        }}
+                                        onDragOver={(e) => onDragOver(e, folder.id)}
+                                        onDragLeave={onDragLeave}
+                                        onDrop={(e) => onDrop(e, folder.id)}
+                                    >
+                                        <FolderOpen className="w-5 h-5 text-amber-500" />
+                                        {editingFolderId === folder.id ? (
+                                            <input
+                                                type="text"
+                                                value={editingFolderName}
+                                                onChange={(e) => setEditingFolderName(e.target.value)}
+                                                onKeyDown={(e) => handleFolderKeyDown(e, folder.id)}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="flex-1 px-2 py-0.5 border border-slate-200 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <span className="flex-1 text-slate-700">{folder.name}</span>
+                                        )}
+                                        {folder.group && (
+                                            <span className="text-xs text-slate-400 flex items-center gap-1">
+                                                <Users className="w-3 h-3" />
+                                                {folder.group.name}
+                                            </span>
+                                        )}
+                                        <div className="hidden group-hover:flex items-center gap-1">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onOpenPermissions(folder);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
+                                                title="Permissions"
+                                            >
+                                                <Shield className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditingFolderId(folder.id);
+                                                    setEditingFolderName(folder.name);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded"
+                                                title="Rename"
+                                            >
+                                                <Pencil className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteFolder(folder.id);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                                title="Delete"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 

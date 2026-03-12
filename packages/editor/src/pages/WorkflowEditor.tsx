@@ -45,6 +45,7 @@ import { useWorkflowState } from '@/hooks/useWorkflowState';
 import { useWorkflowPermissions } from '@/hooks/useWorkflowPermissions';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowExport } from '@/hooks/useWorkflowExport';
+import { SaveAsModal } from '@/components/SaveAsModal';
 
 interface WorkflowEditorProps {
   openBrowser?: boolean;
@@ -77,14 +78,17 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     setEnvironment,
     saving,
     handleSave,
+    handleSaveAs,
   } = useWorkflowState(id, isNew);
 
   // UI state that stays in the component
   const [showNodePanel, setShowNodePanel] = useState(false);
+  const [workflowFolderId, setWorkflowFolderId] = useState<string | null>(null);
   const [showCodeViewer, setShowCodeViewer] = useState(false);
   const [viewCodeFormat, setViewCodeFormat] = useState<'temporal' | 'airflow'>('temporal');
   const [showGitHubSettings, setShowGitHubSettings] = useState(false);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+  const [showSaveAsModal, setShowSaveAsModal] = useState(false);
   const [githubConnected, setGithubConnected] = useState(false);
   const [pythonCode, setPythonCode] = useState<{ workflow: string; activities: string } | null>(null);
   const [airflowCode, setAirflowCode] = useState<Record<string, string> | null>(null);
@@ -598,7 +602,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         }
       }
     }
-     
+
   }, [id, isNew, openBrowser, location.key]); // showWorkflowBrowser intentionally omitted to avoid re-triggering
 
   async function loadGitHubStatus(workflowId: string) {
@@ -664,11 +668,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         properties?: WorkflowProperty[];
         schedule?: WorkflowSchedule;
         version?: number;
+        folderId?: string; // Added for handleSaveAs
       };
       setWorkflowName(workflow.name);
       setWorkflowVersion(workflow.version || 1);
       setWorkflowDescription(workflow.description || '');
       setEnvironment(workflow.environment || 'DV');
+      setWorkflowFolderId(workflow.folderId || null);
 
       // Check for embedded workflow updates
       const { nodes: nodesWithUpdates } = await checkAndUpgradeEmbeddedWorkflows(workflow.nodes);
@@ -851,6 +857,13 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
     },
     [setEdges, setNodes],
   );
+
+  const executeSaveAs = useCallback(async (newName: string) => {
+    const newId = await handleSaveAs(newName, workflowFolderId || undefined);
+    if (newId) {
+      setShowSaveAsModal(false);
+    }
+  }, [handleSaveAs, workflowFolderId]);
 
   const onAutoLayout = useCallback(() => {
     const dagreGraph = new dagre.graphlib.Graph();
@@ -1051,6 +1064,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         onExecutions={() => navigate(`/executions?workflow=${id}`)}
         onAutoLayout={onAutoLayout}
         onSave={handleSave}
+        onSaveAs={() => setShowSaveAsModal(true)}
       />
 
       {/* Read Only Banner */}
@@ -1336,6 +1350,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
       {selectedNode && (
         <NodePropertiesPanel
           node={selectedNode}
+          nodes={nodes}
           onUpdate={handleNodeUpdate}
           onClose={() => setSelectedNode(null)}
         />
@@ -1384,6 +1399,14 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           onCancel={() => setDeletingWorkflow(null)}
         />
       )}
+
+      {/* Save As Modal */}
+      <SaveAsModal
+        isOpen={showSaveAsModal}
+        onClose={() => setShowSaveAsModal(false)}
+        onSave={executeSaveAs}
+        defaultName={workflowName}
+      />
 
       {/* Folder Permissions Modal */}
       {showPermissionsModal && permissionsFolder && (

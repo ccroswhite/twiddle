@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Zap } from 'lucide-react';
-import { useReactFlow, type Node } from '@xyflow/react';
+import { type Node } from '@xyflow/react';
 import { isActivityNode, getNodeDisplayName } from '@/utils/nodeConfig';
 import { nodeParameterEditors } from '@/components/nodeParameterEditors';
 import { workflowsApi } from '@/lib/api';
@@ -13,10 +13,10 @@ interface NodePropertiesPanelProps {
   node: Node | null;
   onUpdate: (nodeId: string, data: Record<string, unknown>) => void;
   onClose: () => void;
+  nodes: Node[];
 }
 
-export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesPanelProps) {
-  const { getNodes } = useReactFlow();
+export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodePropertiesPanelProps) {
   const [label, setLabel] = useState('');
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [activeTab, setActiveTab] = useState<'general' | 'scheduling' | 'requiredActivity' | 'publishedActivity'>('general');
@@ -322,9 +322,8 @@ export function NodePropertiesPanel({ node, onUpdate, onClose }: NodePropertiesP
             parameters={parameters}
             updateParameter={updateParameter}
             availableActivities={(function () {
-              const allNodes = getNodes();
               const allPublished = new Set<string>(globalActivities);
-              allNodes.forEach((n: any) => {
+              nodes.forEach((n: any) => {
                 const pub = (n.data.parameters as Record<string, any>)?.publishedActivity as string[] | undefined;
                 if (pub && Array.isArray(pub)) {
                   pub.forEach(p => allPublished.add(p));

@@ -40,6 +40,8 @@ export interface UseWorkflowStateReturn {
     // For new workflows - folder ID from navigation state
     newWorkflowFolderId: string | null;
     setNewWorkflowFolderId: (folderId: string | null) => void;
+
+    handleSaveAs: (newName: string, folderId?: string) => Promise<string | null>;
 }
 
 /**
@@ -215,6 +217,100 @@ export function useWorkflowState(
         navigate,
     ]);
 
+    /**
+     * Save As (clone) workflow
+     */
+    const handleSaveAs = useCallback(async (newName: string, folderId?: string): Promise<string | null> => {
+        try {
+            setSaving(true);
+            const workflowNodes = nodes
+                .filter((node: Node) => !(node as any).parentId)
+                .map((node: Node) => ({
+                    id: node.id,
+                    name: node.data.label,
+                    type: node.data.nodeType,
+                    position: node.position,
+                    parameters: node.data.parameters || {},
+                }));
+
+            const savedNodeIds = new Set(workflowNodes.map((n: any) => n.id));
+            const embeddedNodeHandleMaps: Record<string, { inputMap: Map<string, string>, outputMap: Map<string, string> }> = {};
+
+            for (const n of workflowNodes) {
+                if (n.type === 'twiddle.embeddedWorkflow' && n.parameters) {
+                    const params = n.parameters as Record<string, unknown>;
+                    try {
+                        const inputHandles = params.inputHandles ? JSON.parse(params.inputHandles as string) : [];
+                        const outputHandles = params.outputHandles ? JSON.parse(params.outputHandles as string) : [];
+                        const inputMap = new Map<string, string>();
+                        const outputMap = new Map<string, string>();
+                        inputHandles.forEach((h: any) => inputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle));
+                        outputHandles.forEach((h: any) => outputMap.set(`${n.id}_embedded_${h.sourceNodeId}`, h.handle));
+                        embeddedNodeHandleMaps[n.id] = { inputMap, outputMap };
+                    } catch (e) {
+                        console.warn('Failed to parse handles for save remapping', e);
+                    }
+                }
+            }
+
+            const remappedEdges = edges.map((edge: Edge) => {
+                let newSource = edge.source;
+                let newSourceHandle = edge.sourceHandle;
+                let newTarget = edge.target;
+                let newTargetHandle = edge.targetHandle;
+
+                if (edge.source.includes('_embedded_')) {
+                    const parentId = edge.source.split('_embedded_')[0];
+                    const maps = embeddedNodeHandleMaps[parentId];
+                    if (maps && maps.outputMap.has(edge.source)) {
+                        newSource = parentId;
+                        newSourceHandle = maps.outputMap.get(edge.source) || edge.sourceHandle;
+                    }
+                }
+                if (edge.target.includes('_embedded_')) {
+                    const parentId = edge.target.split('_embedded_')[0];
+                    const maps = embeddedNodeHandleMaps[parentId];
+                    if (maps && maps.inputMap.has(edge.target)) {
+                        newTarget = parentId;
+                        newTargetHandle = maps.inputMap.get(edge.target) || edge.targetHandle;
+                    }
+                }
+                return { ...edge, source: newSource, sourceHandle: newSourceHandle, target: newTarget, targetHandle: newTargetHandle };
+            });
+
+            const workflowConnections = remappedEdges
+                .filter((edge: Edge) => savedNodeIds.has(edge.source) && savedNodeIds.has(edge.target))
+                .map((edge: Edge) => ({
+                    sourceNodeId: edge.source,
+                    sourceOutput: edge.sourceHandle,
+                    targetNodeId: edge.target,
+                    targetInput: edge.targetHandle,
+                }));
+
+            const created = await (workflowsApi.create as any)({
+                name: newName,
+                description: workflowDescription,
+                nodes: workflowNodes as any,
+                connections: workflowConnections as any,
+                properties: workflowProperties,
+                schedule: workflowSchedule,
+                folderId: folderId,
+            });
+            return created.id;
+        } catch (err) {
+            alert((err as Error).message);
+            return null;
+        } finally {
+            setSaving(false);
+        }
+    }, [
+        nodes,
+        edges,
+        workflowDescription,
+        workflowProperties,
+        workflowSchedule,
+    ]);
+
     return {
         nodes,
         setNodes,
@@ -238,5 +334,6 @@ export function useWorkflowState(
         handleSave,
         newWorkflowFolderId,
         setNewWorkflowFolderId,
+        handleSaveAs,
     };
 }

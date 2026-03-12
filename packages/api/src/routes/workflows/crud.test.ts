@@ -83,13 +83,17 @@ describe('Workflows CRUD API Routes', () => {
 
             // We expect the array to be Alphabetized unique signals
             // Explicit: Signal-X, Signal-Y, Signal-Z
-            // Implicit: node-alpha-OK, node-beta-OK, node-gamma-OK
+            // Explicit: Signal-X, Signal-Y, Signal-Z
+            // Implicit: node-alpha-OK/FAIL, node-beta-OK/FAIL, node-gamma-OK/FAIL
             expect(json).toEqual([
                 'Signal-X',
                 'Signal-Y',
                 'Signal-Z',
+                'node-alpha-FAIL',
                 'node-alpha-OK',
+                'node-beta-FAIL',
                 'node-beta-OK',
+                'node-gamma-FAIL',
                 'node-gamma-OK'
             ].sort());
         });
@@ -133,8 +137,8 @@ describe('Workflows CRUD API Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            // Only the implicit IDs should survive the bad data
-            expect(response.json()).toEqual(['node1-OK', 'node2-OK']);
+            // Only the implicit IDs should survive the bad data, yielding both OK and FAIL
+            expect(response.json()).toEqual(['node1-FAIL', 'node1-OK', 'node2-FAIL', 'node2-OK']);
         });
     });
 });

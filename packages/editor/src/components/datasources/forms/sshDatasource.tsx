@@ -3,10 +3,12 @@ import { DataSourceFieldsRenderer, type FieldDefinition } from '../FieldRenderer
 import type { DataSourceFormProps } from '../registry';
 
 const fields: FieldDefinition[] = [
-    { label: 'Username', field: 'username', type: 'text' },
-    { label: 'Password (optional)', field: 'password', type: 'password' },
-    { label: 'Private Key', field: 'privateKey', type: 'textarea' },
-    { label: 'Passphrase (optional)', field: 'passphrase', type: 'password' },
+  { label: 'Host', field: 'host', type: 'text' },
+  { label: 'Port', field: 'port', type: 'number' },
+  { label: 'Username', field: 'username', type: 'text' },
+  { label: 'Password (optional)', field: 'password', type: 'password' },
+  { label: 'Private Key', field: 'privateKey', type: 'textarea' },
+  { label: 'Passphrase (optional)', field: 'passphrase', type: 'password' },
 ];
 
 export const SshForm: React.FC<DataSourceFormProps> = (props) => {

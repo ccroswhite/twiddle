@@ -2,7 +2,7 @@
  * Folder and permission types for Twiddle
  */
 
-export type FolderPermissionLevel = 'READ' | 'WRITE' | 'ADMIN';
+export type FolderPermissionLevel = 'READ' | 'OPERATOR' | 'WRITE' | 'ADMIN';
 
 export interface Folder {
     id: string;

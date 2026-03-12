@@ -9,7 +9,7 @@ import { toPythonIdentifier, nodeTypeToFunctionName, toPythonValue } from './uti
 /**
  * Generate activity execution code for a node with proper options.
  */
-export function generateActivityExecution(node: WorkflowNode, index: number): string {
+export function generateActivityExecution(node: WorkflowNode, index: number, allRequiredEvents: Set<string>): string {
     const funcName = nodeTypeToFunctionName(node.type);
     const nodeVarName = `node_${index}_result`;
     const nodeName = node.name || node.type.split('.').pop() || 'unknown';
@@ -83,21 +83,25 @@ export function generateActivityExecution(node: WorkflowNode, index: number): st
                 )`;
 
     // Update result thread-safely (in Temporal Python this is deterministic)
-    if (continueOnFail) {
+    const isFailHandled = allRequiredEvents.has(`${node.id}-FAIL`);
+
+    if (continueOnFail || isFailHandled) {
         activityCall += `
                 result = ${nodeVarName}
+                self._events["${node.id}-OK"] = True
                 workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
             except Exception as e:
-                workflow.logger.warning(f"ActivityFailed (Continuing): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
-                self._events["${nodeName}-FAIL"] = True
+                workflow.logger.warning(f"ActivityFailed (${isFailHandled ? 'Handled' : 'Continuing'}): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
+                self._events["${node.id}-FAIL"] = True
                 # Continue with previous result`;
     } else {
         activityCall += `
                 result = ${nodeVarName}
+                self._events["${node.id}-OK"] = True
                 workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
             except Exception as e:
                 workflow.logger.error(f"ActivityFailed (Fatal): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
-                self._events["${nodeName}-FAIL"] = True
+                self._events["${node.id}-FAIL"] = True
                 raise`;
     }
 
@@ -127,9 +131,18 @@ export function generateWorkflowFile(workflow: WorkflowData): string {
     // Filter to only activity nodes (not triggers)
     const activityNodes = nodes.filter(n => isActivityNode(n.type));
 
+    // Collect all required events across all activities so we know if failures are handled
+    const allRequiredEvents = new Set<string>();
+    for (const n of activityNodes) {
+        const reqs = n.parameters?.requiredActivity as string[] | undefined;
+        if (reqs && Array.isArray(reqs)) {
+            reqs.forEach(r => allRequiredEvents.add(r));
+        }
+    }
+
     // Generate node execution calls with proper activity options
     const nodeExecutions = activityNodes
-        .map((node, index) => generateActivityExecution(node, index))
+        .map((node, index) => generateActivityExecution(node, index, allRequiredEvents))
         .join('\n');
 
     return `"""

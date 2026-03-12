@@ -254,9 +254,22 @@ export function WorkflowBrowser() {
             )}
 
             {/* Folders */}
-            {folders.length > 0 && (
-                <div className="mb-6">
-                    <h2 className="text-sm font-medium text-slate-500 uppercase mb-3">Folders</h2>
+            <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-medium text-slate-500 uppercase">Folders</h2>
+                </div>
+                {folders.length === 0 ? (
+                    <div className="text-center py-6 bg-slate-50 border border-slate-200 border-dashed rounded-lg">
+                        <Folder className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-sm text-slate-500 mb-2">No nested subfolders found in this directory.</p>
+                        <button
+                            onClick={() => setShowNewFolderInput(true)}
+                            className="text-sm font-medium text-primary-600 hover:text-primary-700 hover:underline"
+                        >
+                            + Create a Folder Here
+                        </button>
+                    </div>
+                ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {folders.map((folder) => (
                             <div
@@ -322,8 +335,8 @@ export function WorkflowBrowser() {
                             </div>
                         ))}
                     </div>
-                </div>
-            )}
+                )}
+            </div>
 
             {/* Workflows */}
             <div>

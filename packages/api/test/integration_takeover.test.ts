@@ -1,13 +1,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
-import { PrismaClient } from '@prisma/client';
+import { prisma, disconnectDatabase } from '../src/lib/prisma';
 import { workflowRoutes } from '../src/routes/workflows';
 import { optionalAuthMiddleware } from '../src/lib/auth';
 
 describe('Workflow Locking Takeover Integration', () => {
     let app: FastifyInstance;
-    let prisma: PrismaClient;
     let userA: any;
     let userB: any;
     let workflowId: string;
@@ -16,7 +15,6 @@ describe('Workflow Locking Takeover Integration', () => {
 
     beforeAll(async () => {
         app = Fastify();
-        prisma = new PrismaClient();
 
         // Setup Auth Middleware
         app.decorateRequest('user', null);
@@ -57,7 +55,7 @@ describe('Workflow Locking Takeover Integration', () => {
     afterAll(async () => {
         if (workflowId) await prisma.workflow.deleteMany({ where: { id: workflowId } });
         if (userA && userB) await prisma.user.deleteMany({ where: { id: { in: [userA.id, userB.id] } } });
-        await prisma.$disconnect();
+        await disconnectDatabase();
         await app.close();
     });
 

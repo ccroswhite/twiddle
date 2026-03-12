@@ -5,8 +5,9 @@
 export interface Group {
     id: string;
     name: string;
-    description?: string;
+    description: string | null;
     isDefault: boolean;
+    externalId: string | null;
     createdAt: string;
     updatedAt: string;
     memberCount?: number;
@@ -29,10 +30,13 @@ export interface GroupMember {
 export interface GroupCreateInput {
     name: string;
     description?: string;
-    members?: Array<{ userId: string; role: string }>;
+    isDefault?: boolean;
+    externalId?: string;
 }
 
 export interface GroupUpdateInput {
     name?: string;
     description?: string;
+    isDefault?: boolean;
+    externalId?: string;
 }

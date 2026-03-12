@@ -87,6 +87,7 @@ model Group {
   name        String   @unique
   description String?
   isDefault   Boolean  @default(false) // New users auto-join this group
+  externalId  String?  @unique // Entra ID or other IdP Group Object ID
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdById String?
@@ -176,6 +177,7 @@ model Folder {
 // Permission levels for folder access
 enum FolderPermissionLevel {
   READ // Can view workflows in folder
+  OPERATOR // Can manually trigger, retry, and pause workflows
   WRITE // Can create/edit/delete workflows in folder
   ADMIN // Can manage folder permissions and delete folder
 }

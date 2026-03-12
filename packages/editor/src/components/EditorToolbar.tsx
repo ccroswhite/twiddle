@@ -48,6 +48,7 @@ export interface EditorToolbarProps {
     onExecutions: () => void;
     onAutoLayout: () => void;
     onSave: () => void;
+    onSaveAs: () => void;
 }
 
 // =============================================================================
@@ -74,6 +75,7 @@ export function EditorToolbar({
     onExecutions,
     onAutoLayout,
     onSave,
+    onSaveAs,
 }: EditorToolbarProps) {
     return (
         <div className="bg-slate-50 border-b border-slate-300 px-2 py-1.5 flex items-center justify-between relative z-50 shadow-sm text-[13px]">
@@ -162,12 +164,12 @@ export function EditorToolbar({
                 </button>
                 <div className="w-px h-4 bg-slate-300 mx-1" />
                 <button
-                    onClick={onSave}
-                    disabled={saving || isReadOnly}
+                    onClick={isReadOnly ? onSaveAs : onSave}
+                    disabled={saving || (isNew && isReadOnly)} // Prevent saving new but somehow read-only workflows
                     className="flex items-center gap-1.5 px-3 py-1 bg-primary-600 text-white font-medium rounded-sm hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save className="w-3.5 h-3.5" />
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? 'Saving...' : (isReadOnly ? 'Save As...' : 'Save')}
                 </button>
             </div>
         </div>

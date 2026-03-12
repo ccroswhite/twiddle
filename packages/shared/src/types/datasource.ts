@@ -101,9 +101,13 @@ export interface DataSourceWithAccess {
   createdAt: string;
   updatedAt: string;
   createdById?: string;
-  groups: {
-    id: string;
-    name: string;
+  permissions: {
+    groupId: string;
+    permission: 'READ' | 'WRITE' | 'ADMIN';
+    group: {
+      id: string;
+      name: string;
+    };
   }[];
   isOwner: boolean;
 }

@@ -11,7 +11,9 @@ export interface DataSourceData {
     passphrase?: string;
     clientId?: string;
     clientSecret?: string;
+    issuerUrl?: string;
     accessToken?: string;
+    refreshToken?: string;
     account?: string;
     warehouse?: string;
     role?: string;

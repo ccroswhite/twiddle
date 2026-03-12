@@ -38,10 +38,17 @@ async function getUserGroupIds(userId: string): Promise<string[]> {
   return memberships.map(m => m.groupId);
 }
 
-// Check if user can access a data source (owner, admin, in shared group, or legacy data source)
+const PERMISSION_LEVELS = {
+  READ: 1,
+  WRITE: 2,
+  ADMIN: 3
+};
+
+// Check if user can access a data source with the required permission level
 async function canAccessDataSource(
   user: { id: string; isAdmin: boolean },
-  dataSource: { createdById: string | null; permissions?: { groupId: string | null; userId: string | null; permission: string }[] }
+  dataSource: { createdById: string | null; permissions?: { groupId: string | null; userId: string | null; permission: string }[] },
+  requiredLevel: 'READ' | 'WRITE' | 'ADMIN' = 'READ'
 ): Promise<boolean> {
   // Admins can access all data sources
   if (user.isAdmin) return true;
@@ -49,24 +56,33 @@ async function canAccessDataSource(
   // Owner can always access
   if (dataSource.createdById === user.id) return true;
 
-  // Legacy data sources (no owner) are accessible to all authenticated users
-  if (dataSource.createdById === null) return true;
+  // Legacy data sources (no owner) are accessible to all for READ, but only admins for WRITE/ADMIN
+  if (dataSource.createdById === null) {
+    if (requiredLevel === 'READ') return true;
+    return user.isAdmin;
+  }
 
   // If shared with permissions, check membership
   if (dataSource.permissions && dataSource.permissions.length > 0) {
+    const requiredWeight = PERMISSION_LEVELS[requiredLevel];
+
     // Direct user assignment
-    if (dataSource.permissions.some(p => p.userId === user.id)) return true;
+    const directPerms = dataSource.permissions.filter(p => p.userId === user.id);
+    for (const p of directPerms) {
+      const weight = PERMISSION_LEVELS[p.permission as keyof typeof PERMISSION_LEVELS] || 0;
+      if (weight >= requiredWeight) return true;
+    }
 
     // Group assignment
-    const groupIds = dataSource.permissions.filter(p => p.groupId).map(p => p.groupId as string);
-    if (groupIds.length > 0) {
-      const membership = await prisma.groupMember.findFirst({
-        where: {
-          userId: user.id,
-          groupId: { in: groupIds }
-        },
-      });
-      return !!membership;
+    const groupPerms = dataSource.permissions.filter(p => p.groupId);
+    if (groupPerms.length > 0) {
+      const userGroupIds = await getUserGroupIds(user.id);
+      for (const p of groupPerms) {
+        if (p.groupId && userGroupIds.includes(p.groupId)) {
+          const weight = PERMISSION_LEVELS[p.permission as keyof typeof PERMISSION_LEVELS] || 0;
+          if (weight >= requiredWeight) return true;
+        }
+      }
     }
   }
 
@@ -256,11 +272,14 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(401).send({ error: 'Authentication required' });
     }
 
-    const { name, type, data, groupIds } = request.body as CredentialCreateInput & { groupIds?: string[] };
+    const { name, type, data, groupPermissions } = request.body as CredentialCreateInput & {
+      groupPermissions?: { groupId: string; permission: 'READ' | 'WRITE' | 'ADMIN' }[]
+    };
 
     // Verify user is a member of all specified groups
-    if (groupIds && groupIds.length > 0) {
+    if (groupPermissions && groupPermissions.length > 0) {
       const userGroupIds = await getUserGroupIds(user.id);
+      const groupIds = groupPermissions.map(p => p.groupId);
       const invalidGroups = groupIds.filter(gid => !userGroupIds.includes(gid));
       if (invalidGroups.length > 0) {
         return reply.status(403).send({ error: 'You are not a member of one or more selected groups' });
@@ -274,8 +293,8 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
         type,
         data: data as object,
         createdById: user.id,
-        permissions: groupIds && groupIds.length > 0 ? {
-          create: groupIds.map(groupId => ({ groupId, permission: 'READ' }))
+        permissions: groupPermissions && groupPermissions.length > 0 ? {
+          create: groupPermissions.map(p => ({ groupId: p.groupId, permission: p.permission }))
         } : undefined,
       },
       select: {
@@ -317,7 +336,9 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const { id } = request.params as { id: string };
-    const { name, data, groupIds } = request.body as CredentialUpdateInput & { groupIds?: string[] };
+    const { name, data, groupPermissions } = request.body as CredentialUpdateInput & {
+      groupPermissions?: { groupId: string; permission: 'READ' | 'WRITE' | 'ADMIN' }[]
+    };
 
     // Get existing data source
     const existing = await prisma.dataSource.findUnique({
@@ -333,21 +354,24 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'Data source not found' });
     }
 
-    // Check access permission
-    const hasAccess = await canAccessDataSource(user, existing);
-    if (!hasAccess) {
-      return reply.status(403).send({ error: 'Access denied' });
+    // Check access permission for updating core details (requires WRITE)
+    const hasWriteAccess = await canAccessDataSource(user, existing, 'WRITE');
+    if (!hasWriteAccess) {
+      return reply.status(403).send({ error: 'Write access denied' });
     }
 
-    // Only owner (or admin for legacy data sources) can change group sharing
-    const isOwner = existing.createdById === user.id || (existing.createdById === null && user.isAdmin);
-    if (groupIds !== undefined && !isOwner) {
-      return reply.status(403).send({ error: 'Only the data source owner can change group sharing' });
+    // Changing group permissions requires ADMIN access
+    if (groupPermissions !== undefined) {
+      const hasAdminAccess = await canAccessDataSource(user, existing, 'ADMIN');
+      if (!hasAdminAccess) {
+        return reply.status(403).send({ error: 'Only administrators can change group sharing' });
+      }
     }
 
     // If changing groups, verify user is a member of all new groups
-    if (groupIds !== undefined && groupIds.length > 0) {
+    if (groupPermissions !== undefined && groupPermissions.length > 0) {
       const userGroupIds = await getUserGroupIds(user.id);
+      const groupIds = groupPermissions.map(p => p.groupId);
       const invalidGroups = groupIds.filter(gid => !userGroupIds.includes(gid));
       if (invalidGroups.length > 0) {
         return reply.status(403).send({ error: 'You are not a member of one or more selected groups' });
@@ -360,10 +384,10 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       data: {
         ...(name !== undefined && { name }),
         ...(data !== undefined && { data: { ...(existing.data as object), ...(data as object) } }),
-        ...(groupIds !== undefined && {
+        ...(groupPermissions !== undefined && {
           permissions: {
-            deleteMany: {},
-            create: groupIds.map(groupId => ({ groupId, permission: 'READ' })),
+            deleteMany: {}, // Delete all existing
+            create: groupPermissions.map(p => ({ groupId: p.groupId, permission: p.permission })), // Re-create new mappings
           },
         }),
       },
@@ -410,17 +434,20 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
     // Get existing data source
     const existing = await prisma.dataSource.findUnique({
       where: { id },
-      select: { createdById: true },
+      select: {
+        createdById: true,
+        permissions: { select: { groupId: true, userId: true, permission: true } }
+      },
     });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Data source not found' });
     }
 
-    // Only owner (or admin for legacy data sources) can delete
-    const isOwner = existing.createdById === user.id || (existing.createdById === null && user.isAdmin);
-    if (!isOwner) {
-      return reply.status(403).send({ error: 'Only the data source owner can delete it' });
+    // Require ADMIN level access to delete
+    const hasAdminAccess = await canAccessDataSource(user, existing, 'ADMIN');
+    if (!hasAdminAccess) {
+      return reply.status(403).send({ error: 'Only administrators can delete the data source' });
     }
 
     await prisma.dataSource.delete({
@@ -450,10 +477,10 @@ export const credentialRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: 'Data source not found' });
     }
 
-    // Check access permission
-    const hasAccess = await canAccessDataSource(user, dataSource);
+    // Check access permission (Requires WRITE to authorize a test request)
+    const hasAccess = await canAccessDataSource(user, dataSource, 'WRITE');
     if (!hasAccess) {
-      return reply.status(403).send({ error: 'Access denied' });
+      return reply.status(403).send({ error: 'Write access required to test connection' });
     }
 
     const result = await testDataSource(

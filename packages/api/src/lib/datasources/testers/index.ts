@@ -16,6 +16,7 @@ import { testApiKey } from './apiKey.js';
 import { testSSH } from './ssh.js';
 import { testWinRM } from './winrm.js';
 import { testGitHub } from './github.js';
+import { testOAuth2 } from './oauth2.js';
 
 export function registerAllTesters() {
   registerTester('postgresqlDatasource', testPostgreSQL);
@@ -36,4 +37,5 @@ export function registerAllTesters() {
   registerTester('sshDatasource', testSSH);
   registerTester('winrmDatasource', testWinRM);
   registerTester('githubDatasource', testGitHub);
+  registerTester('oauth2', testOAuth2);
 }

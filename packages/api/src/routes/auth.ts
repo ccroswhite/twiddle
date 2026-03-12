@@ -8,6 +8,7 @@ import {
   getAzureUrls,
   exchangeCodeForTokens,
   getUserInfo,
+  getUserGroups,
   createSession,
   getSession,
   deleteSession,
@@ -125,6 +126,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       // Get user info
       const userInfo = await getUserInfo(tokens.accessToken);
 
+      // Get user groups (if Entra ID)
+      const entraGroupIds = await getUserGroups(tokens.accessToken);
+
       // Create session
       const session: UserSession = {
         id: userInfo.id,
@@ -134,6 +138,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         expiresAt: Date.now() + tokens.expiresIn * 1000,
+        entraGroupIds,
       };
 
       const sessionId = await createSession(session);

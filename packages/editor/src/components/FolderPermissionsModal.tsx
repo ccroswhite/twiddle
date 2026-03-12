@@ -200,6 +200,7 @@ function AddPermissionForm({
                     className="px-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                     <option value="READ">Read</option>
+                    <option value="OPERATOR">Operator</option>
                     <option value="WRITE">Write</option>
                     <option value="ADMIN">Admin</option>
                 </select>
@@ -260,6 +261,7 @@ function PermissionsList({
                                     className="px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                                 >
                                     <option value="READ">Read</option>
+                                    <option value="OPERATOR">Operator</option>
                                     <option value="WRITE">Write</option>
                                     <option value="ADMIN">Admin</option>
                                 </select>

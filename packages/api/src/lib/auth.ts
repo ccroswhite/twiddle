@@ -25,6 +25,7 @@ export interface UserSession {
   accessToken?: string;
   refreshToken?: string;
   expiresAt?: number;
+  entraGroupIds?: string[];
 }
 
 // Load auth config from environment
@@ -59,7 +60,7 @@ export function getAuthConfig(): AuthConfig {
         clientId,
         clientSecret,
         redirectUri,
-        scopes: ['openid', 'profile', 'email', 'User.Read'],
+        scopes: ['openid', 'profile', 'email', 'User.Read', 'GroupMember.Read.All'],
       },
     };
   }
@@ -223,6 +224,34 @@ export async function getUserInfo(accessToken: string): Promise<{
   };
 }
 
+// Get user groups from Microsoft Graph
+export async function getUserGroups(accessToken: string): Promise<string[]> {
+  try {
+    const response = await fetch('https://graph.microsoft.com/v1.0/me/memberOf?$select=id', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn(`Failed to get user groups: ${response.status} ${response.statusText}`);
+      return [];
+    }
+
+    const data = await response.json() as {
+      value: { id: string; '@odata.type': string }[];
+    };
+
+    // Filter for group objects
+    return data.value
+      .filter((item) => item['@odata.type'] === '#microsoft.graph.group')
+      .map((item) => item.id);
+  } catch (error) {
+    logger.error({ error }, 'Error fetching user groups');
+    return [];
+  }
+}
+
 // Session management using Prisma
 import { prisma } from './prisma.js';
 
@@ -245,6 +274,61 @@ export async function createSession(userSession: UserSession): Promise<string> {
       isActive: true, // Auto-activate SSO users
     },
   });
+
+  // 1.5. Sync Entra ID Groups
+  if (userSession.provider === 'azure-entra' && userSession.entraGroupIds) {
+    try {
+      // Find all Twiddle groups that map to one of these Entra Group IDs
+      const mappedGroups = await prisma.group.findMany({
+        where: {
+          externalId: {
+            in: userSession.entraGroupIds,
+          },
+        },
+      });
+
+      const mappedGroupIds = mappedGroups.map((g) => g.id);
+
+      // Get current synched group memberships for this user
+      // We only want to remove memberships from groups that HAVE an externalId (i.e. are Entra synced)
+      const currentSynchedMemberships = await prisma.groupMember.findMany({
+        where: {
+          userId: user.id,
+          group: {
+            externalId: { not: null },
+          },
+        },
+      });
+
+      const currentSynchedGroupIds = currentSynchedMemberships.map((m) => m.groupId);
+
+      // Determine additions and removals
+      const groupsToAdd = mappedGroupIds.filter((id) => !currentSynchedGroupIds.includes(id));
+      const groupsToRemove = currentSynchedGroupIds.filter((id) => !mappedGroupIds.includes(id));
+
+      if (groupsToRemove.length > 0) {
+        await prisma.groupMember.deleteMany({
+          where: {
+            userId: user.id,
+            groupId: { in: groupsToRemove },
+          },
+        });
+      }
+
+      if (groupsToAdd.length > 0) {
+        await prisma.groupMember.createMany({
+          data: groupsToAdd.map((groupId) => ({
+            userId: user.id,
+            groupId,
+            role: 'member', // Default role for synched groups
+          })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (error) {
+      logger.error({ error }, 'Failed to sync Entra ID groups during session creation');
+    }
+  }
 
   // 2. Ensure default group membership
   const groupCount = await prisma.groupMember.count({

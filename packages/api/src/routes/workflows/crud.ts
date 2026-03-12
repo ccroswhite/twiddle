@@ -3,6 +3,7 @@
  * Handles List, Get (with locking), Create, Update, Delete operations
  */
 import type { FastifyPluginAsync } from 'fastify';
+import { canAccessWorkflow } from '../../lib/permissions.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { prisma } from '../../lib/prisma.js';
 import { generatePythonCode } from '../../lib/export/temporal-python/index.js';
@@ -149,6 +150,7 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
                 }
                 if (n.id) {
                     allPublished.add(`${n.id}-OK`);
+                    allPublished.add(`${n.id}-FAIL`);
                 }
             }
         }
@@ -365,14 +367,21 @@ export const crudRoutes: FastifyPluginAsync = async (app) => {
     // Update a workflow
     app.put<{ Params: { id: string }; Body: WorkflowUpdateInput }>(
         '/:id',
-        async (request, _reply) => {
+        async (request, reply) => {
             const { id } = request.params;
             const { name, description, nodes, connections, settings, active, tags, properties, schedule } = request.body;
+            const user = (request as { user?: { id: string; name?: string; email: string } }).user || null;
+
+            // Enforce explicit WRITE access
+            const hasAccess = await canAccessWorkflow(user, id, 'WRITE');
+            if (!hasAccess) {
+                return reply.status(403).send({ error: 'Write access required to modify workflow' });
+            }
 
             // Get existing workflow to merge with updates
             const existing = await prisma.workflow.findUnique({ where: { id } });
             if (!existing) {
-                throw new Error('Workflow not found');
+                return reply.status(404).send({ error: 'Workflow not found' });
             }
 
             // Regenerate Python code if nodes or connections changed

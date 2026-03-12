@@ -154,6 +154,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
       name: string;
       description?: string;
       isDefault?: boolean;
+      externalId?: string;
     };
   }>('/', async (request, reply) => {
     const user = await getCurrentUser(request as { user?: { id: string } });
@@ -163,7 +164,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ error: 'Only administrators can create groups' });
     }
 
-    const { name, description, isDefault } = request.body;
+    const { name, description, isDefault, externalId } = request.body;
 
     if (!name) {
       return reply.status(400).send({ error: 'Name is required' });
@@ -191,6 +192,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
         name,
         description,
         isDefault: isDefault || false,
+        externalId: externalId || null,
         createdById: user.id,
         // Add creator as admin of the group
         members: {
@@ -215,6 +217,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
       name?: string;
       description?: string;
       isDefault?: boolean;
+      externalId?: string;
     };
   }>('/:id', async (request, reply) => {
     const { id } = request.params;
@@ -230,7 +233,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(403).send({ error: 'You do not have permission to edit this group' });
     }
 
-    const { name, description, isDefault } = request.body;
+    const { name, description, isDefault, externalId } = request.body;
 
     // Only system admin can change isDefault
     if (isDefault !== undefined && !user.isAdmin) {
@@ -252,6 +255,7 @@ export const groupRoutes: FastifyPluginAsync = async (app) => {
           ...(name && { name }),
           ...(description !== undefined && { description }),
           ...(isDefault !== undefined && { isDefault }),
+          ...(externalId !== undefined && { externalId }),
         },
       });
 

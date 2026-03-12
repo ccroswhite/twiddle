@@ -1,22 +1,8 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { Prisma } from '../generated/prisma/client.js';
-
-interface FolderCreateInput {
-  name: string;
-  description?: string;
-  color?: string;
-  parentId?: string;
-  groupId?: string;
-}
-
-interface FolderUpdateInput {
-  name?: string;
-  description?: string;
-  color?: string;
-  parentId?: string;
-  groupId?: string;
-}
+import { canAccessFolder } from '../lib/permissions.js';
+import type { FolderCreateInput, FolderUpdateInput, FolderPermissionLevel } from '@twiddle/shared';
 
 export const folderRoutes: FastifyPluginAsync = async (app) => {
   // List all folders (filtered by group membership if authenticated)
@@ -39,14 +25,14 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
       });
       const userGroupIds = memberships.map((m) => m.groupId);
 
-      // Show folders in user's groups OR created by user OR with no group
+      // Show folders the user created, OR folders where they have explicit user-level permissions, OR folders shared with their groups
       whereClause = {
         ...whereClause,
         OR: [
-          { groupId: { in: userGroupIds } },
           { createdById: userId },
-          { groupId: null },
-        ],
+          { permissions: { some: { userId } } },
+          { permissions: { some: { groupId: { in: userGroupIds } } } }
+        ]
       };
     }
 
@@ -122,6 +108,16 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         },
+        permissions: {
+          include: {
+            user: {
+              select: { id: true, email: true, name: true },
+            },
+            group: {
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     });
 
@@ -183,7 +179,12 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
     '/:id',
     async (request, reply) => {
       const { id } = request.params;
-      const { name, description, color, parentId, groupId } = request.body;
+      const { name, description, color, parentId } = request.body;
+      const user = (request as { user?: { id: string } }).user || null;
+
+      if (!(await canAccessFolder(user, id, 'WRITE'))) {
+        return reply.status(403).send({ error: 'Write access required to modify folder' });
+      }
 
       const existing = await prisma.folder.findUnique({ where: { id } });
       if (!existing) {
@@ -202,7 +203,6 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
           description,
           color,
           parentId,
-          groupId,
         },
         include: {
           group: {
@@ -221,13 +221,7 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
-      // If groupId changed, update all workflows in this folder to inherit new group
-      if (groupId !== undefined && groupId !== existing.groupId) {
-        await prisma.workflow.updateMany({
-          where: { folderId: id },
-          data: { groupId },
-        });
-      }
+      // Note: groupId inheritance handling removed in favor of explicit directory permissions
 
       return folder;
     }
@@ -236,6 +230,11 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
   // Delete a folder
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { id } = request.params;
+    const user = (request as { user?: { id: string } }).user || null;
+
+    if (!(await canAccessFolder(user, id, 'ADMIN'))) {
+      return reply.status(403).send({ error: 'Admin access required to delete folder' });
+    }
 
     const existing = await prisma.folder.findUnique({
       where: { id },
@@ -356,12 +355,17 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
     Body: {
       userId?: string;
       groupId?: string;
-      permission: 'READ' | 'WRITE' | 'ADMIN';
+      permission: FolderPermissionLevel;
     };
   }>('/:id/permissions', async (request, reply) => {
     const { id } = request.params;
     const { userId, groupId, permission } = request.body;
     const currentUserId = (request as { user?: { id: string } }).user?.id;
+    const user = (request as { user?: { id: string } }).user || null;
+
+    if (!(await canAccessFolder(user, id, 'ADMIN'))) {
+      return reply.status(403).send({ error: 'Admin access required to modify permissions' });
+    }
 
     // Validate that either userId or groupId is provided, but not both
     if ((!userId && !groupId) || (userId && groupId)) {
@@ -401,10 +405,15 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
   // Update a permission
   app.put<{
     Params: { id: string; permissionId: string };
-    Body: { permission: 'READ' | 'WRITE' | 'ADMIN' };
+    Body: { permission: FolderPermissionLevel };
   }>('/:id/permissions/:permissionId', async (request, reply) => {
     const { id, permissionId } = request.params;
     const { permission } = request.body;
+    const user = (request as { user?: { id: string } }).user || null;
+
+    if (!(await canAccessFolder(user, id, 'ADMIN'))) {
+      return reply.status(403).send({ error: 'Admin access required to modify permissions' });
+    }
 
     // Check folder exists
     const folder = await prisma.folder.findUnique({ where: { id } });
@@ -433,6 +442,11 @@ export const folderRoutes: FastifyPluginAsync = async (app) => {
     '/:id/permissions/:permissionId',
     async (request, reply) => {
       const { id, permissionId } = request.params;
+      const user = (request as { user?: { id: string } }).user || null;
+
+      if (!(await canAccessFolder(user, id, 'ADMIN'))) {
+        return reply.status(403).send({ error: 'Admin access required to delete permissions' });
+      }
 
       // Check folder exists
       const folder = await prisma.folder.findUnique({ where: { id } });
