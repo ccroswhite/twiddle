@@ -56,14 +56,41 @@ export function generateActivityExecution(node: WorkflowNode, index: number, all
             try:
                 workflow.logger.info(f"ActivityStarted: workflow_name='{workflowName}' activity_name='{nodeName}'")`;
 
-    // Wait condition logic
+    // Wait condition & Skip evaluation logic
     if (requiredEvents.length > 0) {
+        // Group requirements by their base Node ID so we can check for mutually exclusive terminal states
+        // e.g. "node_123-OK" -> Node ID: "node_123", State: "OK"
+        const upstreamNodes = new Set(requiredEvents.map(req => req.split('-')[0]));
+
         activityCall += `
-                # Wait for required activities
+                # Wait for required activities or mutually exclusive skip conditions
                 workflow.logger.info(f"ActivityWaiting: workflow_name='{workflowName}' activity_name='{nodeName}' waiting_for={${JSON.stringify(requiredEvents)}}")
-                await workflow.wait_condition(
-                    lambda: all(self._events.get(req, False) for req in ${JSON.stringify(requiredEvents)})
-                )`;
+                
+                # We wait until EITHER all required events are true, OR any mutually exclusive terminal state is reached
+                def is_ready_or_skipped():
+                    # Check if all requirements are met
+                    if all(self._events.get(req, False) for req in ${JSON.stringify(requiredEvents)}):
+                        return True
+                        
+                    # Check for mutually exclusive terminal states that trigger a skip
+                    # If an upstream node finished but NOT in the state we required, we must skip.
+                    for upstream_id in ${JSON.stringify(Array.from(upstreamNodes))}:
+                        # Check if any event starting with upstream_id exists in _events
+                        # that is NOT in our required list.
+                        # (We only look at terminal states, which means looking at all emitted events)
+                        for event_key, is_emitted in self._events.items():
+                            if is_emitted and event_key.startswith(f"{upstream_id}-") and event_key not in ${JSON.stringify(requiredEvents)}:
+                                return True # A different branch was taken, stop waiting
+                                
+                    return False
+                
+                await workflow.wait_condition(is_ready_or_skipped)
+                
+                # Now determine if we are executing or skipping
+                if not all(self._events.get(req, False) for req in ${JSON.stringify(requiredEvents)}):
+                    workflow.logger.info(f"ActivitySkipped: workflow_name='{workflowName}' activity_name='{nodeName}' branch_bypassed=True")
+                    self._events["${node.id}-SKIPPED"] = True
+                    return  # Gracefully skip execution`;
     }
 
     // Generate the activity call
@@ -85,11 +112,28 @@ export function generateActivityExecution(node: WorkflowNode, index: number, all
     // Update result thread-safely (in Temporal Python this is deterministic)
     const isFailHandled = allRequiredEvents.has(`${node.id}-FAIL`);
 
+    const customRoutes = (node.parameters?.customRoutes as Array<{ condition: string; emitEvent: string }>) || [];
+    let customRoutesCode = '';
+    if (customRoutes.length > 0) {
+        customRoutesCode = `
+                # Evaluate Custom Conditional Routes
+                ${customRoutes.map((route) => `
+                try:
+                    # Condition: ${route.condition}
+                    # We inject the result dict so condition expressions can use it
+                    if eval(${JSON.stringify(route.condition)}, {"__builtins__": {}}, {"result": result}):
+                        self._events["${node.id}-${route.emitEvent}"] = True
+                        workflow.logger.info(f"CustomRouteEmitted: workflow_name='{workflowName}' activity_name='{nodeName}' route='${route.emitEvent}'")
+                except Exception as eval_err:
+                    workflow.logger.error(f"CustomRouteEvaluationFailed: node_name='{nodeName}' error='{eval_err}'")
+                `).join('')}`;
+    }
+
     if (continueOnFail || isFailHandled) {
         activityCall += `
                 result = ${nodeVarName}
                 self._events["${node.id}-OK"] = True
-                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
+                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")${customRoutesCode}
             except Exception as e:
                 workflow.logger.warning(f"ActivityFailed (${isFailHandled ? 'Handled' : 'Continuing'}): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
                 self._events["${node.id}-FAIL"] = True
@@ -98,7 +142,7 @@ export function generateActivityExecution(node: WorkflowNode, index: number, all
         activityCall += `
                 result = ${nodeVarName}
                 self._events["${node.id}-OK"] = True
-                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")
+                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")${customRoutesCode}
             except Exception as e:
                 workflow.logger.error(f"ActivityFailed (Fatal): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
                 self._events["${node.id}-FAIL"] = True

@@ -8,6 +8,7 @@ import { NodeGeneralTab } from './properties/node/NodeGeneralTab';
 import { NodeSchedulingTab } from './properties/node/NodeSchedulingTab';
 import { NodeRequiredActivityTab } from './properties/node/NodeRequiredActivityTab';
 import { NodePublishedActivityTab } from './properties/node/NodePublishedActivityTab';
+import { NodeConditionalRoutesTab } from './properties/node/NodeConditionalRoutesTab';
 
 interface NodePropertiesPanelProps {
   node: Node | null;
@@ -19,7 +20,7 @@ interface NodePropertiesPanelProps {
 export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodePropertiesPanelProps) {
   const [label, setLabel] = useState('');
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
-  const [activeTab, setActiveTab] = useState<'general' | 'scheduling' | 'requiredActivity' | 'publishedActivity'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'scheduling' | 'conditions' | 'requiredActivity' | 'publishedActivity'>('general');
   const [globalActivities, setGlobalActivities] = useState<string[]>([]);
 
   useEffect(() => {
@@ -312,6 +313,13 @@ export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodeProp
 
         {activeTab === 'scheduling' && isActivityNode(nodeType) && (
           <NodeSchedulingTab
+            parameters={parameters}
+            updateParameter={updateParameter}
+          />
+        )}
+
+        {activeTab === 'conditions' && isActivityNode(nodeType) && (
+          <NodeConditionalRoutesTab
             parameters={parameters}
             updateParameter={updateParameter}
           />

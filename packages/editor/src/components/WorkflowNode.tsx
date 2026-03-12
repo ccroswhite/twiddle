@@ -8,6 +8,7 @@ import {
   isActivityNode
 } from '@/utils/nodeConfig';
 import { useContextMenu } from '@/hooks/useContextMenu';
+import { useValidation } from '@/contexts/ValidationContext';
 
 interface WorkflowNodeProps {
   id: string;
@@ -25,6 +26,7 @@ interface WorkflowNodeProps {
 function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   const { deleteElements, setNodes, getNode } = useReactFlow();
   const { contextMenu, menuRef, handleContextMenu, closeMenu } = useContextMenu();
+  const validationIssues = useValidation().filter(i => i.nodeId === id);
 
   // Check if this is a credential node
   const isCredential = data.nodeType.startsWith('credential.');
@@ -317,36 +319,57 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
               />
             )}
 
-            {/* Output Handle */}
-            {data.nodeType === 'twiddle.if' ? (
-              <>
-                <Handle
-                  type="source"
-                  position={Position.Bottom}
-                  id="true"
-                  className="!bg-green-500 !w-2 !h-2"
-                  style={{ left: '30%' }}
-                />
-                <Handle
-                  type="source"
-                  position={Position.Bottom}
-                  id="false"
-                  className="!bg-red-500 !w-2 !h-2"
-                  style={{ left: '70%' }}
-                />
-              </>
-            ) : (
-              <Handle
-                type="source"
-                position={Position.Bottom}
-                className="!bg-slate-400 !w-2 !h-2"
-              />
-            )}
+            {/* Output Handles (Standard & Custom) */}
+            {(() => {
+              const customRoutes = data.parameters?.customRoutes as Array<{ condition: string; emitEvent: string }> | undefined || [];
+              const showFailRoute = data.parameters?.emitFailRoute === true;
+
+              const outputPorts = [
+                { id: 'OK', color: 'bg-green-500', label: 'On Success', isCustom: false },
+                ...(showFailRoute ? [{ id: 'FAIL', color: 'bg-red-500', label: 'On Failure', isCustom: false }] : []),
+                ...customRoutes.map(r => ({ id: r.emitEvent, color: 'bg-blue-500', label: `IF ${r.condition} -> ${r.emitEvent}`, isCustom: true }))
+              ];
+
+              return outputPorts.map((port, index) => {
+                const position = outputPorts.length > 1
+                  ? 20 + (index * (60 / (outputPorts.length - 1)))
+                  : 50;
+
+                // Linter check: does this custom port have any edges connected to it?
+                const isDangling = validationIssues.some(i => i.id === `dangling-port-${id}-${port.id}`);
+
+                return (
+                  <div key={port.id} style={{ position: 'absolute', left: `${position}%`, bottom: '-4px', transform: 'translateX(-50%)' }}>
+                    {isDangling && (
+                      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-yellow-500" title={`Warning: Emitted state '${port.id}' has no listeners.`}>
+                        ⚠️
+                      </div>
+                    )}
+                    <Handle
+                      type="source"
+                      position={Position.Bottom}
+                      id={port.id}
+                      title={port.label}
+                      className={`!${port.color} !w-2.5 !h-2.5 !border-white !border-2 tooltip-handle !relative !left-auto !transform-none`}
+                    />
+                  </div>
+                );
+              });
+            })()}
           </>
         )}
 
         {/* Node Content */}
-        <div className="flex flex-col p-2 min-w-0 flex-1">
+        <div className="flex flex-col p-2 min-w-0 flex-1 relative">
+          {/* Validation Badge */}
+          {validationIssues.length > 0 && (
+            <div
+              className={`absolute -top-3 -right-3 w-5 h-5 rounded-full flex items-center justify-center text-[10px] shadow-sm z-10 cursor-help ${validationIssues.some(i => i.severity === 'error') ? 'bg-red-100 border border-red-300' : 'bg-yellow-100 border border-yellow-300'}`}
+              title={validationIssues.map(i => `• ${i.message}`).join('\n')}
+            >
+              {validationIssues.some(i => i.severity === 'error') ? '❌' : '⚠️'}
+            </div>
+          )}
           <div className="flex items-center gap-1.5 mb-1">
             <Icon className={`w-3.5 h-3.5 text-slate-600`} />
             <div className="font-bold text-xs text-slate-900 truncate" title={data.label}>{data.label}</div>

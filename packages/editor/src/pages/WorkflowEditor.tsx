@@ -45,6 +45,9 @@ import { useWorkflowState } from '@/hooks/useWorkflowState';
 import { useWorkflowPermissions } from '@/hooks/useWorkflowPermissions';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowExport } from '@/hooks/useWorkflowExport';
+import { useWorkflowValidator } from '@/hooks/useWorkflowValidator';
+import { ValidationContext } from '@/contexts/ValidationContext';
+import { ValidationTray } from '@/components/ValidationTray';
 import { SaveAsModal } from '@/components/SaveAsModal';
 
 interface WorkflowEditorProps {
@@ -96,6 +99,9 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const [availableNodes, setAvailableNodes] = useState<NodeTypeInfo[]>([]);
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+
+  // Run validation engine on the DAG
+  const validationIssues = useWorkflowValidator(nodes, edges);
 
   // Workflow browser hook - still used for some context menu operations
   const workflowBrowser = useWorkflowBrowser();
@@ -1086,88 +1092,112 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
             }
           }}
         >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={isReadOnly ? undefined : onNodesChange}
-            onEdgesChange={isReadOnly ? undefined : onEdgesChange}
-            onConnect={isReadOnly ? undefined : onConnect}
-            onNodesDelete={isReadOnly ? undefined : onNodesDelete}
-            onInit={(instance: any) => { reactFlowInstance.current = instance; }}
-            nodeTypes={nodeTypes}
-            defaultEdgeOptions={{ type: 'smoothstep' }}
-            deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
-            nodesDraggable={!isReadOnly}
-            nodesConnectable={!isReadOnly}
-            elementsSelectable={true}
-            elevateNodesOnSelect={false}
-            snapToGrid={true}
-            snapGrid={[20, 20]}
-            fitView
-            selectionOnDrag={true}
-            selectionMode={SelectionMode.Partial}
-            panOnDrag={true}
-            selectNodesOnDrag={true}
-            onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
-            onEdgeContextMenu={!isReadOnly ? handleEdgeContextMenu : undefined}
-            onPaneContextMenu={handlePaneContextMenu}
-            onPaneMouseMove={(event: React.MouseEvent) => {
-              if (pendingNode) {
-                // Update screen position for preview
-                setPendingNode({
-                  ...pendingNode,
-                  screenPos: { x: event.clientX, y: event.clientY }
-                });
-              }
-            }}
-            onPaneClick={async (event: React.MouseEvent) => {
-              if (pendingNode && reactFlowInstance.current) {
-                const { screenToFlowPosition } = reactFlowInstance.current;
-                const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          <ValidationContext.Provider value={validationIssues}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={isReadOnly ? undefined : onNodesChange}
+              onEdgesChange={isReadOnly ? undefined : onEdgesChange}
+              onConnect={isReadOnly ? undefined : onConnect}
+              onNodesDelete={isReadOnly ? undefined : onNodesDelete}
+              onInit={(instance: any) => { reactFlowInstance.current = instance; }}
+              nodeTypes={nodeTypes}
+              defaultEdgeOptions={{ type: 'smoothstep' }}
+              deleteKeyCode={isReadOnly ? null : ['Backspace', 'Delete']}
+              nodesDraggable={!isReadOnly}
+              nodesConnectable={!isReadOnly}
+              elementsSelectable={true}
+              elevateNodesOnSelect={false}
+              snapToGrid={true}
+              snapGrid={[20, 20]}
+              fitView
+              selectionOnDrag={true}
+              selectionMode={SelectionMode.Partial}
+              panOnDrag={true}
+              selectNodesOnDrag={true}
+              onSelectionContextMenu={!isReadOnly ? handleSelectionContextMenu : undefined}
+              onEdgeContextMenu={!isReadOnly ? handleEdgeContextMenu : undefined}
+              onPaneContextMenu={handlePaneContextMenu}
+              onPaneMouseMove={(event: React.MouseEvent) => {
+                if (pendingNode) {
+                  // Update screen position for preview
+                  setPendingNode({
+                    ...pendingNode,
+                    screenPos: { x: event.clientX, y: event.clientY }
+                  });
+                }
+              }}
+              onPaneClick={async (event: React.MouseEvent) => {
+                if (pendingNode && reactFlowInstance.current) {
+                  const { screenToFlowPosition } = reactFlowInstance.current;
+                  const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-                // Snap to grid
-                position.x = Math.round(position.x / 20) * 20;
-                position.y = Math.round(position.y / 20) * 20;
+                  // Snap to grid
+                  position.x = Math.round(position.x / 20) * 20;
+                  position.y = Math.round(position.y / 20) * 20;
 
-                // Check if this is a workflow type (for embedded workflows)
-                const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
+                  // Check if this is a workflow type (for embedded workflows)
+                  const isWorkflowType = pendingNode.type.type.startsWith('workflow.');
 
-                if (isWorkflowType) {
-                  // Fetch workflow data and create embedded workflow node
-                  const workflowId = pendingNode.type.type.replace('workflow.', '');
-                  try {
-                    const workflow = await workflowsApi.get(workflowId) as {
-                      id: string;
-                      name: string;
-                      description?: string;
-                      version: number;
-                      nodes: any[];
-                      connections: any[];
-                    };
+                  if (isWorkflowType) {
+                    // Fetch workflow data and create embedded workflow node
+                    const workflowId = pendingNode.type.type.replace('workflow.', '');
+                    try {
+                      const workflow = await workflowsApi.get(workflowId) as {
+                        id: string;
+                        name: string;
+                        description?: string;
+                        version: number;
+                        nodes: any[];
+                        connections: any[];
+                      };
 
-                    const { inputHandles, outputHandles } = calculateEdgeHandles(
-                      workflow.nodes,
-                      workflow.connections
-                    );
+                      const { inputHandles, outputHandles } = calculateEdgeHandles(
+                        workflow.nodes,
+                        workflow.connections
+                      );
 
+                      const newNode: Node = {
+                        id: `node_${Date.now()}`,
+                        type: 'workflowNode',
+                        position,
+                        zIndex: 100,
+                        data: {
+                          label: workflow.name,
+                          nodeType: 'twiddle.embeddedWorkflow',
+                          parameters: {
+                            workflowId: workflow.id,
+                            workflowName: workflow.name,
+                            workflowVersion: workflow.version,
+                            isExpanded: 'false',
+                            embeddedNodes: JSON.stringify(workflow.nodes),
+                            embeddedConnections: JSON.stringify(workflow.connections),
+                            inputHandles: JSON.stringify(inputHandles),
+                            outputHandles: JSON.stringify(outputHandles),
+                          },
+                          onOpenProperties: handleOpenProperties,
+                          onToggleExpand: handleToggleExpand,
+                        },
+                      };
+
+                      setNodes((nds: Node[]) => [...nds, newNode]);
+                      setPendingNode(null);
+                    } catch (err) {
+                      console.error('Failed to create embedded workflow node:', err);
+                      alert('Failed to load workflow for embedding');
+                      setPendingNode(null);
+                    }
+                  } else {
+                    // Create regular node
                     const newNode: Node = {
                       id: `node_${Date.now()}`,
                       type: 'workflowNode',
                       position,
                       zIndex: 100,
                       data: {
-                        label: workflow.name,
-                        nodeType: 'twiddle.embeddedWorkflow',
-                        parameters: {
-                          workflowId: workflow.id,
-                          workflowName: workflow.name,
-                          workflowVersion: workflow.version,
-                          isExpanded: 'false',
-                          embeddedNodes: JSON.stringify(workflow.nodes),
-                          embeddedConnections: JSON.stringify(workflow.connections),
-                          inputHandles: JSON.stringify(inputHandles),
-                          outputHandles: JSON.stringify(outputHandles),
-                        },
+                        label: pendingNode.type.displayName,
+                        nodeType: pendingNode.type.type,
+                        parameters: {},
                         onOpenProperties: handleOpenProperties,
                         onToggleExpand: handleToggleExpand,
                       },
@@ -1175,37 +1205,26 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
                     setNodes((nds: Node[]) => [...nds, newNode]);
                     setPendingNode(null);
-                  } catch (err) {
-                    console.error('Failed to create embedded workflow node:', err);
-                    alert('Failed to load workflow for embedding');
-                    setPendingNode(null);
                   }
-                } else {
-                  // Create regular node
-                  const newNode: Node = {
-                    id: `node_${Date.now()}`,
-                    type: 'workflowNode',
-                    position,
-                    zIndex: 100,
-                    data: {
-                      label: pendingNode.type.displayName,
-                      nodeType: pendingNode.type.type,
-                      parameters: {},
-                      onOpenProperties: handleOpenProperties,
-                      onToggleExpand: handleToggleExpand,
-                    },
-                  };
-
-                  setNodes((nds: Node[]) => [...nds, newNode]);
-                  setPendingNode(null);
                 }
+              }}
+            >
+              <Controls />
+              <MiniMap />
+              <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
+            </ReactFlow>
+          </ValidationContext.Provider>
+
+          <ValidationTray
+            issues={validationIssues}
+            onIssueClick={(nodeId) => {
+              const node = nodes.find(n => n.id === nodeId);
+              if (node && reactFlowInstance.current) {
+                reactFlowInstance.current.setCenter(node.position.x + 100, node.position.y + 50, { zoom: 1.5, duration: 800 });
+                setSelectedNode(node);
               }
             }}
-          >
-            <Controls />
-            <MiniMap />
-            <Background variant={BackgroundVariant.Dots} gap={[20, 20]} size={1} offset={[0, 0]} />
-          </ReactFlow>
+          />
 
           {/* Visual preview of pending node - outside ReactFlow for proper positioning */}
           {pendingNode && (

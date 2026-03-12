@@ -38,9 +38,9 @@ describe('Temporal Python Workflow Generator', () => {
 
         const result = generateWorkflowFile(workflow);
 
-        // Assert wait condition is generated
-        expect(result).toContain('await workflow.wait_condition(');
-        expect(result).toContain('lambda: all(self._events.get(req, False) for req in ["Upstream-Activity-OK","Other-Signal"])');
+        // Assert wait condition is generated using the new skip logic
+        expect(result).toContain('await workflow.wait_condition(is_ready_or_skipped)');
+        expect(result).toContain('if all(self._events.get(req, False) for req in ["Upstream-Activity-OK","Other-Signal"]):');
 
         // Assert execution follows wait condition
         expect(result).toContain('node_0_result = await workflow.execute_activity(');
