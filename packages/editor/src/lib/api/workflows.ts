@@ -109,12 +109,14 @@ export const workflowsApi = {
             body: JSON.stringify({ targetEnvironment }),
         }),
     heartbeat: (id: string) =>
-        request(`/workflows/${id}/heartbeat`, {
+        request(`/workflows/${id}/lock`, {
             method: 'POST',
+            body: JSON.stringify({}),
         }),
     requestLock: (id: string) =>
         request(`/workflows/${id}/lock/request`, {
             method: 'POST',
+            body: JSON.stringify({}),
         }),
     resolveLock: (id: string, action: 'ACCEPT' | 'DENY') =>
         request(`/workflows/${id}/lock/resolve`, {
@@ -124,6 +126,7 @@ export const workflowsApi = {
     unlock: (id: string) =>
         request(`/workflows/${id}/lock`, {
             method: 'DELETE',
+            body: JSON.stringify({}),
         }),
     getVersions: (id: string) => request(`/workflows/${id}/versions`),
     getVersion: (id: string, versionId: string) => request(`/workflows/${id}/versions/${versionId}`),

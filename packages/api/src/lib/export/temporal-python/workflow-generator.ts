@@ -129,20 +129,32 @@ export function generateActivityExecution(node: WorkflowNode, index: number, all
                 `).join('')}`;
     }
 
+    let emitSuccessCode = '';
+    if (node.type === 'twiddle.if') {
+        emitSuccessCode = `
+                branch_val = result.get('branch', 'false')
+                if branch_val == 'true':
+                    self._events["${node.id}-true"] = True
+                    workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}' branch='true'")
+                else:
+                    self._events["${node.id}-false"] = True
+                    workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}' branch='false'")`;
+    } else {
+        emitSuccessCode = `
+                self._events["${node.id}-OK"] = True
+                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")`;
+    }
+
     if (continueOnFail || isFailHandled) {
         activityCall += `
-                result = ${nodeVarName}
-                self._events["${node.id}-OK"] = True
-                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")${customRoutesCode}
+                result = ${nodeVarName}${emitSuccessCode}${customRoutesCode}
             except Exception as e:
                 workflow.logger.warning(f"ActivityFailed (${isFailHandled ? 'Handled' : 'Continuing'}): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
                 self._events["${node.id}-FAIL"] = True
                 # Continue with previous result`;
     } else {
         activityCall += `
-                result = ${nodeVarName}
-                self._events["${node.id}-OK"] = True
-                workflow.logger.info(f"ActivitySuccess: workflow_name='{workflowName}' activity_name='{nodeName}'")${customRoutesCode}
+                result = ${nodeVarName}${emitSuccessCode}${customRoutesCode}
             except Exception as e:
                 workflow.logger.error(f"ActivityFailed (Fatal): workflow_name='{workflowName}' activity_name='{nodeName}' error='{e}'")
                 self._events["${node.id}-FAIL"] = True

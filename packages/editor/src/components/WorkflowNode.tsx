@@ -254,8 +254,9 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
   return (
     <>
       <div
-        className={`bg-white rounded-sm shadow-sm flex items-stretch overflow-hidden border min-w-[140px] relative ${selected ? 'border-primary-500 ring-1 ring-primary-500' : 'border-slate-300'
-          } ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
+        className={`bg-white rounded pl-1.5 shadow-sm min-w-[200px] transition-all flex border
+          ${selected || contextMenu ? 'ring-2 ring-primary-500 border-primary-500 shadow-md' : 'border-slate-200 hover:shadow-md'}
+          ${isEmbedded ? 'opacity-70 cursor-default' : ''}`}
         style={embeddedDimensions ? { minHeight: embeddedDimensions.nodeHeight } : undefined}
         onContextMenu={handleContextMenu}
       >
@@ -324,11 +325,20 @@ function WorkflowNodeComponent({ id, data, selected }: WorkflowNodeProps) {
               const customRoutes = data.parameters?.customRoutes as Array<{ condition: string; emitEvent: string }> | undefined || [];
               const showFailRoute = data.parameters?.emitFailRoute === true;
 
-              const outputPorts = [
-                { id: 'OK', color: 'bg-green-500', label: 'On Success', isCustom: false },
-                ...(showFailRoute ? [{ id: 'FAIL', color: 'bg-red-500', label: 'On Failure', isCustom: false }] : []),
-                ...customRoutes.map(r => ({ id: r.emitEvent, color: 'bg-blue-500', label: `IF ${r.condition} -> ${r.emitEvent}`, isCustom: true }))
-              ];
+              let outputPorts;
+              if (data.nodeType === 'twiddle.if') {
+                outputPorts = [
+                  { id: 'true', color: 'bg-green-500', label: 'True', isCustom: false },
+                  { id: 'false', color: 'bg-red-500', label: 'False', isCustom: false },
+                  ...(showFailRoute ? [{ id: 'FAIL', color: 'bg-red-500', label: 'On Failure', isCustom: false }] : [])
+                ];
+              } else {
+                outputPorts = [
+                  { id: 'OK', color: 'bg-green-500', label: 'On Success', isCustom: false },
+                  ...(showFailRoute ? [{ id: 'FAIL', color: 'bg-red-500', label: 'On Failure', isCustom: false }] : []),
+                  ...customRoutes.map(r => ({ id: r.emitEvent, color: 'bg-blue-500', label: `IF ${r.condition} -> ${r.emitEvent}`, isCustom: true }))
+                ];
+              }
 
               return outputPorts.map((port, index) => {
                 const position = outputPorts.length > 1

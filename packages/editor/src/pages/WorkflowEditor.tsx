@@ -25,7 +25,6 @@ import { WorkflowPropertiesPanel, WorkflowProperty, WorkflowSchedule } from '@/c
 import { GitHubSettings } from '@/components/GitHubSettings';
 import { RightPanel } from '@/components/RightPanel';
 import { EditorToolbar } from '@/components/EditorToolbar';
-import { MonitorTableView } from '@/components/MonitorTableView';
 import { getNextEnvironment, type Environment } from '@/components/EnvironmentBadge';
 import { PromotionRequestModal } from '@/components/PromotionRequestModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
@@ -45,7 +44,7 @@ import { useWorkflowState } from '@/hooks/useWorkflowState';
 import { useWorkflowPermissions } from '@/hooks/useWorkflowPermissions';
 import { useWorkflowVersions } from '@/hooks/useWorkflowVersions';
 import { useWorkflowExport } from '@/hooks/useWorkflowExport';
-import { useWorkflowValidator } from '@/hooks/useWorkflowValidator';
+import { validateWorkflow, type ValidationIssue } from '@/hooks/useWorkflowValidator';
 import { ValidationContext } from '@/contexts/ValidationContext';
 import { ValidationTray } from '@/components/ValidationTray';
 import { SaveAsModal } from '@/components/SaveAsModal';
@@ -100,8 +99,26 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
 
-  // Run validation engine on the DAG
-  const validationIssues = useWorkflowValidator(nodes, edges);
+  // Validation State
+  const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
+  const [hasValidated, setHasValidated] = useState(false);
+
+  // Clear validation state if the workflow graph or properties change
+  useEffect(() => {
+    if (hasValidated) {
+      setValidationIssues([]);
+      setHasValidated(false);
+    }
+  }, [nodes, edges, workflowProperties]);
+
+  const explicitDagProp = workflowProperties.find(p => p.key === 'twiddle.enforceExplicitDAG');
+  const enforceExplicitDAG = explicitDagProp ? explicitDagProp.value === 'true' : true;
+
+  const handleValidate = useCallback(() => {
+    const issues = validateWorkflow(nodes, edges, enforceExplicitDAG);
+    setValidationIssues(issues);
+    setHasValidated(true);
+  }, [nodes, edges, enforceExplicitDAG]);
 
   // Workflow browser hook - still used for some context menu operations
   const workflowBrowser = useWorkflowBrowser();
@@ -449,6 +466,43 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
   const handleUpdateSchedule = useCallback((updates: Partial<WorkflowSchedule>) => {
     setWorkflowSchedule((prev: WorkflowSchedule) => ({ ...prev, ...updates }));
   }, []);
+
+  const handleSetEnforceExplicitDAG = useCallback((enabled: boolean) => {
+    setWorkflowProperties(props => {
+      const existing = props.find(p => p.key === 'twiddle.enforceExplicitDAG');
+      if (existing) {
+        return props.map(p => p.id === existing.id ? { ...p, value: enabled ? 'true' : 'false' } : p);
+      } else {
+        return [...props, {
+          id: generatePropertyId(),
+          key: 'twiddle.enforceExplicitDAG',
+          type: 'boolean',
+          value: enabled ? 'true' : 'false'
+        }];
+      }
+    });
+  }, []);
+
+  const handleIgnoreIssue = useCallback((nodeId: string, issueId: string) => {
+    setNodes((nds: Node[]) => nds.map((n) => {
+      if (n.id === nodeId) {
+        const currentIgnored = (n.data.parameters as Record<string, any>)?.ignoredValidations as string[] || [];
+        if (!currentIgnored.includes(issueId)) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              parameters: {
+                ...(n.data.parameters || {}),
+                ignoredValidations: [...currentIgnored, issueId],
+              },
+            },
+          };
+        }
+      }
+      return n;
+    }));
+  }, [setNodes]);
 
   const handleToggleExpand = useCallback((nodeId: string) => {
     handleToggleExpandRef.current?.(nodeId);
@@ -1067,6 +1121,8 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         }}
         onGitHubSettings={() => setShowGitHubSettings(true)}
         onProperties={() => setShowPropertiesPanel(true)}
+        onValidate={handleValidate}
+        onMonitor={() => navigate(`/workflows/${id}/monitor`)}
         onExecutions={() => navigate(`/executions?workflow=${id}`)}
         onAutoLayout={onAutoLayout}
         onSave={handleSave}
@@ -1217,6 +1273,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
 
           <ValidationTray
             issues={validationIssues}
+            hasValidated={hasValidated}
             onIssueClick={(nodeId) => {
               const node = nodes.find(n => n.id === nodeId);
               if (node && reactFlowInstance.current) {
@@ -1224,6 +1281,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
                 setSelectedNode(node);
               }
             }}
+            onIgnoreIssue={handleIgnoreIssue}
           />
 
           {/* Visual preview of pending node - outside ReactFlow for proper positioning */}
@@ -1279,10 +1337,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           )}
         </div>
 
-        {/* Bottom Pane: Monitor / List View */}
-        <div className="h-64 shrink-0 bg-white border-t-2 border-slate-300 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] relative z-10 transition-all duration-300">
-          <MonitorTableView nodes={nodes} />
-        </div>
+        {/* Bottom Pane: Monitor / List View removed to reclaim space for the editor layout */}
       </div>
 
       {/* Version History Modal */}
@@ -1370,6 +1425,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
         <NodePropertiesPanel
           node={selectedNode}
           nodes={nodes}
+          enforceExplicitDAG={enforceExplicitDAG}
           onUpdate={handleNodeUpdate}
           onClose={() => setSelectedNode(null)}
         />
@@ -1472,6 +1528,7 @@ export function WorkflowEditor({ openBrowser = false }: WorkflowEditorProps) {
           onUpdateProperty={handleUpdateProperty}
           onDeleteProperty={handleDeleteProperty}
           onUpdateSchedule={handleUpdateSchedule}
+          onSetEnforceExplicitDAG={handleSetEnforceExplicitDAG}
           onClose={() => setShowPropertiesPanel(false)}
         />
       </RightPanel>

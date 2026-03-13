@@ -12,12 +12,13 @@ import { NodeConditionalRoutesTab } from './properties/node/NodeConditionalRoute
 
 interface NodePropertiesPanelProps {
   node: Node | null;
+  nodes: Node[];
+  enforceExplicitDAG: boolean;
   onUpdate: (nodeId: string, data: Record<string, unknown>) => void;
   onClose: () => void;
-  nodes: Node[];
 }
 
-export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodePropertiesPanelProps) {
+export function NodePropertiesPanel({ node, nodes, enforceExplicitDAG, onUpdate, onClose }: NodePropertiesPanelProps) {
   const [label, setLabel] = useState('');
   const [parameters, setParameters] = useState<Record<string, unknown>>({});
   const [activeTab, setActiveTab] = useState<'general' | 'scheduling' | 'conditions' | 'requiredActivity' | 'publishedActivity'>('general');
@@ -38,7 +39,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodeProp
   const tabs = [
     { id: 'general', label: 'General' },
     { id: 'scheduling', label: 'Scheduling' },
-    { id: 'requiredActivity', label: 'Required Activity' },
+    ...(!enforceExplicitDAG ? [{ id: 'requiredActivity', label: 'Required Activity' }] : []),
     { id: 'publishedActivity', label: 'Published Activity' },
   ] as const;
 
@@ -325,7 +326,7 @@ export function NodePropertiesPanel({ node, onUpdate, onClose, nodes }: NodeProp
           />
         )}
 
-        {activeTab === 'requiredActivity' && (
+        {activeTab === 'requiredActivity' && !enforceExplicitDAG && (
           <NodeRequiredActivityTab
             parameters={parameters}
             updateParameter={updateParameter}

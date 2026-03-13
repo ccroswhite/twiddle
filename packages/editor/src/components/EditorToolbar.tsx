@@ -15,6 +15,7 @@ import {
     Settings,
     Play,
     LayoutGrid,
+    ClipboardCheck,
 } from 'lucide-react';
 import { ExportDropdown, type ExportFormat } from './ExportDropdown';
 import { ViewCodeDropdown, type ViewCodeFormat } from './ViewCodeDropdown';
@@ -45,6 +46,8 @@ export interface EditorToolbarProps {
     onViewCode: (format: ViewCodeFormat) => void;
     onGitHubSettings: () => void;
     onProperties: () => void;
+    onValidate: () => void;
+    onMonitor: () => void;
     onExecutions: () => void;
     onAutoLayout: () => void;
     onSave: () => void;
@@ -72,6 +75,8 @@ export function EditorToolbar({
     onViewCode,
     onGitHubSettings,
     onProperties,
+    onValidate,
+    onMonitor,
     onExecutions,
     onAutoLayout,
     onSave,
@@ -144,14 +149,32 @@ export function EditorToolbar({
                     <Settings className="w-3.5 h-3.5" />
                     Properties
                 </button>
+                <div className="w-px h-4 bg-slate-300 mx-1" />
+                <button
+                    onClick={onValidate}
+                    className="flex items-center gap-1.5 px-2 py-1 text-blue-700 hover:bg-blue-100 rounded-sm transition-colors"
+                    title="Validate workflow DAG"
+                >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="font-medium text-blue-700">Validate</span>
+                </button>
+                <button
+                    onClick={onMonitor}
+                    disabled={isNew}
+                    className="flex items-center gap-1.5 px-2 py-1 text-slate-700 hover:bg-slate-200 rounded-sm transition-colors disabled:opacity-50"
+                    title="View dense tabular operational viewpoint"
+                >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    Monitor
+                </button>
                 <button
                     onClick={onExecutions}
                     disabled={isNew}
                     className="flex items-center gap-1.5 px-2 py-1 text-slate-700 hover:bg-slate-200 rounded-sm transition-colors disabled:opacity-50"
-                    title="View workflow executions"
+                    title="View workflow execution history"
                 >
                     <Play className="w-3.5 h-3.5" />
-                    Monitor
+                    Executions
                 </button>
                 <button
                     onClick={onAutoLayout}

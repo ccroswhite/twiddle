@@ -9,6 +9,7 @@ import { AuthGuard } from './components/AuthGuard';
 // =============================================================================
 
 const WorkflowEditor = lazy(() => import('./pages/WorkflowEditor').then(m => ({ default: m.WorkflowEditor })));
+const WorkflowMonitor = lazy(() => import('./pages/WorkflowMonitor').then(m => ({ default: m.WorkflowMonitor })));
 const WorkflowBrowser = lazy(() => import('./pages/WorkflowBrowser').then(m => ({ default: m.WorkflowBrowser })));
 const WorkflowExecutions = lazy(() => import('./pages/WorkflowExecutions').then(m => ({ default: m.WorkflowExecutions })));
 const Datasources = lazy(() => import('./pages/Datasources').then(m => ({ default: m.Datasources })));
@@ -52,6 +53,7 @@ export default function App() {
             <Route index element={<Navigate to="/workflows" replace />} />
             <Route path="workflows" element={<WorkflowBrowser />} />
             <Route path="workflows/:id" element={<WorkflowEditor />} />
+            <Route path="workflows/:id/monitor" element={<WorkflowMonitor />} />
             <Route path="workflows/new" element={<WorkflowEditor />} />
             <Route path="executions" element={<WorkflowExecutions />} />
             <Route path="datasources" element={<Datasources />} />

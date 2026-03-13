@@ -14,6 +14,7 @@ interface WorkflowPropertiesPanelProps {
     onUpdateProperty: (id: string, updates: Partial<WorkflowProperty>) => void;
     onDeleteProperty: (id: string) => void;
     onUpdateSchedule: (updates: Partial<WorkflowSchedule>) => void;
+    onSetEnforceExplicitDAG?: (enabled: boolean) => void; // Optional for backward compatibility with older implementations
     onClose: () => void;
 }
 
@@ -24,6 +25,7 @@ export function WorkflowPropertiesPanel({
     onUpdateProperty,
     onDeleteProperty,
     onUpdateSchedule,
+    onSetEnforceExplicitDAG,
     onClose,
 }: WorkflowPropertiesPanelProps) {
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -96,6 +98,32 @@ export function WorkflowPropertiesPanel({
                 onUpdateSchedule={onUpdateSchedule}
             />
 
+            {/* Linter Settings Section */}
+            <div className="px-4 py-4 border-b border-slate-200">
+                <h3 className="text-sm font-semibold text-slate-700 mb-3">Linter Settings</h3>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="text-sm font-medium text-slate-900">Enforce Explicit DAG</div>
+                        <div className="text-xs text-slate-500 mt-0.5">Require visual edges for all wait conditions</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            className="sr-only peer"
+                            checked={(() => {
+                                const prop = properties.find(p => p.key === 'twiddle.enforceExplicitDAG');
+                                return prop ? prop.value === 'true' : true;
+                            })()}
+                            onChange={(e) => {
+                                if (onSetEnforceExplicitDAG) {
+                                    onSetEnforceExplicitDAG(e.target.checked);
+                                }
+                            }}
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
             {/* Add Button */}
             <div className="px-4 py-3 border-b border-slate-200">
                 <button

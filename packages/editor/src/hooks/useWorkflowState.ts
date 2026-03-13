@@ -176,6 +176,38 @@ export function useWorkflowState(
                     targetInput: edge.targetHandle,
                 }));
 
+            // Phase 20: Auto-Generate Dependencies from Visual Edges
+            // Instead of manual string entry, the React Flow edges are now the
+            // single source of truth for the Temporal DAG wait conditions.
+            const explicitDagProp = workflowProperties.find((p: any) => p.key === 'twiddle.enforceExplicitDAG');
+            const enforceExplicitDAG = explicitDagProp ? explicitDagProp.value === 'true' : true;
+
+            workflowNodes.forEach((node: any) => {
+                const incomingEdges = workflowConnections.filter((conn: any) => conn.targetNodeId === node.id);
+                const visualDependencies = incomingEdges.map((conn: any) => {
+                    return `${conn.sourceNodeId}-${conn.sourceOutput || 'OK'}`;
+                });
+
+                if (enforceExplicitDAG) {
+                    if (visualDependencies.length > 0) {
+                        node.parameters.requiredActivity = visualDependencies;
+                    } else {
+                        delete node.parameters.requiredActivity;
+                    }
+                } else {
+                    // If not enforcing explicit DAG, the user can manually type signals. 
+                    // We merge visual edges with manual entries to prevent overwriting custom signals.
+                    const existingDeps = (node.parameters.requiredActivity as string[]) || [];
+                    const mergedDeps = Array.from(new Set([...existingDeps, ...visualDependencies]));
+
+                    if (mergedDeps.length > 0) {
+                        node.parameters.requiredActivity = mergedDeps;
+                    } else {
+                        delete node.parameters.requiredActivity;
+                    }
+                }
+            });
+
             if (isNew) {
                 const created = await (workflowsApi.create as any)({
                     name: workflowName,

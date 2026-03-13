@@ -78,9 +78,25 @@ export function useWorkflowLocking(
                 } else {
                     setTakeoverRequest(null);
                 }
-            } catch (err) {
-                console.error('Heartbeat failed:', err);
-                onReloadWorkflow(workflowId);
+            } catch (err: any) {
+                // Ignore 401 Unauthorized if auth is disabled or session expired
+                // to prevent constant 30s page reloads for local development
+                if (
+                    err.status === 401 ||
+                    err.message?.includes('401') ||
+                    err.message?.toLowerCase().includes('unauthorized')
+                ) {
+                    console.warn('Heartbeat ignored (401 Unauthorized)');
+                    return;
+                }
+                // Only reload if we specifically get a 409 Conflict (taken over)
+                // Otherwise do NOT blow away the user's unsaved canvas state
+                if (err.status === 409 || err.message?.includes('409') || err.message?.includes('another user')) {
+                    console.error('Lock taken by another user, reloading strictly to Read-Only mode:', err);
+                    onReloadWorkflow(workflowId);
+                } else {
+                    console.warn('Heartbeat ping failed, but preserving local canvas state to avoid data loss:', err);
+                }
             }
         }, 30000); // 30 seconds
 
